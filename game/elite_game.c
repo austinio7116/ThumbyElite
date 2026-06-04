@@ -1,27 +1,32 @@
 /*
  * ThumbyElite — top-level game module.
  *
- * Phase 2: mesh + draw-list + dual-core proof. The three baked ship
- * hulls (fighter / viper / freighter) tumble slowly in a starfield;
- * free-look on the d-pad, A/B to thrust. Frame time + triangle count
- * in the corner so device fps is measurable from a photo.
+ * Phase 3: combat arena. Cockpit-view dogfight against waves of AI
+ * hostiles — full chord controls, pulse lasers, shields/hull/heat,
+ * engine trails, explosions and the Elite scanner. Dying respawns you
+ * after a beat; clearing a wave spawns a bigger one.
  */
 #include "elite_game.h"
 #include "elite_types.h"
 #include "r3d_scene.h"
+#include "r3d_fx.h"
+#include "elite_entity.h"
+#include "elite_input.h"
+#include "elite_flight.h"
+#include "elite_combat.h"
+#include "elite_ai.h"
+#include "ui_hud.h"
 #include "craft_font.h"
 #include "meshes_gen.h"
 #include <stdio.h>
 
-#define DEMO_SHIPS 7
-static R3DObject s_ships[DEMO_SHIPS];
-static float     s_spin[DEMO_SHIPS];
-
-static Vec3  s_cam_pos;       /* logical camera position (world) */
-static Mat3  s_cam_basis;
 static float s_frame_ms;
-
+static int   s_target = -1;
+static int   s_wave;
+static float s_wave_timer;     /* countdown to next wave / respawn */
+static float s_respawn_timer;
 static uint32_t s_rng;
+
 static uint32_t xorshift32(void) {
     s_rng ^= s_rng << 13; s_rng ^= s_rng >> 17; s_rng ^= s_rng << 5;
     return s_rng;
@@ -30,56 +35,150 @@ static float frand(float lo, float hi) {
     return lo + (hi - lo) * (float)(xorshift32() & 0xFFFF) * (1.0f / 65535.0f);
 }
 
+static void spawn_player(void) {
+    Ship *p = &g_ships[PLAYER];
+    p->alive = true;
+    p->mesh = &mesh_fighter;
+    p->pos = v3(0, 0, 0);
+    p->basis = m3_identity();
+    p->vel = v3(0, 0, 0);
+    p->throttle = 0.4f;
+    p->assist = true;
+    p->boost_t = 0;
+    p->max_speed = 120.0f;
+    p->accel = 60.0f;
+    p->turn_rate = 2.1f;
+    p->hull_max = 100.0f;
+    p->hull = p->hull_max;
+    p->shield_max = 80.0f;
+    p->shield = p->shield_max;
+    p->heat = 0;
+    p->fire_cool = 0;
+    p->team = TEAM_PLAYER;
+}
+
+static void spawn_wave(int wave) {
+    int n = 2 + wave;
+    if (n > 7) n = 7;
+    Vec3 pp = g_ships[PLAYER].pos;
+    for (int i = 0; i < n; i++) {
+        /* Ring around the player, outside gun range. */
+        float a = frand(0, 6.2831f);
+        float r = frand(500, 800);
+        Vec3 pos = v3(pp.x + cosf(a) * r, pp.y + frand(-150, 150),
+                      pp.z + sinf(a) * r);
+        const Mesh *m = (wave >= 2 && (i & 3) == 3) ? &mesh_freighter
+                       : (i & 1) ? &mesh_viper : &mesh_fighter;
+        int idx = ship_spawn(m, pos, TEAM_HOSTILE);
+        if (idx > 0) {
+            /* Face roughly toward the player. */
+            g_ships[idx].basis = m3_identity();
+            g_ships[idx].throttle = 0.8f;
+        }
+    }
+}
+
+static void cycle_target(void) {
+    /* Nearest-first cycling: order hostiles by distance, pick the one
+     * after the current target (wraps). */
+    Vec3 pp = g_ships[PLAYER].pos;
+    int best = -1, cur_found = 0;
+    float cur_d = -1.0f, best_d = 1e30f, first_d = 1e30f;
+    int first = -1;
+    if (s_target >= 0 && g_ships[s_target].alive)
+        cur_d = v3_len(v3_sub(g_ships[s_target].pos, pp));
+    for (int i = 1; i < MAX_SHIPS; i++) {
+        if (!g_ships[i].alive || g_ships[i].team != TEAM_HOSTILE) continue;
+        float d = v3_len(v3_sub(g_ships[i].pos, pp));
+        if (d < first_d) { first_d = d; first = i; }
+        if (cur_d >= 0.0f &&
+            (d > cur_d || (d == cur_d && i > s_target)) && d < best_d) {
+            best_d = d;
+            best = i;
+        }
+        (void)cur_found;
+    }
+    s_target = (best >= 0) ? best : first;
+}
+
 void elite_game_init(uint32_t seed) {
     s_rng = seed | 1u;
-    s_cam_pos = v3(0, 0, 0);
-    s_cam_basis = m3_identity();
     r3d_starfield_init(seed ^ 0x5EEDu);
-
-    static const Mesh *kinds[3];
-    kinds[0] = &mesh_fighter;
-    kinds[1] = &mesh_viper;
-    kinds[2] = &mesh_freighter;
-
-    /* A loose line-abreast of ships ahead of the camera. */
-    for (int i = 0; i < DEMO_SHIPS; i++) {
-        s_ships[i].mesh = kinds[i % 3];
-        s_ships[i].basis = m3_identity();
-        s_ships[i].pos = v3((i - DEMO_SHIPS / 2) * 14.0f,
-                            frand(-5, 5), 28.0f + frand(-6, 14));
-        s_spin[i] = frand(0.15f, 0.5f);
-        m3_rotate_local(&s_ships[i].basis, 1, frand(0, 6.28f));
-    }
+    ships_init();
+    fx_init();
+    combat_init();
+    elite_input_reset();
+    spawn_player();
+    s_wave = 1;
+    s_wave_timer = 0;
+    s_respawn_timer = 0;
+    s_target = -1;
+    spawn_wave(s_wave);
 }
 
 void elite_game_set_frame_ms(float ms) { s_frame_ms = ms; }
 
 void elite_game_tick(const CraftRawButtons *btn, float dt) {
-    /* Free-look: d-pad pitches/yaws the camera; A/B thrust along forward. */
-    const float turn = 1.6f * dt;
-    if (btn->left)  m3_rotate_local(&s_cam_basis, 1, -turn);
-    if (btn->right) m3_rotate_local(&s_cam_basis, 1,  turn);
-    if (btn->up)    m3_rotate_local(&s_cam_basis, 0, -turn);
-    if (btn->down)  m3_rotate_local(&s_cam_basis, 0,  turn);
-    m3_orthonormalize(&s_cam_basis);
+    FlightInput in;
+    elite_input_update(btn, dt, &in);
 
-    const float speed = 12.0f * dt;
-    if (btn->a) s_cam_pos = v3_add(s_cam_pos, v3_scale(s_cam_basis.r[2],  speed));
-    if (btn->b) s_cam_pos = v3_add(s_cam_pos, v3_scale(s_cam_basis.r[2], -speed));
+    Ship *p = &g_ships[PLAYER];
+    static bool s_dead_latch = false;
+    if (p->alive) {
+        s_dead_latch = false;
+        flight_apply_input(&in, dt);
+        if (in.fire) combat_fire_laser(PLAYER, 0.0f);
+        if (in.cycle_target) cycle_target();
+    } else {
+        if (!s_dead_latch) { s_dead_latch = true; s_respawn_timer = 2.5f; }
+        s_respawn_timer -= dt;
+        if (s_respawn_timer <= 0.0f) {
+            spawn_player();
+            s_target = -1;
+        }
+    }
 
-    for (int i = 0; i < DEMO_SHIPS; i++) {
-        m3_rotate_local(&s_ships[i].basis, 1, s_spin[i] * dt);
-        m3_rotate_local(&s_ships[i].basis, 0, s_spin[i] * 0.35f * dt);
+    flight_tick(dt);
+    ai_tick(dt);
+    combat_tick(dt);
+    fx_tick(dt);
+
+    /* Engine trails for every thrusting ship (incl. the player — visible
+     * when looking back over the shoulder later; cheap either way). */
+    for (int i = 0; i < MAX_SHIPS; i++) {
+        Ship *s = &g_ships[i];
+        if (!s->alive) continue;
+        Vec3 rear = v3_sub(s->pos, v3_scale(s->basis.r[2],
+                                            s->mesh->bound_r * 0.8f));
+        fx_engine_trail(rear, s->vel, s->throttle, dt);
+    }
+
+    /* Auto-drop dead targets; wave logic. */
+    if (s_target >= 0 && !g_ships[s_target].alive) s_target = -1;
+    if (ships_alive_hostile() == 0) {
+        if (s_wave_timer <= 0.0f) s_wave_timer = 3.0f;
+        s_wave_timer -= dt;
+        if (s_wave_timer <= 0.0f) {
+            s_wave++;
+            spawn_wave(s_wave);
+            s_wave_timer = 0;
+        }
     }
 }
 
 void elite_game_render_begin(void) {
-    r3d_scene_begin(&s_cam_basis, 60.0f);
-    for (int i = 0; i < DEMO_SHIPS; i++) {
-        R3DObject obj = s_ships[i];
-        obj.pos = v3_sub(obj.pos, s_cam_pos);   /* camera-relative */
+    Ship *p = &g_ships[PLAYER];
+    r3d_scene_begin(&p->basis, 60.0f);
+
+    for (int i = 1; i < MAX_SHIPS; i++) {
+        if (!g_ships[i].alive) continue;
+        R3DObject obj;
+        obj.mesh = g_ships[i].mesh;
+        obj.basis = g_ships[i].basis;
+        obj.pos = v3_sub(g_ships[i].pos, p->pos);   /* camera-relative */
         r3d_scene_add_object(&obj);
     }
+    fx_emit_all(p->pos);
 }
 
 void elite_game_render(uint16_t *fb, int y_min, int y_max) {
@@ -87,9 +186,18 @@ void elite_game_render(uint16_t *fb, int y_min, int y_max) {
 }
 
 void elite_game_draw_overlay(uint16_t *fb) {
-    char buf[32];
-    snprintf(buf, sizeof buf, "%d.%dMS %dTRI",
-             (int)s_frame_ms, ((int)(s_frame_ms * 10.0f)) % 10,
-             r3d_scene_tri_count());
-    craft_font_draw(fb, buf, 2, 2, rgb565(120, 255, 120));
+    Ship *p = &g_ships[PLAYER];
+    if (p->alive) {
+        HudInfo info = {
+            .target = s_target,
+            .wave = s_wave,
+            .kills = combat_kills(),
+            .render_ms = s_frame_ms,
+            .show_perf = 1,
+        };
+        ui_hud_draw(fb, &info);
+    } else {
+        craft_font_draw_2x(fb, "SHIP LOST", 28, 52, RGB565C(255, 80, 60));
+        craft_font_draw(fb, "RESPAWNING...", 38, 70, RGB565C(170, 170, 180));
+    }
 }

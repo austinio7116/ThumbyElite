@@ -31,6 +31,41 @@ static inline float edge(float ax, float ay, float bx, float by, float px, float
     return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
 }
 
+void r3d_point(int x, int y, uint16_t d, uint16_t color, int size,
+               int y_min, int y_max) {
+    for (int dy = 0; dy < size; dy++) {
+        int py = y + dy;
+        if (py < y_min || py >= y_max) continue;
+        uint16_t *fb_row = s_fb + py * ELITE_FB_W;
+        uint16_t *dp_row = s_depth + py * ELITE_FB_W;
+        for (int dx = 0; dx < size; dx++) {
+            int px = x + dx;
+            if ((unsigned)px >= ELITE_FB_W) continue;
+            if (d > dp_row[px]) fb_row[px] = color;
+        }
+    }
+}
+
+void r3d_line(float x0, float y0, uint16_t d0,
+              float x1, float y1, uint16_t d1,
+              uint16_t color, int y_min, int y_max) {
+    float dx = x1 - x0, dy = y1 - y0;
+    float adx = dx < 0 ? -dx : dx, ady = dy < 0 ? -dy : dy;
+    int steps = (int)(adx > ady ? adx : ady) + 1;
+    if (steps > 256) steps = 256;
+    float inv = 1.0f / (float)steps;
+    float sx = dx * inv, sy = dy * inv, sd = ((float)d1 - (float)d0) * inv;
+    float px = x0, py = y0, pd = (float)d0;
+    for (int i = 0; i <= steps; i++) {
+        int ix = (int)px, iy = (int)py;
+        if (iy >= y_min && iy < y_max && (unsigned)ix < ELITE_FB_W) {
+            int idx = iy * ELITE_FB_W + ix;
+            if ((uint16_t)pd > s_depth[idx]) s_fb[idx] = color;
+        }
+        px += sx; py += sy; pd += sd;
+    }
+}
+
 void r3d_tri(float ax, float ay, uint16_t az,
              float bx, float by, uint16_t bz,
              float cx, float cy, uint16_t cz,

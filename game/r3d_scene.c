@@ -21,9 +21,48 @@ typedef struct {
 static SceneTri s_tris[R3D_SCENE_MAX_TRIS];
 static int      s_ntris;
 
+typedef struct { float x, y; uint16_t d, color; uint8_t size; } ScenePoint;
+typedef struct {
+    float x0, y0, x1, y1;
+    uint16_t d0, d1, color;
+} SceneLine;
+static ScenePoint s_points[R3D_SCENE_MAX_POINTS];
+static SceneLine  s_lines[R3D_SCENE_MAX_LINES];
+static int        s_npoints, s_nlines;
+
 void r3d_scene_begin(const Mat3 *cam_basis, float fov_deg) {
     r3d_pipe_set_camera(cam_basis, fov_deg);
     s_ntris = 0;
+    s_npoints = 0;
+    s_nlines = 0;
+}
+
+void r3d_scene_add_point(float sx, float sy, uint16_t d, uint16_t color,
+                         uint8_t size) {
+    if (s_npoints >= R3D_SCENE_MAX_POINTS) return;
+    ScenePoint *p = &s_points[s_npoints++];
+    p->x = sx; p->y = sy; p->d = d; p->color = color; p->size = size;
+}
+
+void r3d_scene_add_line(float x0, float y0, uint16_t d0,
+                        float x1, float y1, uint16_t d1, uint16_t color) {
+    if (s_nlines >= R3D_SCENE_MAX_LINES) return;
+    SceneLine *l = &s_lines[s_nlines++];
+    l->x0 = x0; l->y0 = y0; l->d0 = d0;
+    l->x1 = x1; l->y1 = y1; l->d1 = d1;
+    l->color = color;
+}
+
+int r3d_scene_project(Vec3 cam_rel, float *sx, float *sy, uint16_t *d) {
+    Vec3 v = m3_mul_v3_t(r3d_pipe_camera(), cam_rel);
+    if (v.z <= R3D_NEAR) return 0;
+    float inv_z = 1.0f / v.z;
+    float focal = r3d_pipe_focal();
+    *sx = 64.0f + focal * v.x * inv_z;
+    *sy = 64.0f - focal * v.y * inv_z;
+    float dd = R3D_DEPTH_K * inv_z;
+    *d = (dd >= 65535.0f) ? 65535u : (uint16_t)dd;
+    return 1;
 }
 
 int r3d_scene_add_object(const R3DObject *obj) {
@@ -127,5 +166,15 @@ void r3d_scene_raster(uint16_t *fb, int y0, int y1) {
         const SceneTri *t = &s_tris[i];
         r3d_tri(t->x0, t->y0, t->d0, t->x1, t->y1, t->d1,
                 t->x2, t->y2, t->d2, t->color, y0, y1);
+    }
+
+    /* FX pass: depth-tested, no depth write — ships occlude them. */
+    for (int i = 0; i < s_npoints; i++) {
+        const ScenePoint *p = &s_points[i];
+        r3d_point((int)p->x, (int)p->y, p->d, p->color, p->size, y0, y1);
+    }
+    for (int i = 0; i < s_nlines; i++) {
+        const SceneLine *l = &s_lines[i];
+        r3d_line(l->x0, l->y0, l->d0, l->x1, l->y1, l->d1, l->color, y0, y1);
     }
 }

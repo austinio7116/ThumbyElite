@@ -79,6 +79,13 @@ add_executable(thumbyelite
     ${GAME}/r3d_raster.c
     ${GAME}/r3d_pipe.c
     ${GAME}/r3d_scene.c
+    ${GAME}/r3d_fx.c
+    ${GAME}/elite_entity.c
+    ${GAME}/elite_input.c
+    ${GAME}/elite_flight.c
+    ${GAME}/elite_combat.c
+    ${GAME}/elite_ai.c
+    ${GAME}/ui_hud.c
     ${GAME}/craft_font.c
 
     ${MESHES_GEN_C}

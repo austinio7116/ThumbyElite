@@ -54,20 +54,24 @@ int main(void) {
 
         elite_game_tick(&btn, dt);
 
-        uint32_t r0 = to_ms_since_boot(get_absolute_time());
+        /* Perf readout = pure work time (draw-list build + raster),
+         * EXCLUDING the wait for the previous frame's DMA (~6.5ms fixed). */
+        uint64_t t0 = to_us_since_boot(get_absolute_time());
         elite_game_render_begin();          /* core0: build draw-list */
+        uint64_t t1 = to_us_since_boot(get_absolute_time());
 
         /* Single-buffered fb + async DMA present: wait for the previous
          * frame's transfer before either core writes g_fb (tears otherwise). */
         craft_lcd_wait_idle();
+        uint64_t t2 = to_us_since_boot(get_absolute_time());
         s_core1_done = false;
         s_core1_go   = true;                          /* core1: lower half */
         elite_game_render(g_fb, 0, ELITE_FB_H / 2);   /* core0: upper half */
         while (!s_core1_done) tight_loop_contents();
+        uint64_t t3 = to_us_since_boot(get_absolute_time());
 
         elite_game_draw_overlay(g_fb);
-        elite_game_set_frame_ms(
-            (float)(to_ms_since_boot(get_absolute_time()) - r0));
+        elite_game_set_frame_ms((float)((t1 - t0) + (t3 - t2)) * 0.001f);
 
         craft_lcd_present(g_fb);
     }

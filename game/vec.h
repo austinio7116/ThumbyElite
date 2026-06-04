@@ -61,6 +61,19 @@ static inline void m3_rotate_local(Mat3 *m, int axis, float a) {
     m->r[j] = v3_sub(v3_scale(rj, c), v3_scale(ri, s));
 }
 
+/* Rotate the basis about an arbitrary WORLD-space unit axis (Rodrigues).
+ * Used to steer a ship toward a target direction. */
+static inline void m3_rotate_world(Mat3 *m, Vec3 k, float a) {
+    float c = cosf(a), s = sinf(a), omc = 1.0f - c;
+    for (int i = 0; i < 3; i++) {
+        Vec3 v = m->r[i];
+        Vec3 kxv = v3_cross(k, v);
+        float kdv = v3_dot(k, v);
+        m->r[i] = v3_add(v3_add(v3_scale(v, c), v3_scale(kxv, s)),
+                         v3_scale(k, kdv * omc));
+    }
+}
+
 /* Re-orthonormalise (drift control after many incremental rotations). */
 static inline void m3_orthonormalize(Mat3 *m) {
     m->r[2] = v3_norm(m->r[2]);

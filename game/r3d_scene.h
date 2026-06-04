@@ -31,6 +31,19 @@ void r3d_scene_raster(uint16_t *fb, int y0, int y1);
 
 int r3d_scene_tri_count(void);
 
+/* Particles / beams: projected by the caller (or via r3d_scene_project)
+ * during the build step, drawn depth-tested after the triangle pass. */
+#define R3D_SCENE_MAX_POINTS 256
+#define R3D_SCENE_MAX_LINES  24
+void r3d_scene_add_point(float sx, float sy, uint16_t d, uint16_t color,
+                         uint8_t size);
+void r3d_scene_add_line(float x0, float y0, uint16_t d0,
+                        float x1, float y1, uint16_t d1, uint16_t color);
+
+/* Project a CAMERA-RELATIVE world position with the scene camera.
+ * Returns 0 if behind the near plane. */
+int r3d_scene_project(Vec3 cam_rel, float *sx, float *sy, uint16_t *d);
+
 /* Starfield: regenerate the fixed direction table (e.g. on system entry). */
 void r3d_starfield_init(uint32_t seed);
 

@@ -30,4 +30,12 @@ void r3d_tri(float ax, float ay, uint16_t az,
              float cx, float cy, uint16_t cz,
              uint16_t color, int y_min, int y_max);
 
+/* Depth-TESTED (but not depth-writing) primitives for particles/beams —
+ * drawn after the triangle pass so ships correctly occlude them. */
+void r3d_point(int x, int y, uint16_t d, uint16_t color, int size,
+               int y_min, int y_max);
+void r3d_line(float x0, float y0, uint16_t d0,
+              float x1, float y1, uint16_t d1,
+              uint16_t color, int y_min, int y_max);
+
 #endif

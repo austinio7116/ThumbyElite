@@ -14,6 +14,7 @@
  */
 #include "elite_types.h"
 #include "elite_game.h"
+#include "elite_entity.h"
 #include "craft_buttons.h"
 
 #include <SDL2/SDL.h>
@@ -56,6 +57,45 @@ int main(int argc, char **argv) {
                                : (uint32_t)time(NULL);
     printf("[elite] seed = %u\n", seed);
     elite_game_init(seed);
+
+    /* Headless autopilot: chase the scanner's nearest hostile and hold the
+     * trigger for N seconds, logging the combat loop each second. */
+    if (getenv("ELITE_DEMO")) {
+        int secs = atoi(getenv("ELITE_DEMO"));
+        if (secs < 1) secs = 20;
+        for (int f = 0; f < secs * 30; f++) {
+            CraftRawButtons b = {0};
+            b.a = true;                       /* fire */
+            if (f % 90 == 30) b.lb = true;    /* tap LB -> lock target */
+            /* Crude pursuit: steer toward the first live hostile. */
+            Ship *p = &g_ships[0];
+            for (int i = 1; i < 16; i++) {
+                if (!g_ships[i].alive) continue;
+                Vec3 rel = v3_sub(g_ships[i].pos, p->pos);
+                Vec3 local = m3_mul_v3_t(&p->basis, rel);
+                if (local.x > 5.0f) b.right = true;
+                else if (local.x < -5.0f) b.left = true;
+                if (local.y > 5.0f) b.up = true;
+                else if (local.y < -5.0f) b.down = true;
+                break;
+            }
+            elite_game_tick(&b, 1.0f / 30.0f);
+            if (f % 30 == 29) {
+                extern int combat_kills(void);
+                extern int ships_alive_hostile(void);
+                printf("[demo] t=%2ds hull=%3.0f shield=%3.0f heat=%3.0f "
+                       "foes=%d kills=%d v=%3.0f\n",
+                       (f + 1) / 30, g_ships[0].hull, g_ships[0].shield,
+                       g_ships[0].heat, ships_alive_hostile(), combat_kills(),
+                       v3_len(g_ships[0].vel));
+            }
+            if (shot_path && f == secs * 30 - 1) {
+                render_frame();
+                dump_ppm(shot_path);
+            }
+        }
+        return 0;
+    }
 
     if (shot_path) {
         int settle = getenv("ELITE_SETTLE") ? atoi(getenv("ELITE_SETTLE")) : 60;
