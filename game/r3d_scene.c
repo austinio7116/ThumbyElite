@@ -26,15 +26,26 @@ typedef struct {
     float x0, y0, x1, y1;
     uint16_t d0, d1, color;
 } SceneLine;
+typedef struct { float x, y; uint16_t d, color; int16_t r; } SceneDisc;
 static ScenePoint s_points[R3D_SCENE_MAX_POINTS];
 static SceneLine  s_lines[R3D_SCENE_MAX_LINES];
-static int        s_npoints, s_nlines;
+static SceneDisc  s_discs[R3D_SCENE_MAX_DISCS];
+static int        s_npoints, s_nlines, s_ndiscs;
 
 void r3d_scene_begin(const Mat3 *cam_basis, float fov_deg) {
     r3d_pipe_set_camera(cam_basis, fov_deg);
     s_ntris = 0;
     s_npoints = 0;
     s_nlines = 0;
+    s_ndiscs = 0;
+}
+
+void r3d_scene_add_disc(float sx, float sy, uint16_t d, int r_px,
+                        uint16_t color) {
+    if (s_ndiscs >= R3D_SCENE_MAX_DISCS) return;
+    SceneDisc *p = &s_discs[s_ndiscs++];
+    p->x = sx; p->y = sy; p->d = d; p->color = color;
+    p->r = (int16_t)(r_px > 64 ? 64 : r_px);
 }
 
 void r3d_scene_add_point(float sx, float sy, uint16_t d, uint16_t color,
@@ -168,7 +179,12 @@ void r3d_scene_raster(uint16_t *fb, int y0, int y1) {
                 t->x2, t->y2, t->d2, t->color, y0, y1);
     }
 
-    /* FX pass: depth-tested, no depth write — ships occlude them. */
+    /* FX pass: depth-tested, no depth write — ships occlude them.
+     * Discs first (fireballs), so sparks/debris draw over them. */
+    for (int i = 0; i < s_ndiscs; i++) {
+        const SceneDisc *p = &s_discs[i];
+        r3d_disc((int)p->x, (int)p->y, p->d, p->r, p->color, y0, y1);
+    }
     for (int i = 0; i < s_npoints; i++) {
         const ScenePoint *p = &s_points[i];
         r3d_point((int)p->x, (int)p->y, p->d, p->color, p->size, y0, y1);

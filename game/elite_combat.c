@@ -22,13 +22,17 @@
 
 static float s_regen_hold[MAX_SHIPS];
 static int   s_kills;
+static float s_hitmark, s_killmark;
 
 void combat_init(void) {
     for (int i = 0; i < MAX_SHIPS; i++) s_regen_hold[i] = 0;
     s_kills = 0;
+    s_hitmark = s_killmark = 0;
 }
 
 int combat_kills(void) { return s_kills; }
+float combat_hitmarker(void) { return s_hitmark; }
+float combat_killmarker(void) { return s_killmark; }
 
 bool combat_can_fire(const Ship *s) {
     return s->fire_cool <= 0.0f && s->heat < HEAT_MAX;
@@ -46,7 +50,7 @@ static float ray_sphere(Vec3 o, Vec3 dir, Vec3 c, float r) {
     return (t >= 0.0f) ? t : tca + thc;
 }
 
-static void apply_damage(int victim, float dmg, Vec3 hit_pos) {
+static void apply_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
     Ship *v = &g_ships[victim];
     s_regen_hold[victim] = SHIELD_DELAY;
     if (v->shield > 0.0f) {
@@ -56,10 +60,12 @@ static void apply_damage(int victim, float dmg, Vec3 hit_pos) {
         v->hull -= dmg;
     }
     fx_spawn_spark(hit_pos, v->vel);
+    if (shooter == PLAYER) s_hitmark = 0.12f;
     if (v->hull <= 0.0f) {
         v->alive = false;
         fx_spawn_explosion(v->pos, v->vel);
         if (victim != PLAYER) s_kills++;
+        if (shooter == PLAYER) s_killmark = 0.7f;
     }
 }
 
@@ -113,11 +119,13 @@ int combat_fire_laser(int shooter, float spread) {
                                             : RGB565C(80, 255, 90);
     fx_beam(muzzle, end, col);
     float dmg = (s->team == TEAM_PLAYER) ? LASER_DMG : LASER_DMG_AI;
-    if (best >= 0) apply_damage(best, dmg, end);
+    if (best >= 0) apply_damage(shooter, best, dmg, end);
     return best;
 }
 
 void combat_tick(float dt) {
+    if (s_hitmark > 0) s_hitmark -= dt;
+    if (s_killmark > 0) s_killmark -= dt;
     for (int i = 0; i < MAX_SHIPS; i++) {
         Ship *s = &g_ships[i];
         if (!s->alive) continue;

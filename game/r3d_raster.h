@@ -38,4 +38,8 @@ void r3d_line(float x0, float y0, uint16_t d0,
               float x1, float y1, uint16_t d1,
               uint16_t color, int y_min, int y_max);
 
+/* Filled circle, depth-tested per pixel (explosion fireballs, flashes). */
+void r3d_disc(int cx, int cy, uint16_t d, int r, uint16_t color,
+              int y_min, int y_max);
+
 #endif

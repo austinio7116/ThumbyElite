@@ -99,14 +99,26 @@ int main(int argc, char **argv) {
     }
 
     /* Deterministic gun-visual test: park one hostile dead ahead, fire,
-     * render the same frame. */
-    if (getenv("ELITE_FIRETEST")) {
+     * render the same frame. ELITE_KILLTEST=n: keep firing until it dies,
+     * then advance n more frames and render (explosion stages). */
+    if (getenv("ELITE_FIRETEST") || getenv("ELITE_KILLTEST")) {
         for (int i = 1; i < 16; i++) g_ships[i].alive = false;
         int e = ship_spawn(&mesh_viper, v3(0, 0, 120.0f), TEAM_HOSTILE);
-        g_ships[e].ai_state = AI_NONE;
+        if (getenv("ELITE_KILLTEST")) {
+            /* One-shot kill, parked target (neutral = no AI movement). */
+            g_ships[e].team = TEAM_NEUTRAL;
+            g_ships[e].shield = 0;
+            g_ships[e].hull = 1;
+        }
         CraftRawButtons b = {0};
         b.a = true;
         elite_game_tick(&b, 1.0f / 30.0f);   /* fire frame */
+        if (getenv("ELITE_KILLTEST")) {
+            int after = atoi(getenv("ELITE_KILLTEST"));
+            CraftRawButtons none = {0};
+            for (int f = 0; f < after; f++)
+                elite_game_tick(&none, 1.0f / 30.0f);
+        }
         render_frame();
         dump_ppm(shot_path ? shot_path : "firetest.ppm");
         return 0;

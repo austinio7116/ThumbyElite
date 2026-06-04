@@ -1,27 +1,42 @@
 /*
- * ThumbyElite — in-flight HUD (128x128).
+ * ThumbyElite — in-flight HUD (128x128), Elite-style dashboard.
  *
- * Layout: shield/hull bars top-left, heat bar + speed top-right, centre
- * crosshair + target brackets (with off-screen direction arrow), and the
- * classic Elite scanner disc bottom-centre: contacts as blips with
- * vertical stalks showing above/below the flight plane.
+ * Full-width console along the bottom with a raised centre housing for
+ * the scanner (the iconic Elite silhouette). Speed/throttle instruments
+ * live in the left panel, shield/hull/heat in the right. Canopy pillars
+ * frame the view. Centre: crosshair, target brackets, hit/kill markers.
  */
 #include "ui_hud.h"
 #include "elite_types.h"
 #include "elite_entity.h"
+#include "elite_combat.h"
 #include "r3d_scene.h"
 #include "craft_font.h"
 #include <stdio.h>
 
-#define COL_SHIELD RGB565C( 80, 180, 255)
-#define COL_HULL   RGB565C(255, 120,  70)
-#define COL_HEAT   RGB565C(255, 200,  60)
-#define COL_FRAME  RGB565C( 70, 110, 140)
-#define COL_CROSS  RGB565C(140, 220, 170)
-#define COL_TARGET RGB565C(255,  90,  70)
-#define COL_BLIP_H RGB565C(255,  80,  60)
-#define COL_BLIP_N RGB565C(170, 170, 180)
-#define COL_TEXT   RGB565C(120, 255, 120)
+#define COL_SHIELD  RGB565C( 80, 180, 255)
+#define COL_HULL    RGB565C(255, 120,  70)
+#define COL_HEAT    RGB565C(255, 200,  60)
+#define COL_FRAME   RGB565C( 60,  90, 115)
+#define COL_CROSS   RGB565C(140, 220, 170)
+#define COL_TARGET  RGB565C(255,  90,  70)
+#define COL_BLIP_H  RGB565C(255,  80,  60)
+#define COL_BLIP_N  RGB565C(170, 170, 180)
+#define COL_TEXT    RGB565C(120, 255, 120)
+#define COL_NUM     RGB565C(200, 210, 225)
+#define COL_CONSOLE RGB565C( 14,  18,  30)
+#define COL_STRUT   RGB565C( 95, 110, 140)
+#define COL_CANOPY  RGB565C( 55,  65,  88)
+#define COL_PILLAR  RGB565C( 30,  38,  55)
+#define COL_GRID    RGB565C( 32,  44,  62)
+
+/* Dashboard geometry. */
+#define DASH_TOP   101
+#define BULGE_TOP   93
+#define BULGE_L0    36   /* bulge foot, left */
+#define BULGE_L1    44   /* bulge shoulder, left */
+#define BULGE_R1    83
+#define BULGE_R0    91
 
 static inline void px(uint16_t *fb, int x, int y, uint16_t c) {
     if ((unsigned)x < ELITE_FB_W && (unsigned)y < ELITE_FB_H)
@@ -33,7 +48,6 @@ static void hline(uint16_t *fb, int x0, int x1, int y, uint16_t c) {
 static void vline(uint16_t *fb, int x, int y0, int y1, uint16_t c) {
     for (int y = y0; y <= y1; y++) px(fb, x, y, c);
 }
-
 static void line(uint16_t *fb, int x0, int y0, int x1, int y1, uint16_t c) {
     float dx = (float)(x1 - x0), dy = (float)(y1 - y0);
     float adx = dx < 0 ? -dx : dx, ady = dy < 0 ? -dy : dy;
@@ -49,29 +63,55 @@ static void line(uint16_t *fb, int x0, int y0, int x1, int y1, uint16_t c) {
 static void bar(uint16_t *fb, int x, int y, int w, float frac, uint16_t c) {
     if (frac < 0) frac = 0;
     if (frac > 1) frac = 1;
-    hline(fb, x, x + w, y - 1, COL_FRAME);
-    hline(fb, x, x + w, y + 1, COL_FRAME);
-    px(fb, x - 1, y, COL_FRAME);
-    px(fb, x + w + 1, y, COL_FRAME);
+    hline(fb, x, x + w, y - 1, COL_GRID);
+    hline(fb, x, x + w, y + 1, COL_GRID);
+    px(fb, x - 1, y, COL_GRID);
+    px(fb, x + w + 1, y, COL_GRID);
     int fill = (int)(w * frac + 0.5f);
     if (fill > 0) hline(fb, x, x + fill, y, c);
 }
 
-/* --- Scanner (Elite disc) --------------------------------------------- */
-#define SC_CX 64
-#define SC_CY 109
-#define SC_RX 26
-#define SC_RY 12
+/* --- Dashboard ---------------------------------------------------------*/
+static void dashboard(uint16_t *fb) {
+    /* Console fill: bulge rows then the full-width slab. */
+    for (int y = BULGE_TOP; y < DASH_TOP; y++) {
+        int t = y - BULGE_TOP;                       /* shoulder slope 1:1 */
+        int x0 = BULGE_L1 - t, x1 = BULGE_R1 + t;
+        hline(fb, x0, x1, y, COL_CONSOLE);
+    }
+    for (int y = DASH_TOP; y < ELITE_FB_H; y++)
+        hline(fb, 0, ELITE_FB_W - 1, y, COL_CONSOLE);
+
+    /* Edge highlights. */
+    hline(fb, 0, BULGE_L0, DASH_TOP, COL_STRUT);
+    hline(fb, BULGE_R0, ELITE_FB_W - 1, DASH_TOP, COL_STRUT);
+    line(fb, BULGE_L0, DASH_TOP, BULGE_L1, BULGE_TOP, COL_STRUT);
+    hline(fb, BULGE_L1, BULGE_R1, BULGE_TOP, COL_STRUT);
+    line(fb, BULGE_R1, BULGE_TOP, BULGE_R0, DASH_TOP, COL_STRUT);
+
+    /* Canopy pillars + diagonals. */
+    line(fb, 0, 30, 30, 6, COL_CANOPY);
+    line(fb, 127, 30, 97, 6, COL_CANOPY);
+    vline(fb, 0, 30, DASH_TOP - 1, COL_PILLAR);
+    vline(fb, 127, 30, DASH_TOP - 1, COL_PILLAR);
+}
+
+/* --- Scanner (Elite disc, in the bulge) -------------------------------- */
+#define SC_CX 63
+#define SC_CY 110
+#define SC_RX 24
+#define SC_RY 13
 #define SC_RANGE 400.0f
 
 static void scanner(uint16_t *fb) {
-    /* Ellipse outline (parametric, 40 segments worth of pixels). */
+    /* Dim grid cross first, then the rim. */
+    hline(fb, SC_CX - SC_RX + 2, SC_CX + SC_RX - 2, SC_CY, COL_GRID);
+    vline(fb, SC_CX, SC_CY - SC_RY + 1, SC_CY + SC_RY - 1, COL_GRID);
     for (int i = 0; i < 64; i++) {
         float a = (float)i * (6.2831853f / 64.0f);
         px(fb, SC_CX + (int)(SC_RX * cosf(a)),
                SC_CY + (int)(SC_RY * sinf(a)), COL_FRAME);
     }
-    /* Centre tick = us. */
     px(fb, SC_CX, SC_CY, RGB565C(255, 255, 255));
 
     const Ship *p = &g_ships[PLAYER];
@@ -81,18 +121,16 @@ static void scanner(uint16_t *fb) {
         Vec3 local = m3_mul_v3_t(&p->basis, v3_sub(s->pos, p->pos));
         float dx = local.x * (SC_RX / SC_RANGE);
         float dz = -local.z * (SC_RY / SC_RANGE);
-        /* Clamp into the disc. */
         float e = (dx * dx) / (SC_RX * SC_RX) + (dz * dz) / (SC_RY * SC_RY);
         if (e > 1.0f) {
             float k = 1.0f / sqrtf(e);
             dx *= k; dz *= k;
         }
         int fx = SC_CX + (int)dx, fy = SC_CY + (int)dz;
-        int stalk = (int)(-local.y * (10.0f / SC_RANGE) * 4.0f);
+        int stalk = (int)(-local.y * (40.0f / SC_RANGE));
         if (stalk > 9) stalk = 9;
         if (stalk < -9) stalk = -9;
         uint16_t c = (s->team == TEAM_HOSTILE) ? COL_BLIP_H : COL_BLIP_N;
-        /* Foot on the plane, stalk up/down, blip at the head. */
         px(fb, fx, fy, COL_FRAME);
         if (stalk != 0)
             vline(fb, fx, fy < fy + stalk ? fy : fy + stalk,
@@ -110,8 +148,6 @@ static void target_box(uint16_t *fb, int target) {
     uint16_t d;
     if (r3d_scene_project(v3_sub(t->pos, p->pos), &sx, &sy, &d) &&
         sx > -20 && sx < 148 && sy > -20 && sy < 148) {
-        /* Box half-size from projected bounding radius:
-         * r_px = focal * r / z, and d = K/z -> z = K/d. */
         float z = R3D_DEPTH_K / (float)d;
         int h = (int)(r3d_pipe_focal() * t->mesh->bound_r / z);
         if (h < 5) h = 5;
@@ -128,15 +164,14 @@ static void target_box(uint16_t *fb, int target) {
         hline(fb, x1 - l, x1, y1, COL_TARGET);
         vline(fb, x1, y1 - l, y1, COL_TARGET);
     } else {
-        /* Off-screen: edge arrow along the view-space direction. */
         Vec3 v = m3_mul_v3_t(&p->basis, v3_sub(t->pos, p->pos));
         float ax = v.x, ay = -v.y;
-        if (v.z < 0) { ax = -ax; ay = -ay; }   /* behind: flip */
+        if (v.z < 0) { ax = -ax; ay = -ay; }
         float al = sqrtf(ax * ax + ay * ay);
         if (al < 1e-4f) { ax = 1; ay = 0; al = 1; }
         ax /= al; ay /= al;
-        int ex = 64 + (int)(ax * 56.0f);
-        int ey = 64 + (int)(ay * 56.0f);
+        int ex = 64 + (int)(ax * 52.0f);
+        int ey = 60 + (int)(ay * 44.0f);
         px(fb, ex, ey, COL_TARGET);
         px(fb, ex - (int)(ax * 2), ey - (int)(ay * 2), COL_TARGET);
         px(fb, ex - (int)(ax * 4), ey - (int)(ay * 4), COL_TARGET);
@@ -144,47 +179,21 @@ static void target_box(uint16_t *fb, int target) {
         px(fb, ex + (int)(ay * 2), ey + (int)(-ax * 2), COL_TARGET);
     }
 
-    /* Target readout: shield/hull, distance. */
+    /* Target readout under the canopy line, top-right. */
     char buf[24];
     float dist = v3_len(v3_sub(t->pos, p->pos));
     snprintf(buf, sizeof buf, "%dM", (int)dist);
-    craft_font_draw(fb, buf, 96, 14, COL_TARGET);
-    bar(fb, 98, 22, 24, t->shield / (t->shield_max > 0 ? t->shield_max : 1),
+    craft_font_draw(fb, buf, 98, 12, COL_TARGET);
+    bar(fb, 100, 20, 22, t->shield / (t->shield_max > 0 ? t->shield_max : 1),
         COL_SHIELD);
-    bar(fb, 98, 26, 24, t->hull / (t->hull_max > 0 ? t->hull_max : 1),
+    bar(fb, 100, 24, 22, t->hull / (t->hull_max > 0 ? t->hull_max : 1),
         COL_HULL);
-}
-
-/* --- Cockpit frame ------------------------------------------------------
- * A filled console trapezoid at the bottom (the scanner sits on it) with
- * highlighted strut edges, plus canopy ticks in the top corners — enough
- * silhouette to feel like you're IN a ship rather than a floating camera. */
-#define COL_CONSOLE  RGB565C(16, 20, 32)
-#define COL_STRUT    RGB565C(90, 105, 135)
-#define COL_CANOPY   RGB565C(55, 65, 88)
-
-static void cockpit_frame(uint16_t *fb) {
-    /* Console: top edge y=101 between the strut feet; widens downward. */
-    for (int y = 101; y < ELITE_FB_H; y++) {
-        int spread = y - 101;                /* strut slope ~1:1 */
-        int x0 = 33 - spread, x1 = 94 + spread;
-        if (x0 < 0) x0 = 0;
-        if (x1 > 127) x1 = 127;
-        hline(fb, x0, x1, y, COL_CONSOLE);
-    }
-    /* Strut edge highlights. */
-    line(fb, 33, 101, 7, 127, COL_STRUT);
-    line(fb, 94, 101, 120, 127, COL_STRUT);
-    hline(fb, 33, 94, 101, COL_STRUT);
-    /* Canopy corner ticks. */
-    line(fb, 0, 16, 20, 4, COL_CANOPY);
-    line(fb, 127, 16, 107, 4, COL_CANOPY);
 }
 
 void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
     const Ship *p = &g_ships[PLAYER];
 
-    cockpit_frame(fb);
+    dashboard(fb);
 
     /* Crosshair. */
     hline(fb, 59, 61, 64, COL_CROSS);
@@ -192,24 +201,39 @@ void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
     vline(fb, 64, 59, 61, COL_CROSS);
     vline(fb, 64, 67, 69, COL_CROSS);
 
-    /* Player bars (top-left): shield, hull. */
-    bar(fb, 4, 4, 28, p->shield / p->shield_max, COL_SHIELD);
-    bar(fb, 4, 9, 28, p->hull / p->hull_max, COL_HULL);
-    /* Heat (below, fills as it heats). */
-    bar(fb, 4, 14, 28, p->heat / 100.0f, COL_HEAT);
+    /* Hit marker: diagonal ticks flaring from the crosshair. */
+    if (combat_hitmarker() > 0.0f) {
+        for (int k = 3; k <= 5; k++) {
+            px(fb, 64 - k, 64 - k, COL_TARGET);
+            px(fb, 64 + k, 64 - k, COL_TARGET);
+            px(fb, 64 - k, 64 + k, COL_TARGET);
+            px(fb, 64 + k, 64 + k, COL_TARGET);
+        }
+    }
+    /* Kill marker: brief confirm under the crosshair. */
+    if (combat_killmarker() > 0.0f)
+        craft_font_draw(fb, "KILL", 57, 74, COL_TARGET);
 
-    /* Speed + throttle (bottom-left). */
+    /* Left panel: speed / throttle / status lights. */
     char buf[24];
+    craft_font_draw(fb, "SP", 2, 102, COL_TEXT);
+    bar(fb, 13, 105, 20, v3_len(p->vel) / (p->max_speed * 1.8f), COL_TEXT);
+    craft_font_draw(fb, "TH", 2, 109, COL_NUM);
+    bar(fb, 13, 112, 20, p->throttle, COL_NUM);
     snprintf(buf, sizeof buf, "%3d", (int)v3_len(p->vel));
-    craft_font_draw(fb, buf, 4, 116, COL_TEXT);
-    craft_font_draw(fb, "M/S", 18, 116, COL_FRAME);
-    bar(fb, 4, 124, 28, p->throttle, COL_TEXT);
-    if (!p->assist) craft_font_draw(fb, "DRIFT", 4, 108, COL_HEAT);
-    if (p->boost_t > 0) craft_font_draw(fb, "BOOST", 4, 100, COL_SHIELD);
+    craft_font_draw(fb, buf, 2, 118, COL_NUM);
+    if (!p->assist) craft_font_draw(fb, "DR", 18, 118, COL_HEAT);
+    if (p->boost_t > 0) craft_font_draw(fb, "BS", 27, 118, COL_SHIELD);
 
-    /* Wave / kills (bottom-right). */
+    /* Right panel: shield / hull / heat + wave/kills. */
+    craft_font_draw(fb, "S", 94, 102, COL_SHIELD);
+    bar(fb, 101, 105, 22, p->shield / p->shield_max, COL_SHIELD);
+    craft_font_draw(fb, "H", 94, 109, COL_HULL);
+    bar(fb, 101, 112, 22, p->hull / p->hull_max, COL_HULL);
+    craft_font_draw(fb, "T", 94, 116, COL_HEAT);
+    bar(fb, 101, 119, 22, p->heat / 100.0f, COL_HEAT);
     snprintf(buf, sizeof buf, "W%d K%d", info->wave, info->kills);
-    craft_font_draw(fb, buf, 96, 116, COL_TEXT);
+    craft_font_draw(fb, buf, 94, 122, COL_TEXT);
 
     scanner(fb);
 

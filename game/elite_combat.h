@@ -20,4 +20,9 @@ bool combat_can_fire(const Ship *s);
 /* Stats for HUD/scoring. */
 int combat_kills(void);
 
+/* HUD hit feedback: seconds remaining on the hit / kill markers
+ * (set when a PLAYER shot connects / destroys). */
+float combat_hitmarker(void);
+float combat_killmarker(void);
+
 #endif

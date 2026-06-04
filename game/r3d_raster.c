@@ -46,6 +46,23 @@ void r3d_point(int x, int y, uint16_t d, uint16_t color, int size,
     }
 }
 
+void r3d_disc(int cx, int cy, uint16_t d, int r, uint16_t color,
+              int y_min, int y_max) {
+    if (r < 1) r = 1;
+    for (int dy = -r; dy <= r; dy++) {
+        int py = cy + dy;
+        if (py < y_min || py >= y_max) continue;
+        int half = (int)sqrtf((float)(r * r - dy * dy));
+        int x0 = cx - half, x1 = cx + half;
+        if (x0 < 0) x0 = 0;
+        if (x1 > ELITE_FB_W - 1) x1 = ELITE_FB_W - 1;
+        uint16_t *fb_row = s_fb + py * ELITE_FB_W;
+        uint16_t *dp_row = s_depth + py * ELITE_FB_W;
+        for (int px = x0; px <= x1; px++)
+            if (d > dp_row[px]) fb_row[px] = color;
+    }
+}
+
 void r3d_line(float x0, float y0, uint16_t d0,
               float x1, float y1, uint16_t d1,
               uint16_t color, int y_min, int y_max) {

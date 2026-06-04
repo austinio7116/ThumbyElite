@@ -46,6 +46,9 @@ void fx_init(void) {
     s_trail_accum = 0;
 }
 
+/* Defined below fireball storage; cleared via dur<=t sentinel at init —
+ * static zero init means t==dur==0, i.e. inactive. */
+
 int fx_alive_count(void) {
     int n = 0;
     for (int i = 0; i < MAX_PARTICLES; i++) if (s_parts[i].life > 0) n++;
@@ -68,19 +71,51 @@ static void spawn(Vec3 pos, Vec3 vel, float life, uint16_t c0, uint16_t c1) {
     p->color0 = c0; p->color1 = c1;
 }
 
+/* --- Fireballs: expanding depth-tested discs — the BIG readable part of
+ * an explosion at any distance (debris particles alone vanish at range). */
+#define MAX_FIREBALLS 6
+typedef struct {
+    Vec3  pos, vel;
+    float t, dur;        /* age / duration */
+    float r_max;         /* world-space radius at peak, meters */
+} Fireball;
+static Fireball s_fire[MAX_FIREBALLS];
+
+static void fireball(Vec3 pos, Vec3 vel, float r_max, float dur) {
+    int oldest = 0;
+    for (int i = 0; i < MAX_FIREBALLS; i++) {
+        if (s_fire[i].t >= s_fire[i].dur) { oldest = i; break; }
+        if (s_fire[i].t > s_fire[oldest].t) oldest = i;
+    }
+    s_fire[oldest].pos = pos;
+    s_fire[oldest].vel = vel;
+    s_fire[oldest].t = 0;
+    s_fire[oldest].dur = dur;
+    s_fire[oldest].r_max = r_max;
+}
+
 void fx_spawn_explosion(Vec3 pos, Vec3 base_vel) {
-    for (int i = 0; i < 36; i++) {
-        Vec3 v = v3_add(base_vel, v3_scale(rnd_dir(), frand(6, 34)));
-        float life = frand(0.5f, 1.3f);
+    /* Core flash + fireball + secondary pops. */
+    fireball(pos, base_vel, 14.0f, 0.9f);
+    fireball(v3_add(pos, v3_scale(rnd_dir(), 4.0f)),
+             base_vel, 7.0f, 0.65f);
+    fireball(v3_add(pos, v3_scale(rnd_dir(), 6.0f)),
+             base_vel, 5.0f, 1.1f);
+    /* Debris: fast, plentiful, long-lived. */
+    for (int i = 0; i < 48; i++) {
+        Vec3 v = v3_add(base_vel, v3_scale(rnd_dir(), frand(8, 45)));
+        float life = frand(0.6f, 1.8f);
         uint16_t hot = (i & 3) ? RGB565C(255, 200, 80) : RGB565C(255, 255, 220);
         spawn(pos, v, life, hot, RGB565C(90, 30, 10));
     }
 }
 
 void fx_spawn_spark(Vec3 pos, Vec3 base_vel) {
-    for (int i = 0; i < 5; i++) {
-        Vec3 v = v3_add(base_vel, v3_scale(rnd_dir(), frand(4, 14)));
-        spawn(pos, v, frand(0.15f, 0.35f),
+    /* A visible impact: brief flash disc + a spray of embers. */
+    fireball(pos, base_vel, 2.6f, 0.18f);
+    for (int i = 0; i < 10; i++) {
+        Vec3 v = v3_add(base_vel, v3_scale(rnd_dir(), frand(6, 20)));
+        spawn(pos, v, frand(0.2f, 0.45f),
               RGB565C(255, 240, 160), RGB565C(180, 80, 30));
     }
 }
@@ -119,6 +154,12 @@ void fx_tick(float dt) {
     }
     for (int i = 0; i < MAX_BEAMS; i++)
         if (s_beams[i].life > 0) s_beams[i].life -= dt;
+    for (int i = 0; i < MAX_FIREBALLS; i++) {
+        Fireball *f = &s_fire[i];
+        if (f->t >= f->dur) continue;
+        f->t += dt;
+        f->pos = v3_add(f->pos, v3_scale(f->vel, dt));
+    }
 }
 
 static uint16_t lerp565(uint16_t a, uint16_t b, float t) {
@@ -201,8 +242,38 @@ static void dust_emit(Vec3 cam_pos, Vec3 cam_vel) {
     }
 }
 
+/* Fireball colour ramp: white flash -> yellow -> orange -> dark ember. */
+static uint16_t fireball_color(float t01) {
+    if (t01 < 0.15f) return RGB565C(255, 255, 235);
+    if (t01 < 0.40f) return RGB565C(255, 215, 90);
+    if (t01 < 0.70f) return RGB565C(245, 130, 40);
+    return RGB565C(140, 50, 18);
+}
+
+static void fireballs_emit(Vec3 cam_pos) {
+    float focal = r3d_pipe_focal();
+    for (int i = 0; i < MAX_FIREBALLS; i++) {
+        const Fireball *f = &s_fire[i];
+        if (f->t >= f->dur) continue;
+        float t01 = f->t / f->dur;
+        /* Fast expansion, brief hold, slight shrink as it gutters out. */
+        float grow = t01 < 0.35f ? (t01 / 0.35f)
+                                 : 1.0f - 0.35f * ((t01 - 0.35f) / 0.65f);
+        float r_world = f->r_max * grow;
+        float sx, sy;
+        uint16_t d;
+        if (!r3d_scene_project(v3_sub(f->pos, cam_pos), &sx, &sy, &d)) continue;
+        if (sx < -40 || sx > 168 || sy < -40 || sy > 168) continue;
+        float z = R3D_DEPTH_K / (float)(d > 0 ? d : 1);
+        int r_px = (int)(focal * r_world / z);
+        if (r_px < 1) r_px = 1;
+        r3d_scene_add_disc(sx, sy, d, r_px, fireball_color(t01));
+    }
+}
+
 void fx_emit_all(Vec3 cam_pos, Vec3 cam_vel) {
     dust_emit(cam_pos, cam_vel);
+    fireballs_emit(cam_pos);
     for (int i = 0; i < MAX_PARTICLES; i++) {
         const Particle *p = &s_parts[i];
         if (p->life <= 0) continue;
