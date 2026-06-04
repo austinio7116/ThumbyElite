@@ -32,9 +32,18 @@ typedef struct {
 void r3d_pipe_set_camera(const Mat3 *cam_basis, float fov_deg);
 void r3d_pipe_set_sun(Vec3 dir_toward_light_world);
 
-/* Transform, light, clip, project and rasterise one object. y_min/y_max
- * bound the rasterised rows (dual-core screen-half split). Returns the
- * number of triangles actually rasterised (for budget profiling). */
-int r3d_pipe_draw_object(const R3DObject *obj, int y_min, int y_max);
+/* Transform, light, clip and project one object, emitting final screen
+ * triangles via r3d_emit_tri (implemented by r3d_scene — appends to the
+ * frame draw-list). Returns the number of triangles emitted. */
+int r3d_pipe_draw_object(const R3DObject *obj);
+
+/* Implemented by r3d_scene.c. */
+void r3d_emit_tri(float ax, float ay, uint16_t az,
+                  float bx, float by, uint16_t bz,
+                  float cx, float cy, uint16_t cz, uint16_t color);
+
+/* Camera basis / focal length as last set (starfield + HUD projections). */
+const Mat3 *r3d_pipe_camera(void);
+float r3d_pipe_focal(void);
 
 #endif

@@ -5,10 +5,9 @@
  * all verts to view space once, then per face: backface pre-cull (normal
  * dot view-vector), flat-shade against the sun, near-plane clip
  * (Sutherland-Hodgman against z = R3D_NEAR, 3-in fast path), project,
- * and hand screen triangles to r3d_raster.
+ * and emit final screen triangles to the frame draw-list (r3d_scene).
  */
 #include "r3d_pipe.h"
-#include "r3d_raster.h"
 
 static Mat3  s_cam;            /* camera basis (rows: right/up/forward) */
 static float s_focal;          /* pixels: 64 / tan(fov/2) */
@@ -48,7 +47,10 @@ static inline uint16_t shade565(uint16_t c, float shade) {
     return (uint16_t)((r << 11) | (g << 5) | b);
 }
 
-int r3d_pipe_draw_object(const R3DObject *obj, int y_min, int y_max) {
+const Mat3 *r3d_pipe_camera(void) { return &s_cam; }
+float r3d_pipe_focal(void) { return s_focal; }
+
+int r3d_pipe_draw_object(const R3DObject *obj) {
     const Mesh *mesh = obj->mesh;
     if (!mesh || mesh->nverts > R3D_MAX_VERTS) return 0;
 
@@ -108,9 +110,9 @@ int r3d_pipe_draw_object(const R3DObject *obj, int y_min, int y_max) {
         int in_a = s_front[a], in_b = s_front[b], in_c = s_front[c];
         int in_count = in_a + in_b + in_c;
         if (in_count == 3) {
-            r3d_tri(s_sx[a], s_sy[a], s_sd[a],
-                    s_sx[b], s_sy[b], s_sd[b],
-                    s_sx[c], s_sy[c], s_sd[c], col, y_min, y_max);
+            r3d_emit_tri(s_sx[a], s_sy[a], s_sd[a],
+                         s_sx[b], s_sy[b], s_sd[b],
+                         s_sx[c], s_sy[c], s_sd[c], col);
             drawn++;
             continue;
         }
@@ -141,12 +143,12 @@ int r3d_pipe_draw_object(const R3DObject *obj, int y_min, int y_max) {
             if (v.z < R3D_NEAR * 1.0001f) v.z = R3D_NEAR * 1.0001f;
             project(v, &ox[i], &oy[i], &od[i]);
         }
-        r3d_tri(ox[0], oy[0], od[0], ox[1], oy[1], od[1],
-                ox[2], oy[2], od[2], col, y_min, y_max);
+        r3d_emit_tri(ox[0], oy[0], od[0], ox[1], oy[1], od[1],
+                     ox[2], oy[2], od[2], col);
         drawn++;
         if (n_out == 4) {
-            r3d_tri(ox[0], oy[0], od[0], ox[2], oy[2], od[2],
-                    ox[3], oy[3], od[3], col, y_min, y_max);
+            r3d_emit_tri(ox[0], oy[0], od[0], ox[2], oy[2], od[2],
+                         ox[3], oy[3], od[3], col);
             drawn++;
         }
     }

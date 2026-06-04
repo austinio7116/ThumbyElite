@@ -31,6 +31,42 @@ endif()
 set(ELITE_ROOT ${CMAKE_CURRENT_LIST_DIR}/..)
 set(GAME       ${ELITE_ROOT}/game)
 set(DEVICE     ${CMAKE_CURRENT_LIST_DIR})
+set(MODELS     ${ELITE_ROOT}/tools/models)
+
+# Bake ship meshes to const flash tables — native host tool via sub-CMake
+# so the cross toolchain skips it. CMAKE_CURRENT_BINARY_DIR + a project-
+# specific target name keep this collision-free as a ThumbyOne slot.
+include(ExternalProject)
+ExternalProject_Add(thumbyelite_baker
+    SOURCE_DIR ${ELITE_ROOT}/tools
+    BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/baker
+    CMAKE_ARGS
+        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_C_COMPILER=cc
+        -DCMAKE_SYSTEM_NAME=
+        -DCMAKE_SYSTEM_PROCESSOR=
+        -DCMAKE_C_FLAGS=
+        -DCMAKE_EXE_LINKER_FLAGS=
+    INSTALL_COMMAND ""
+    BUILD_ALWAYS 1
+    BUILD_BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/baker/obj2mesh
+)
+set(MESHES_GEN_C ${CMAKE_CURRENT_BINARY_DIR}/generated/meshes_gen.c)
+set(MESH_ARGS
+    fighter=${MODELS}/fighter.obj
+    viper=${MODELS}/viper.obj
+    freighter=${MODELS}/freighter.obj
+)
+add_custom_command(
+    OUTPUT ${MESHES_GEN_C}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/baker/obj2mesh ${MESHES_GEN_C}
+            ${CMAKE_CURRENT_BINARY_DIR}/generated/meshes_gen.h ${MESH_ARGS}
+    DEPENDS thumbyelite_baker ${MODELS}/fighter.obj ${MODELS}/viper.obj
+            ${MODELS}/freighter.obj ${MODELS}/ships.mtl
+    COMMENT "Baking ship meshes"
+)
+add_custom_target(generate_elite_meshes DEPENDS ${MESHES_GEN_C})
 
 add_executable(thumbyelite
     # Platform layer.
@@ -42,10 +78,15 @@ add_executable(thumbyelite
     ${GAME}/elite_game.c
     ${GAME}/r3d_raster.c
     ${GAME}/r3d_pipe.c
+    ${GAME}/r3d_scene.c
     ${GAME}/craft_font.c
-)
 
-target_include_directories(thumbyelite PRIVATE ${GAME} ${DEVICE})
+    ${MESHES_GEN_C}
+)
+add_dependencies(thumbyelite generate_elite_meshes)
+
+target_include_directories(thumbyelite PRIVATE
+    ${GAME} ${DEVICE} ${CMAKE_CURRENT_BINARY_DIR}/generated)
 
 target_compile_options(thumbyelite PRIVATE
     -O3 -g -Wall -Wextra

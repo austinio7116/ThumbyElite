@@ -1,11 +1,11 @@
 /*
  * ThumbyElite — device entry point (standalone, RP2350).
  *
- * Thin platform shell over the shared elite_game loop: read buttons, tick,
- * render, present via async DMA. Phase 1 renders single-core to establish
- * the baseline; the dual-core screen-half split arrives with the Phase 2
- * draw-list (core1 is launched but parked so the lockout plumbing and
- * timing are realistic from day one).
+ * Thin platform shell over the shared elite_game loop. Dual-core
+ * screen-half rendering: core0 builds the frame draw-list (transform/
+ * clip/shade), then both cores rasterise it — core0 rows [0,64),
+ * core1 rows [64,128). Disjoint pixels, no locks; the same go/done
+ * volatile handshake as ThumbyRogue.
  */
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
@@ -19,11 +19,17 @@
 
 static uint16_t g_fb[ELITE_FB_W * ELITE_FB_H];
 
-/* Core1: parked for Phase 1. Lockout-victim so core0 can stop us during
- * future flash saves; the render split takes this loop over in Phase 2. */
+static volatile bool s_core1_go   = false;
+static volatile bool s_core1_done = false;
+
 static void core1_entry(void) {
-    multicore_lockout_victim_init();
-    while (true) tight_loop_contents();
+    multicore_lockout_victim_init();   /* core0 parks us during flash saves */
+    while (true) {
+        while (!s_core1_go) tight_loop_contents();
+        s_core1_go = false;
+        elite_game_render(g_fb, ELITE_FB_H / 2, ELITE_FB_H);
+        s_core1_done = true;
+    }
 }
 
 int main(void) {
@@ -48,12 +54,17 @@ int main(void) {
 
         elite_game_tick(&btn, dt);
 
-        /* Single-buffered fb + async DMA present: wait for the previous
-         * frame's transfer before writing g_fb again (tearing otherwise). */
         uint32_t r0 = to_ms_since_boot(get_absolute_time());
-        elite_game_render_begin();
+        elite_game_render_begin();          /* core0: build draw-list */
+
+        /* Single-buffered fb + async DMA present: wait for the previous
+         * frame's transfer before either core writes g_fb (tears otherwise). */
         craft_lcd_wait_idle();
-        elite_game_render(g_fb, 0, ELITE_FB_H);
+        s_core1_done = false;
+        s_core1_go   = true;                          /* core1: lower half */
+        elite_game_render(g_fb, 0, ELITE_FB_H / 2);   /* core0: upper half */
+        while (!s_core1_done) tight_loop_contents();
+
         elite_game_draw_overlay(g_fb);
         elite_game_set_frame_ms(
             (float)(to_ms_since_boot(get_absolute_time()) - r0));
