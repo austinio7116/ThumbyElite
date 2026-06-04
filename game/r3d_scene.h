@@ -34,7 +34,7 @@ int r3d_scene_tri_count(void);
 /* Particles / beams: projected by the caller (or via r3d_scene_project)
  * during the build step, drawn depth-tested after the triangle pass. */
 #define R3D_SCENE_MAX_POINTS 256
-#define R3D_SCENE_MAX_LINES  24
+#define R3D_SCENE_MAX_LINES  48   /* beams + near-dust streaks */
 void r3d_scene_add_point(float sx, float sy, uint16_t d, uint16_t color,
                          uint8_t size);
 void r3d_scene_add_line(float x0, float y0, uint16_t d0,

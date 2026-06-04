@@ -34,6 +34,18 @@ static void vline(uint16_t *fb, int x, int y0, int y1, uint16_t c) {
     for (int y = y0; y <= y1; y++) px(fb, x, y, c);
 }
 
+static void line(uint16_t *fb, int x0, int y0, int x1, int y1, uint16_t c) {
+    float dx = (float)(x1 - x0), dy = (float)(y1 - y0);
+    float adx = dx < 0 ? -dx : dx, ady = dy < 0 ? -dy : dy;
+    int steps = (int)(adx > ady ? adx : ady) + 1;
+    float stx = dx / steps, sty = dy / steps;
+    float cx = (float)x0, cy = (float)y0;
+    for (int i = 0; i <= steps; i++) {
+        px(fb, (int)cx, (int)cy, c);
+        cx += stx; cy += sty;
+    }
+}
+
 static void bar(uint16_t *fb, int x, int y, int w, float frac, uint16_t c) {
     if (frac < 0) frac = 0;
     if (frac > 1) frac = 1;
@@ -143,8 +155,36 @@ static void target_box(uint16_t *fb, int target) {
         COL_HULL);
 }
 
+/* --- Cockpit frame ------------------------------------------------------
+ * A filled console trapezoid at the bottom (the scanner sits on it) with
+ * highlighted strut edges, plus canopy ticks in the top corners — enough
+ * silhouette to feel like you're IN a ship rather than a floating camera. */
+#define COL_CONSOLE  RGB565C(16, 20, 32)
+#define COL_STRUT    RGB565C(90, 105, 135)
+#define COL_CANOPY   RGB565C(55, 65, 88)
+
+static void cockpit_frame(uint16_t *fb) {
+    /* Console: top edge y=101 between the strut feet; widens downward. */
+    for (int y = 101; y < ELITE_FB_H; y++) {
+        int spread = y - 101;                /* strut slope ~1:1 */
+        int x0 = 33 - spread, x1 = 94 + spread;
+        if (x0 < 0) x0 = 0;
+        if (x1 > 127) x1 = 127;
+        hline(fb, x0, x1, y, COL_CONSOLE);
+    }
+    /* Strut edge highlights. */
+    line(fb, 33, 101, 7, 127, COL_STRUT);
+    line(fb, 94, 101, 120, 127, COL_STRUT);
+    hline(fb, 33, 94, 101, COL_STRUT);
+    /* Canopy corner ticks. */
+    line(fb, 0, 16, 20, 4, COL_CANOPY);
+    line(fb, 127, 16, 107, 4, COL_CANOPY);
+}
+
 void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
     const Ship *p = &g_ships[PLAYER];
+
+    cockpit_frame(fb);
 
     /* Crosshair. */
     hline(fb, 59, 61, 64, COL_CROSS);

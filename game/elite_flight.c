@@ -13,9 +13,10 @@ void flight_apply_input(const FlightInput *in, float dt) {
 
     float tr = p->turn_rate * dt;
     /* Pitch about the ship's right axis, yaw about up, roll about forward.
-     * Signs: d-pad up = nose up (flight-stick "pull back" inverted feel is
-     * a setting for later), right = nose right / roll right. */
-    if (in->pitch != 0.0f) m3_rotate_local(&p->basis, 0, -in->pitch * tr);
+     * Flight-stick convention (user-confirmed): d-pad UP = nose DOWN
+     * ("push the stick forward"). An un-inverted option can join the
+     * pause-menu settings later. */
+    if (in->pitch != 0.0f) m3_rotate_local(&p->basis, 0, in->pitch * tr);
     if (in->yaw   != 0.0f) m3_rotate_local(&p->basis, 1,  in->yaw * tr);
     if (in->roll  != 0.0f) m3_rotate_local(&p->basis, 2,  in->roll * tr * 1.5f);
     m3_orthonormalize(&p->basis);

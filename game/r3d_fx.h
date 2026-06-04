@@ -22,8 +22,9 @@ void fx_engine_trail(Vec3 rear_pos, Vec3 ship_vel, float throttle, float dt);
 void fx_beam(Vec3 from, Vec3 to, uint16_t color);
 
 /* Project everything into the scene (camera-relative). Call between
- * r3d_scene_begin and rasterisation, on core0. */
-void fx_emit_all(Vec3 cam_pos);
+ * r3d_scene_begin and rasterisation, on core0. cam_vel drives the
+ * space-dust streaks (sense of speed). */
+void fx_emit_all(Vec3 cam_pos, Vec3 cam_vel);
 
 int fx_alive_count(void);
 

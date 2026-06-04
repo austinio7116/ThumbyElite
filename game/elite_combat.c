@@ -11,13 +11,14 @@
 #include "elite_types.h"
 
 #define LASER_RANGE   600.0f
-#define LASER_DMG     11.0f
+#define LASER_DMG     12.0f    /* player guns */
+#define LASER_DMG_AI   5.0f    /* hostile guns hit softer (survivability) */
 #define LASER_COOL    0.16f
 #define LASER_HEAT    5.5f
 #define HEAT_MAX      100.0f
 #define HEAT_DISSIPATE 22.0f
-#define SHIELD_REGEN  2.5f
-#define SHIELD_DELAY  4.0f     /* s after a hit before regen resumes */
+#define SHIELD_REGEN  6.0f
+#define SHIELD_DELAY  3.0f     /* s after a hit before regen resumes */
 
 static float s_regen_hold[MAX_SHIPS];
 static int   s_kills;
@@ -81,22 +82,38 @@ int combat_fire_laser(int shooter, float spread) {
                                          v3_scale(s->basis.r[1], b))));
     }
 
-    Vec3 muzzle = v3_add(s->pos, v3_scale(dir, s->mesh->bound_r + 0.5f));
-
+    /* Aim ray from the ship centre (fair hit detection)... */
     int best = -1;
     float best_t = LASER_RANGE;
     for (int i = 0; i < MAX_SHIPS; i++) {
         if (i == shooter || !g_ships[i].alive) continue;
-        float t = ray_sphere(muzzle, dir, g_ships[i].pos,
+        float t = ray_sphere(s->pos, dir, g_ships[i].pos,
                              g_ships[i].mesh->bound_r * 0.85f);
         if (t >= 0.0f && t < best_t) { best_t = t; best = i; }
     }
+    Vec3 end = v3_add(s->pos, v3_scale(dir, best >= 0 ? best_t : LASER_RANGE));
 
-    Vec3 end = v3_add(muzzle, v3_scale(dir, best >= 0 ? best_t : LASER_RANGE));
+    /* ...but the VISIBLE beam starts at a gun on the hull. The player's
+     * fixed mounts alternate left/right wing — on screen the bolts climb
+     * from the lower corners and converge on the crosshair (Elite-style).
+     * AI beams just leave the nose. */
+    Vec3 muzzle;
+    if (shooter == PLAYER) {
+        /* Offsets chosen so the muzzles project to the lower screen
+         * corners (~(20,120)/(108,120) at 60deg FOV). */
+        static int gun = 0;
+        gun ^= 1;
+        Vec3 off = v3(gun ? 1.6f : -1.6f, -2.0f, 4.0f);
+        muzzle = v3_add(s->pos, m3_mul_v3(&s->basis, off));
+    } else {
+        muzzle = v3_add(s->pos, v3_scale(dir, s->mesh->bound_r * 0.9f));
+    }
+
     uint16_t col = (s->team == TEAM_PLAYER) ? RGB565C(255, 80, 60)
                                             : RGB565C(80, 255, 90);
     fx_beam(muzzle, end, col);
-    if (best >= 0) apply_damage(best, LASER_DMG, end);
+    float dmg = (s->team == TEAM_PLAYER) ? LASER_DMG : LASER_DMG_AI;
+    if (best >= 0) apply_damage(best, dmg, end);
     return best;
 }
 

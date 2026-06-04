@@ -58,7 +58,7 @@ static void spawn_player(void) {
 }
 
 static void spawn_wave(int wave) {
-    int n = 2 + wave;
+    int n = 1 + wave;          /* wave 1 = a gentle pair */
     if (n > 7) n = 7;
     Vec3 pp = g_ships[PLAYER].pos;
     for (int i = 0; i < n; i++) {
@@ -178,7 +178,7 @@ void elite_game_render_begin(void) {
         obj.pos = v3_sub(g_ships[i].pos, p->pos);   /* camera-relative */
         r3d_scene_add_object(&obj);
     }
-    fx_emit_all(p->pos);
+    fx_emit_all(p->pos, p->vel);
 }
 
 void elite_game_render(uint16_t *fb, int y_min, int y_max) {

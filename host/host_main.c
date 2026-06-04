@@ -15,6 +15,7 @@
 #include "elite_types.h"
 #include "elite_game.h"
 #include "elite_entity.h"
+#include "meshes_gen.h"
 #include "craft_buttons.h"
 
 #include <SDL2/SDL.h>
@@ -94,6 +95,20 @@ int main(int argc, char **argv) {
                 dump_ppm(shot_path);
             }
         }
+        return 0;
+    }
+
+    /* Deterministic gun-visual test: park one hostile dead ahead, fire,
+     * render the same frame. */
+    if (getenv("ELITE_FIRETEST")) {
+        for (int i = 1; i < 16; i++) g_ships[i].alive = false;
+        int e = ship_spawn(&mesh_viper, v3(0, 0, 120.0f), TEAM_HOSTILE);
+        g_ships[e].ai_state = AI_NONE;
+        CraftRawButtons b = {0};
+        b.a = true;
+        elite_game_tick(&b, 1.0f / 30.0f);   /* fire frame */
+        render_frame();
+        dump_ppm(shot_path ? shot_path : "firetest.ppm");
         return 0;
     }
 

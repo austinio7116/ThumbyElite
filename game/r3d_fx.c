@@ -130,7 +130,79 @@ static uint16_t lerp565(uint16_t a, uint16_t b, float t) {
     return (uint16_t)((r << 11) | (g << 5) | bl);
 }
 
-void fx_emit_all(Vec3 cam_pos) {
+/* --- Space dust --------------------------------------------------------
+ * Two wrapping shells around the camera give translation cues the
+ * at-infinity starfield can't:
+ *   near shell: bright motes, +-60m, drawn as velocity streaks at speed
+ *   far shell:  dim points, +-500m — distant scenery that drifts slowly
+ * Positions wrap per-axis so the cloud always surrounds the player. */
+#define DUST_NEAR_N 30
+#define DUST_FAR_N  20
+#define DUST_NEAR_R 60.0f
+#define DUST_FAR_R  500.0f
+static Vec3 s_dust_near[DUST_NEAR_N];
+static Vec3 s_dust_far[DUST_FAR_N];
+static int  s_dust_seeded;
+
+static void dust_seed(Vec3 c) {
+    for (int i = 0; i < DUST_NEAR_N; i++)
+        s_dust_near[i] = v3_add(c, v3(frand(-DUST_NEAR_R, DUST_NEAR_R),
+                                      frand(-DUST_NEAR_R, DUST_NEAR_R),
+                                      frand(-DUST_NEAR_R, DUST_NEAR_R)));
+    for (int i = 0; i < DUST_FAR_N; i++)
+        s_dust_far[i] = v3_add(c, v3(frand(-DUST_FAR_R, DUST_FAR_R),
+                                     frand(-DUST_FAR_R, DUST_FAR_R),
+                                     frand(-DUST_FAR_R, DUST_FAR_R)));
+    s_dust_seeded = 1;
+}
+
+static void dust_wrap(Vec3 *p, Vec3 c, float r) {
+    if (p->x - c.x >  r) p->x -= 2 * r;
+    if (p->x - c.x < -r) p->x += 2 * r;
+    if (p->y - c.y >  r) p->y -= 2 * r;
+    if (p->y - c.y < -r) p->y += 2 * r;
+    if (p->z - c.z >  r) p->z -= 2 * r;
+    if (p->z - c.z < -r) p->z += 2 * r;
+}
+
+static void dust_emit(Vec3 cam_pos, Vec3 cam_vel) {
+    if (!s_dust_seeded) dust_seed(cam_pos);
+    float speed = v3_len(cam_vel);
+    /* Streak = where this mote appeared a short moment ago, relative to
+     * us — i.e. offset by +vel*dt_streak (we moved, the dust didn't). */
+    Vec3 streak = v3_scale(cam_vel, 0.045f);
+    int do_streaks = speed > 25.0f;
+    uint16_t cn = RGB565C(150, 160, 175);
+    for (int i = 0; i < DUST_NEAR_N; i++) {
+        dust_wrap(&s_dust_near[i], cam_pos, DUST_NEAR_R);
+        Vec3 rel = v3_sub(s_dust_near[i], cam_pos);
+        float sx, sy;
+        uint16_t d;
+        if (!r3d_scene_project(rel, &sx, &sy, &d)) continue;
+        if (sx < -4 || sx > 132 || sy < -4 || sy > 132) continue;
+        if (do_streaks) {
+            float ex, ey;
+            uint16_t ed;
+            if (r3d_scene_project(v3_add(rel, streak), &ex, &ey, &ed))
+                r3d_scene_add_line(sx, sy, d, ex, ey, ed, cn);
+        } else {
+            r3d_scene_add_point(sx, sy, d, cn, 1);
+        }
+    }
+    uint16_t cf = RGB565C(90, 95, 110);
+    for (int i = 0; i < DUST_FAR_N; i++) {
+        dust_wrap(&s_dust_far[i], cam_pos, DUST_FAR_R);
+        float sx, sy;
+        uint16_t d;
+        if (!r3d_scene_project(v3_sub(s_dust_far[i], cam_pos), &sx, &sy, &d))
+            continue;
+        if (sx < 0 || sx > 127 || sy < 0 || sy > 127) continue;
+        r3d_scene_add_point(sx, sy, d, cf, 1);
+    }
+}
+
+void fx_emit_all(Vec3 cam_pos, Vec3 cam_vel) {
+    dust_emit(cam_pos, cam_vel);
     for (int i = 0; i < MAX_PARTICLES; i++) {
         const Particle *p = &s_parts[i];
         if (p->life <= 0) continue;
