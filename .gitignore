@@ -1,0 +1,7 @@
+build_host/
+build_device/
+*.o
+*.elf
+*.sav
+*.ppm
+*.png
