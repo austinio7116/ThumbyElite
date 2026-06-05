@@ -423,6 +423,7 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
     bool a_edge = btn->a && !s_prev.a;
     bool b_edge = btn->b && !s_prev.b;
     bool lb_edge = btn->lb && !s_prev.lb;
+    bool rb_edge = btn->rb && !s_prev.rb;
     bool up = btn->up && !s_prev.up;
     bool down = btn->down && !s_prev.down;
     bool back = btn->menu && !s_prev.menu;     /* B stays free for SELL */
@@ -470,6 +471,8 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
 
     case SCR_SHIPYARD:
         if (s_detail) {
+            if (rb_edge && s_cursor < YARD_OFFERS - 1) s_cursor++;
+            if (lb_edge && s_cursor > 0) s_cursor--;
             if (a_edge) { shipyard_buy(s_cursor); s_detail = 0; }
             if (b_edge || back) s_detail = 0;
             break;
@@ -484,6 +487,17 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
     case SCR_OUTFIT:
         outfit_build_rows();
         if (s_detail) {
+            if (rb_edge) {
+                int n = s_cursor;
+                do { n++; } while (n < s_n_rows &&
+                                   s_rows[n].kind == ROW_HDR);
+                if (n < s_n_rows) s_cursor = n;
+            }
+            if (lb_edge) {
+                int n = s_cursor;
+                do { n--; } while (n > 0 && s_rows[n].kind == ROW_HDR);
+                if (n >= 0 && s_rows[n].kind != ROW_HDR) s_cursor = n;
+            }
             if (a_edge) { outfit_action_a(s_cursor); s_detail = 0; }
             if (b_edge || back) s_detail = 0;
             break;
@@ -932,7 +946,7 @@ void station_draw(uint16_t *fb) {
         int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
         int cost = k_hulls[cls].price - tradein;
         if (cost < 0) cost = 0;
-        detail_draw_hull(fb, cls, cost, "A:BUY B:BACK");
+        detail_draw_hull(fb, cls, cost, "LB/RB:NEXT A:BUY B:BACK");
         return;
     }
     if (s_detail && s_screen == SCR_OUTFIT) {
@@ -943,26 +957,26 @@ void station_draw(uint16_t *fb) {
         const WeaponInst *cmp = NULL;
         int price = -1;
         const char *plabel = "COST";
-        const char *foot = "A:ACTION B:BACK";
+        const char *foot = "LB/RB:NEXT A:ACT B:BACK";
         if (r->kind == ROW_MOUNT && g_player.mounts[r->index].in_use) {
             wi = &g_player.mounts[r->index];
             if (wi->integrity < 100) {
                 price = repair_cost(wi);
                 plabel = "REPAIR";
-                foot = "A:REPAIR B:BACK";
+                foot = "LB/RB:NEXT A:RPR B:BACK";
             } else foot = "B:BACK";
         } else if (r->kind == ROW_SALV) {
             wi = &g_player.salvage[r->index];
             price = (int)(weapon_price(wi->type, wi->quality) *
                           (0.35f + 0.30f * wi->integrity * 0.01f));
             plabel = "SELLS FOR";
-            foot = "A:FIT B:BACK";
+            foot = "LB/RB:NEXT A:FIT B:BACK";
         } else if (r->kind == ROW_SHOP) {
             tmp = (WeaponInst){ (uint8_t)r->index, Q_STANDARD, 100, 1 };
             wi = &tmp;
             price = (int)(weapon_price(r->index, Q_STANDARD) *
                           skill_price_mult());
-            foot = "A:BUY B:BACK";
+            foot = "LB/RB:NEXT A:BUY B:BACK";
         }
         if (wi) {
             /* Comparator (user spec): the fitted weapon of the SAME
