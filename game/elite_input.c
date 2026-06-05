@@ -9,6 +9,9 @@
  */
 #include "elite_input.h"
 #include "elite_player.h"
+#ifdef ELITE_INPUT_DEBUG
+#include <stdio.h>
+#endif
 #include <string.h>
 
 #define TAP_MS    0.30f
@@ -90,6 +93,10 @@ void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) 
     }
 
     if (!btn->a) s_swallow_a = false;
+#ifdef ELITE_INPUT_DEBUG
+    if (btn->a && s_swallow_a)
+        fprintf(stderr, "[input] A swallowed\n");
+#endif
     out->fire = btn->a && !s_swallow_a;
     /* B while LB is held = chaff (weapon switch needs LB up). */
     bool b_edge = btn->b && !s_prev_b;

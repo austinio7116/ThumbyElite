@@ -104,3 +104,4 @@ target_include_directories(thumbyelite_host PRIVATE
     ${SDL2_INCLUDE_DIRS}
 )
 target_link_libraries(thumbyelite_host PRIVATE ${SDL2_LIBRARIES} m)
+target_compile_definitions(thumbyelite_host PRIVATE ELITE_INPUT_DEBUG=1)

@@ -148,8 +148,8 @@ int main(int argc, char **argv) {
         static int mf = 0;
         CraftRawButtons none = {0};
         #define MV(btns) do { \
-            CraftRawButtons _b = (btns); \
-            elite_game_tick(&_b, 1.0f / 30.0f); \
+            CraftRawButtons _mv_b = (btns); \
+            elite_game_tick(&_mv_b, 1.0f / 30.0f); \
             render_frame(); \
             char _p[64]; \
             snprintf(_p, sizeof _p, "/tmp/movie/f_%05d.ppm", mf++); \
@@ -165,8 +165,22 @@ int main(int argc, char **argv) {
         MV_TAP(down, 4);
         MV_TAP(a, 8);
 
-        /* Phase 1: arrival staging — clean sky, two raiders. */
+        /* Phase 1: a proper hero ship — MAULER with PULSE-M, GAUSS and
+         * HOMING, war chest for the shopping act. */
         Ship *pl = &g_ships[0];
+        g_player.hull_id = 5;                    /* MAULER */
+        g_player.hull_seed = 0x5EED77u;
+        g_player.credits = 30000;
+        g_player.mounts[0] = (WeaponInst){ .type = WPN_PULSE_M,
+            .quality = Q_REINFORCED, .integrity = 100, .in_use = 1 };
+        g_player.mounts[1] = (WeaponInst){ .type = WPN_GAUSS,
+            .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
+        g_player.mounts[2] = (WeaponInst){ .type = WPN_HOMING,
+            .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
+        for (int i = 0; i < HULL_SLOTS; i++) g_player.ammo[i] = -1;
+        player_apply_to_ship();
+        pl->hull = pl->hull_max;
+        pl->shield = pl->shield_max;
         elite_game_debug_face_away_from_sun();
         extern const Mesh *hull_mesh(uint32_t, int);
         Vec3 fwd = pl->basis.r[2], rgt = pl->basis.r[0];
@@ -184,28 +198,79 @@ int main(int argc, char **argv) {
         MV_IDLE(20);
         MV_TAP(lb, 2);                          /* lock */
 
-        /* Phase 2: the dogfight — steer via real d-pad input. */
-        for (int f = 0; f < 1500; f++) {
-            int tgt = -1;
-            for (int i = 1; i < MAX_SHIPS; i++)
-                if (g_ships[i].alive &&
-                    g_ships[i].team == TEAM_HOSTILE) { tgt = i; break; }
-            if (tgt < 0) break;
-            CraftRawButtons b = none;
-            Vec3 rel = v3_sub(g_ships[tgt].pos, pl->pos);
-            Vec3 local = m3_mul_v3_t(&pl->basis, rel);
-            if (local.x > 4.0f) b.right = true;
-            else if (local.x < -4.0f) b.left = true;
-            if (local.y > 4.0f) b.up = true;
-            else if (local.y < -4.0f) b.down = true;
-            float d2 = v3_len(rel);
-            if (local.z > 0 && local.x * local.x + local.y * local.y <
-                    d2 * d2 * 0.012f)
-                b.a = true;                     /* roughly on target */
-            if (f == 40) b.lb = true;           /* re-lock mid-fight */
-            MV(b);
+        /* Phase 2: the weapons showcase. The button-flip autopilot
+         * fought the 1%-floor turn ramp (every direction change reset
+         * it) and tracked nothing — the camera rig now steers the
+         * basis DIRECTLY: capped smooth rotation toward the lead
+         * point, fire through the real input when on target. */
+        #define MV_STEER(aimpt, rate) do { \
+            Vec3 _want = v3_norm(v3_sub((aimpt), pl->pos)); \
+            Vec3 _cur = pl->basis.r[2]; \
+            Vec3 _ax = v3_cross(_cur, _want); \
+            float _sa = v3_len(_ax); \
+            if (_sa > 1e-5f) { \
+                float _ang = asinf(_sa > 1.0f ? 1.0f : _sa); \
+                float _step = _ang < (rate) ? _ang : (rate); \
+                m3_rotate_world(&pl->basis, v3_scale(_ax, 1.0f / _sa), \
+                                _step); \
+                m3_orthonormalize(&pl->basis); \
+            } \
+        } while (0)
+        #define MV_AIM(tgt, wspd, dead, fire_cone, press_a) do { \
+            Ship *_t = &g_ships[tgt]; \
+            float _d = v3_len(v3_sub(_t->pos, pl->pos)); \
+            float _tt = (wspd) > 0 ? _d / (wspd) : 0; \
+            Vec3 _aim = v3_add(_t->pos, \
+                               v3_scale(v3_sub(_t->vel, pl->vel), _tt)); \
+            MV_STEER(_aim, 0.075f); \
+            Vec3 _l = m3_mul_v3_t(&pl->basis, v3_sub(_aim, pl->pos)); \
+            CraftRawButtons _b = none; \
+            (void)(dead); \
+            if ((press_a) && _l.z > 0 && \
+                _l.x * _l.x + _l.y * _l.y < _d * _d * (fire_cone)) \
+                _b.a = true; \
+            MV(_b); \
+        } while (0)
+
+        /* 2a: open with a homing volley — lock, loose two, watch. */
+        pl->active_w = 2;                        /* HOMING */
+        for (int f = 0; f < 120 && p1 > 0 && g_ships[p1].alive; f++) {
+            int fire = (f == 25 || f == 70);
+            if (fire) pl->fire_cool = 0;
+            MV_AIM(p1, 190.0f, 6.0f, 0.05f, fire);
         }
-        MV_IDLE(50);                            /* watch the fireball */
+        MV_IDLE(45);                             /* missiles fly */
+        /* 2b: switch to the medium laser, press the attack. */
+        MV_TAP(b, 2);                            /* HOMING -> PULSE-M */
+        pl->shield = pl->shield_max;             /* continuity polish */
+        for (int f = 0; f < 600 && p1 > 0 && g_ships[p1].alive; f++) {
+            MV_AIM(p1, 0.0f, 3.0f, 0.010f, 1);
+            if (f % 120 == 60) {
+                Vec3 l2 = m3_mul_v3_t(&pl->basis,
+                                      v3_sub(g_ships[p1].pos, pl->pos));
+                printf("[2b] f=%d st=%d w=%d cool=%.2f heat=%.0f "
+                       "l=(%.1f %.1f %.1f) canfire=%d nw=%d aw=%d\n",
+                       f, elite_game_state(),
+                       pl->weapons[pl->active_w], pl->fire_cool,
+                       pl->heat, l2.x, l2.y, l2.z,
+                       combat_can_fire(pl), pl->n_weapons, pl->active_w);
+            }
+        }
+        MV_IDLE(40);                             /* fireball */
+        printf("[movie] p1 alive=%d hull=%.0f shield=%.0f myheat=%.0f "
+               "frame=%d\n",
+               p1 > 0 ? g_ships[p1].alive : -1,
+               p1 > 0 ? g_ships[p1].hull : 0,
+               p1 > 0 ? g_ships[p1].shield : 0, pl->heat, mf);
+        /* 2c: the gauss finish on raider two — helix + kill. */
+        MV_TAP(lb, 2);                           /* lock next */
+        MV_TAP(b, 2);                            /* PULSE-M -> GAUSS */
+        pl->shield = pl->shield_max;
+        for (int f = 0; f < 700 && p2 > 0 && g_ships[p2].alive; f++)
+            MV_AIM(p2, 1400.0f, 3.0f, 0.006f, 1);
+        MV_IDLE(55);
+        printf("[movie] p2 alive=%d frame=%d\n",
+               p2 > 0 ? g_ships[p2].alive : -1, mf);
 
         /* Phase 3: salvage run — lock loot, fly to it, scoop. */
         extern int loot_positions(Vec3 *, int *, int);
@@ -223,16 +288,10 @@ int main(int argc, char **argv) {
                     float d3 = v3_len(v3_sub(cans[i], pl->pos));
                     if (d3 < bd) { bd = d3; bi = i; }
                 }
-                CraftRawButtons b = none;
-                Vec3 local = m3_mul_v3_t(&pl->basis,
-                                         v3_sub(cans[bi], pl->pos));
-                if (local.x > 2.0f) b.right = true;
-                else if (local.x < -2.0f) b.left = true;
-                if (local.y > 2.0f) b.up = true;
-                else if (local.y < -2.0f) b.down = true;
+                MV_STEER(cans[bi], 0.06f);
                 pl->throttle = (bd > 120.0f) ? 0.85f
                              : (bd > 40.0f) ? 0.45f : 0.22f;
-                MV(b);
+                MV(none);
             }
             Vec3 cans[6]; int comp[6];
             if (loot_positions(cans, comp, 6) == 0) break;
@@ -257,14 +316,9 @@ int main(int argc, char **argv) {
         for (int f = 0; f < 1400; f++) {
             float d3 = v3_len(pl->pos);         /* station at origin */
             if (d3 < 420.0f) break;
-            CraftRawButtons b = none;
-            Vec3 local = m3_mul_v3_t(&pl->basis, v3_scale(pl->pos, -1.0f));
-            if (local.x > 12.0f) b.right = true;
-            else if (local.x < -12.0f) b.left = true;
-            if (local.y > 12.0f) b.up = true;
-            else if (local.y < -12.0f) b.down = true;
+            MV_STEER(v3(0, 0, 0), 0.05f);     /* station at origin */
             pl->throttle = (d3 > 700.0f) ? 0.85f : 0.4f;
-            MV(b);
+            MV(none);
         }
         pl->throttle = 0.05f;
         printf("[movie] dock attempt at %.0fm state=%d\n",
@@ -291,7 +345,10 @@ int main(int argc, char **argv) {
         MV_TAP(down, 3); MV_TAP(down, 3);       /* OUTFITTING */
         MV_TAP(a, 12);
         MV_TAP(lb, 30);                         /* detail sheet, linger */
-        MV_TAP(rb, 26); MV_TAP(rb, 26);         /* cycle two more */
+        MV_TAP(rb, 24); MV_TAP(rb, 24);         /* fitted gear tour */
+        for (int k = 0; k < 6; k++) MV_TAP(rb, 12);   /* into the shop */
+        MV_IDLE(30);                            /* study the offer */
+        MV_TAP(a, 20);                          /* BUY IT */
         MV_TAP(b, 8);                           /* back to list */
         MV_TAP(menu, 8);
         MV_TAP(down, 3); MV_TAP(a, 12);         /* MISSIONS */
