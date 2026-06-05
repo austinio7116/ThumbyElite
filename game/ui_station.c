@@ -10,6 +10,10 @@
 #include "elite_player.h"
 #include "system_sim.h"
 #include "econ.h"
+#include "elite_ships.h"
+#include "ui_status.h"
+#include "elite_entity.h"
+#include "elite_weapons.h"
 #include "craft_font.h"
 #include <stdio.h>
 #include <string.h>
@@ -24,7 +28,9 @@
 #define COL_WARN   RGB565C(255, 120,  70)
 #define COL_ILL    RGB565C(220, 100, 200)
 
-typedef enum { SCR_HOME = 0, SCR_MARKET } Screen;
+typedef enum {
+    SCR_HOME = 0, SCR_MARKET, SCR_SHIPYARD, SCR_OUTFIT, SCR_STATUS
+} Screen;
 
 static Screen s_screen;
 static int s_station;
@@ -38,10 +44,10 @@ static float s_toast_t;
 
 #define HOME_ITEMS 6
 static const char *k_home[HOME_ITEMS] = {
-    "MARKET", "REFUEL", "LAUNCH", "SHIPYARD", "OUTFITTING", "MISSIONS",
+    "MARKET", "SHIPYARD", "OUTFITTING", "STATUS", "REFUEL", "LAUNCH",
 };
 static const bool k_home_enabled[HOME_ITEMS] = {
-    true, true, true, false, false, false,
+    true, true, true, true, true, true,
 };
 
 void station_open(int station_idx) {
@@ -69,7 +75,7 @@ static void try_buy(int good) {
     if (price <= 0) { toast("NO TRADE"); return; }
     if (stock <= 0) { toast("NO STOCK"); return; }
     if (g_player.credits < price) { toast("NO CREDITS"); return; }
-    if (player_cargo_total() >= g_player.cargo_cap) { toast("HOLD FULL"); return; }
+    if (player_cargo_total() >= player_cargo_cap()) { toast("HOLD FULL"); return; }
     g_player.credits -= price;
     g_player.cargo[good]++;
     s_bought[good]++;
@@ -102,6 +108,183 @@ static void try_refuel(void) {
     toast("REFUELLED");
 }
 
+/* --- shipyard ----------------------------------------------------------*/
+static void shipyard_buy(int hull_id) {
+    if (hull_id == g_player.hull_id) { toast("CURRENT SHIP"); return; }
+    const HullDef *h = &k_hulls[hull_id];
+    int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
+    int cost = h->price - tradein;
+    if (cost < 0) cost = 0;
+    if (g_player.credits < cost) { toast("NO CREDITS"); return; }
+    /* Cargo must fit the new hold. */
+    if (player_cargo_total() > h->cargo) { toast("CARGO WONT FIT"); return; }
+    g_player.credits -= cost;
+    g_player.hull_id = (uint8_t)hull_id;
+    /* Tiers clamp to what the frame can take. */
+    if (g_player.shield_tier > h->max_shield_tier)
+        g_player.shield_tier = h->max_shield_tier;
+    if (g_player.hull_tier > h->max_hull_tier)
+        g_player.hull_tier = h->max_hull_tier;
+    /* Mounts that don't fit (count or size) drop to salvage, else sell. */
+    for (int i = 0; i < HULL_SLOTS; i++) {
+        WeaponInst *m = &g_player.mounts[i];
+        if (!m->in_use) continue;
+        bool fits = i < h->n_slots &&
+                    k_weapons[m->type].size <= h->slot_size[i];
+        if (fits) continue;
+        int sl = -1;
+        for (int t = 0; t < MAX_SALVAGE; t++)
+            if (!g_player.salvage[t].in_use) { sl = t; break; }
+        if (sl >= 0 && player_cargo_total() < h->cargo) {
+            g_player.salvage[sl] = *m;
+        } else {
+            g_player.credits += weapon_price(m->type, m->quality) / 2;
+        }
+        m->in_use = 0;
+    }
+    player_apply_to_ship();
+    g_ships[PLAYER].hull = g_ships[PLAYER].hull_max;   /* delivered fresh */
+    g_ships[PLAYER].shield = g_ships[PLAYER].shield_max;
+    toast("SHIP DELIVERED");
+}
+
+/* --- outfitting ----------------------------------------------------------
+ * Row model: mounts, then upgrades, then the salvage rack, then the
+ * shop list. Rebuilt every tick (cheap; counts change under actions). */
+typedef enum { ROW_MOUNT, ROW_SHIELD_UP, ROW_HULL_UP, ROW_SALV, ROW_SHOP } RowKind;
+typedef struct { uint8_t kind, index; } OutfitRow;
+static OutfitRow s_rows[HULL_SLOTS + 2 + MAX_SALVAGE + WPN_COUNT];
+static int s_n_rows;
+
+static void outfit_build_rows(void) {
+    const HullDef *h = &k_hulls[g_player.hull_id];
+    s_n_rows = 0;
+    for (int i = 0; i < h->n_slots; i++)
+        s_rows[s_n_rows++] = (OutfitRow){ ROW_MOUNT, (uint8_t)i };
+    s_rows[s_n_rows++] = (OutfitRow){ ROW_SHIELD_UP, 0 };
+    s_rows[s_n_rows++] = (OutfitRow){ ROW_HULL_UP, 0 };
+    for (int i = 0; i < MAX_SALVAGE; i++)
+        if (g_player.salvage[i].in_use)
+            s_rows[s_n_rows++] = (OutfitRow){ ROW_SALV, (uint8_t)i };
+    for (int i = 0; i < WPN_COUNT; i++)
+        s_rows[s_n_rows++] = (OutfitRow){ ROW_SHOP, (uint8_t)i };
+}
+
+static int repair_cost(const WeaponInst *w) {
+    int base = weapon_price(w->type, w->quality);
+    return (int)((100 - w->integrity) * base / 100 * 0.6f *
+                 skill_repair_mult()) + 1;
+}
+
+static int free_slot_for(int wpn_type) {
+    const HullDef *h = &k_hulls[g_player.hull_id];
+    for (int i = 0; i < h->n_slots; i++)
+        if (!g_player.mounts[i].in_use &&
+            k_weapons[wpn_type].size <= h->slot_size[i])
+            return i;
+    return -1;
+}
+
+static void outfit_action_a(int row) {
+    if (row >= s_n_rows) return;
+    const OutfitRow *r = &s_rows[row];
+    const HullDef *h = &k_hulls[g_player.hull_id];
+    switch (r->kind) {
+    case ROW_MOUNT: {
+        WeaponInst *m = &g_player.mounts[r->index];
+        if (!m->in_use) { toast("EMPTY MOUNT"); return; }
+        if (m->integrity >= 100) { toast("NO DAMAGE"); return; }
+        int cost = repair_cost(m);
+        if (g_player.credits < cost) { toast("NO CREDITS"); return; }
+        g_player.credits -= cost;
+        m->integrity = 100;
+        g_player.xp_tech += 1;
+        player_apply_to_ship();
+        toast("REPAIRED");
+        break;
+    }
+    case ROW_SHIELD_UP: {
+        if (g_player.shield_tier >= h->max_shield_tier) { toast("FRAME LIMIT"); return; }
+        int cost = upgrade_price(g_player.hull_id, g_player.shield_tier + 1);
+        if (g_player.credits < cost) { toast("NO CREDITS"); return; }
+        g_player.credits -= cost;
+        g_player.shield_tier++;
+        player_apply_to_ship();
+        toast("SHIELD UP");
+        break;
+    }
+    case ROW_HULL_UP: {
+        if (g_player.hull_tier >= h->max_hull_tier) { toast("FRAME LIMIT"); return; }
+        int cost = upgrade_price(g_player.hull_id, g_player.hull_tier + 1);
+        if (g_player.credits < cost) { toast("NO CREDITS"); return; }
+        g_player.credits -= cost;
+        g_player.hull_tier++;
+        player_apply_to_ship();
+        toast("HULL UP");
+        break;
+    }
+    case ROW_SALV: {
+        WeaponInst *sv = &g_player.salvage[r->index];
+        int slot = free_slot_for(sv->type);
+        if (slot < 0) { toast("NO FREE SLOT"); return; }
+        g_player.mounts[slot] = *sv;
+        sv->in_use = 0;
+        player_apply_to_ship();
+        toast("FITTED");
+        break;
+    }
+    case ROW_SHOP: {
+        int price = (int)(weapon_price(r->index, Q_STANDARD) *
+                          skill_price_mult());
+        int slot = free_slot_for(r->index);
+        if (slot < 0) { toast("NO FREE SLOT"); return; }
+        if (g_player.credits < price) { toast("NO CREDITS"); return; }
+        g_player.credits -= price;
+        g_player.mounts[slot] =
+            (WeaponInst){ (uint8_t)r->index, Q_STANDARD, 100, 1 };
+        player_apply_to_ship();
+        toast("FITTED");
+        break;
+    }
+    }
+}
+
+static void outfit_action_b(int row) {
+    if (row >= s_n_rows) return;
+    const OutfitRow *r = &s_rows[row];
+    switch (r->kind) {
+    case ROW_MOUNT: {
+        /* Unmount into the salvage rack. */
+        WeaponInst *m = &g_player.mounts[r->index];
+        if (!m->in_use) return;
+        int sl = -1;
+        for (int t = 0; t < MAX_SALVAGE; t++)
+            if (!g_player.salvage[t].in_use) { sl = t; break; }
+        if (sl < 0 || player_cargo_total() >= player_cargo_cap()) {
+            toast("NO RACK SPACE");
+            return;
+        }
+        g_player.salvage[sl] = *m;
+        m->in_use = 0;
+        player_apply_to_ship();
+        toast("UNMOUNTED");
+        break;
+    }
+    case ROW_SALV: {
+        /* Sell from the rack: value scales with quality + integrity. */
+        WeaponInst *sv = &g_player.salvage[r->index];
+        int v = (int)(weapon_price(sv->type, sv->quality) *
+                      (0.35f + 0.30f * sv->integrity * 0.01f));
+        g_player.credits += v;
+        sv->in_use = 0;
+        toast("SOLD");
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 DockAction station_tick(const CraftRawButtons *btn, float dt) {
     DockAction act = DOCK_NONE;
     bool a_edge = btn->a && !s_prev.a;
@@ -129,15 +312,41 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
     case SCR_HOME:
         if (up && s_cursor > 0) s_cursor--;
         if (down && s_cursor < HOME_ITEMS - 1) s_cursor++;
-        if (a_edge && k_home_enabled[s_cursor]) {
+        if (a_edge) {
             if (s_cursor == 0) { s_screen = SCR_MARKET; s_cursor = 0; s_scroll = 0; }
-            else if (s_cursor == 1) try_refuel();
-            else if (s_cursor == 2) act = DOCK_LAUNCH;
-        } else if (a_edge) {
-            toast("COMING SOON");
+            else if (s_cursor == 1) { s_screen = SCR_SHIPYARD; s_cursor = 0; s_scroll = 0; }
+            else if (s_cursor == 2) { s_screen = SCR_OUTFIT; s_cursor = 0; s_scroll = 0; }
+            else if (s_cursor == 3) { s_screen = SCR_STATUS; status_open(); }
+            else if (s_cursor == 4) try_refuel();
+            else if (s_cursor == 5) act = DOCK_LAUNCH;
         }
         if (back) act = DOCK_LAUNCH;           /* MENU = leave */
         break;
+
+    case SCR_SHIPYARD:
+        if (up && s_cursor > 0) s_cursor--;
+        if (down && s_cursor < N_HULLS - 1) s_cursor++;
+        if (s_cursor < s_scroll) s_scroll = s_cursor;
+        if (s_cursor > s_scroll + 6) s_scroll = s_cursor - 6;
+        if (a_edge) shipyard_buy(s_cursor);
+        if (back) { s_screen = SCR_HOME; s_cursor = 1; }
+        break;
+
+    case SCR_OUTFIT:
+        outfit_build_rows();
+        if (up && s_cursor > 0) s_cursor--;
+        if (down && s_cursor < s_n_rows - 1) s_cursor++;
+        if (s_cursor < s_scroll) s_scroll = s_cursor;
+        if (s_cursor > s_scroll + 8) s_scroll = s_cursor - 8;
+        if (a_edge) outfit_action_a(s_cursor);
+        if (b_edge) outfit_action_b(s_cursor);
+        if (back) { s_screen = SCR_HOME; s_cursor = 2; }
+        break;
+
+    case SCR_STATUS:
+        if (status_tick(btn, dt)) { s_screen = SCR_HOME; s_cursor = 3; }
+        s_prev = *btn;
+        return act;
 
     case SCR_MARKET:
         if (up && s_cursor > 0) s_cursor--;
@@ -198,7 +407,7 @@ static void draw_home(uint16_t *fb) {
              (int)g_player.fuel_max);
     craft_font_draw(fb, fuel, 2, 103, COL_DIM);
     snprintf(fuel, sizeof fuel, "CARGO %d/%d", player_cargo_total(),
-             g_player.cargo_cap);
+             player_cargo_cap());
     craft_font_draw(fb, fuel, 2, 110, COL_DIM);
     hl(fb, 118, COL_GRID);
     craft_font_draw(fb, "A:SELECT MENU:LEAVE MENU", 2, 121, COL_DIM);
@@ -242,15 +451,138 @@ static void draw_market(uint16_t *fb) {
     hl(fb, 113, COL_GRID);
     char buf[32];
     snprintf(buf, sizeof buf, "HOLD %d/%d", player_cargo_total(),
-             g_player.cargo_cap);
+             player_cargo_cap());
     craft_font_draw(fb, buf, 2, 116, COL_DIM);
     craft_font_draw(fb, "A:BUY B:SELL", 70, 116, COL_DIM);
+    craft_font_draw(fb, "MENU:BACK", 2, 123, COL_DIM);
+}
+
+static const char *k_qtag[5] = { "SLV", "STD", "RNF", "MIL", "PRO" };
+
+static void draw_shipyard(uint16_t *fb) {
+    draw_header(fb);
+    craft_font_draw(fb, "SHIPYARD", 2, 12, COL_DIM);
+    hl(fb, 19, COL_GRID);
+    int y = 22;
+    for (int i = s_scroll; i < N_HULLS && i < s_scroll + 7; i++, y += 10) {
+        const HullDef *h = &k_hulls[i];
+        uint16_t c = (i == s_cursor) ? COL_CUR
+                   : (i == g_player.hull_id) ? COL_CRED : COL_DIM;
+        if (i == s_cursor) craft_font_draw(fb, ">", 2, y, COL_CUR);
+        craft_font_draw(fb, h->name, 8, y, c);
+        char buf[16];
+        if (i == g_player.hull_id)
+            craft_font_draw(fb, "OWNED", 92, y, COL_CRED);
+        else {
+            int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
+            int cost = h->price - tradein;
+            if (cost < 0) cost = 0;
+            snprintf(buf, sizeof buf, "%d", cost);
+            craft_font_draw(fb, buf, 92, y, c);
+        }
+    }
+    /* Selected hull stat strip. */
+    const HullDef *sel = &k_hulls[s_cursor];
+    hl(fb, 96, COL_GRID);
+    char buf[36];
+    snprintf(buf, sizeof buf, "SPD%d CRG%d HUL%d SHD%d",
+             (int)sel->max_speed, sel->cargo, (int)sel->hull_base,
+             (int)sel->shield_base);
+    craft_font_draw(fb, buf, 2, 99, COL_DIM);
+    char slots[20] = "SLOTS ";
+    int sl = 6;
+    for (int i = 0; i < sel->n_slots; i++) {
+        slots[sl++] = (char)('0' + sel->slot_size[i]);
+        slots[sl++] = ' ';
+    }
+    slots[sl] = 0;
+    snprintf(buf, sizeof buf, "%s STIER%d HTIER%d", slots,
+             sel->max_shield_tier, sel->max_hull_tier);
+    craft_font_draw(fb, buf, 2, 106, COL_DIM);
+    hl(fb, 115, COL_GRID);
+    craft_font_draw(fb, "A:BUY(TRADE-IN) MENU:BACK", 2, 118, COL_DIM);
+}
+
+static void draw_outfit(uint16_t *fb) {
+    draw_header(fb);
+    craft_font_draw(fb, "OUTFITTING", 2, 12, COL_DIM);
+    hl(fb, 19, COL_GRID);
+    const HullDef *h = &k_hulls[g_player.hull_id];
+    outfit_build_rows();
+    if (s_cursor >= s_n_rows) s_cursor = s_n_rows - 1;
+    int y = 22;
+    char buf[36];
+    for (int i = s_scroll; i < s_n_rows && i < s_scroll + 9; i++, y += 10) {
+        const OutfitRow *r = &s_rows[i];
+        uint16_t c = (i == s_cursor) ? COL_CUR : COL_DIM;
+        if (i == s_cursor) craft_font_draw(fb, ">", 2, y, COL_CUR);
+        switch (r->kind) {
+        case ROW_MOUNT: {
+            const WeaponInst *m = &g_player.mounts[r->index];
+            if (m->in_use)
+                snprintf(buf, sizeof buf, "S%d %-8s%s %d%%",
+                         h->slot_size[r->index], k_weapons[m->type].name,
+                         k_qtag[m->quality], m->integrity);
+            else
+                snprintf(buf, sizeof buf, "S%d ----",
+                         h->slot_size[r->index]);
+            craft_font_draw(fb, buf, 8, y, c);
+            if (m->in_use && m->integrity < 100) {
+                snprintf(buf, sizeof buf, "%d", repair_cost(m));
+                craft_font_draw(fb, buf, 104, y, COL_CRED);
+            }
+            break;
+        }
+        case ROW_SHIELD_UP:
+        case ROW_HULL_UP: {
+            int is_sh = r->kind == ROW_SHIELD_UP;
+            int tier = is_sh ? g_player.shield_tier : g_player.hull_tier;
+            int max = is_sh ? h->max_shield_tier : h->max_hull_tier;
+            if (tier >= max)
+                snprintf(buf, sizeof buf, "%s T%d MAX",
+                         is_sh ? "SHIELD" : "ARMOR", tier);
+            else
+                snprintf(buf, sizeof buf, "%s T%d>%d",
+                         is_sh ? "SHIELD" : "ARMOR", tier, tier + 1);
+            craft_font_draw(fb, buf, 8, y, c);
+            if (tier < max) {
+                snprintf(buf, sizeof buf, "%d",
+                         upgrade_price(g_player.hull_id, tier + 1));
+                craft_font_draw(fb, buf, 104, y, COL_CRED);
+            }
+            break;
+        }
+        case ROW_SALV: {
+            const WeaponInst *m = &g_player.salvage[r->index];
+            snprintf(buf, sizeof buf, "RK %-8s%s %d%%",
+                     k_weapons[m->type].name, k_qtag[m->quality],
+                     m->integrity);
+            craft_font_draw(fb, buf, 8, y, c);
+            break;
+        }
+        case ROW_SHOP: {
+            snprintf(buf, sizeof buf, "BUY %-8sZ%d",
+                     k_weapons[r->index].name, k_weapons[r->index].size);
+            craft_font_draw(fb, buf, 8, y, c);
+            snprintf(buf, sizeof buf, "%d",
+                     (int)(weapon_price(r->index, Q_STANDARD) *
+                           skill_price_mult()));
+            craft_font_draw(fb, buf, 104, y, COL_CRED);
+            break;
+        }
+        }
+    }
+    hl(fb, 113, COL_GRID);
+    craft_font_draw(fb, "A:FIT/RPR/BUY B:UNFIT/SELL", 2, 116, COL_DIM);
     craft_font_draw(fb, "MENU:BACK", 2, 123, COL_DIM);
 }
 
 void station_draw(uint16_t *fb) {
     fill(fb, COL_BG);
     if (s_screen == SCR_MARKET) draw_market(fb);
+    else if (s_screen == SCR_SHIPYARD) draw_shipyard(fb);
+    else if (s_screen == SCR_OUTFIT) draw_outfit(fb);
+    else if (s_screen == SCR_STATUS) { status_draw(fb); return; }
     else draw_home(fb);
 
     if (s_toast_t > 0) {

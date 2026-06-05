@@ -21,12 +21,15 @@
 #include "elite_flight.h"
 #include "elite_combat.h"
 #include "elite_proj.h"
+#include "elite_loot.h"
 #include "elite_ai.h"
 #include "ui_hud.h"
 #include "ui_map.h"
 #include "ui_station.h"
+#include "ui_status.h"
 #include "elite_player.h"
 #include "system_sim.h"
+#include "station_gen.h"
 #include "galaxy_gen.h"
 #include "craft_font.h"
 #include "meshes_gen.h"
@@ -36,7 +39,7 @@
 typedef enum {
     ST_FLIGHT = 0, ST_SUPERCRUISE, ST_HYPERJUMP,
     ST_GALAXY_MAP, ST_SYSTEM_MAP, ST_PAUSE,
-    ST_DOCKING, ST_DOCKED,
+    ST_DOCKING, ST_DOCKED, ST_STATUS,
 } GState;
 
 #define DOCK_RANGE 600.0f
@@ -62,6 +65,8 @@ static float   s_hyper_t;
 static uint32_t s_hyper_seed;
 
 static int   s_target = -1;      /* combat lock */
+static char  s_scoop_toast[28];
+static float s_scoop_toast_t;
 static float s_frame_ms;
 static int   s_pause_cursor;
 static bool  s_prev_menu, s_prev_a;
@@ -104,29 +109,18 @@ static Vec3 cam_pos_mm(void) {
 static void spawn_player(void) {
     Ship *p = &g_ships[PLAYER];
     p->alive = true;
-    p->mesh = &mesh_fighter;
     p->pos = v3(0, 0, 0);
     p->basis = m3_identity();
     p->vel = v3(0, 0, 0);
     p->throttle = 0.3f;
     p->assist = true;
     p->boost_t = 0;
-    p->max_speed = 120.0f;
-    p->accel = 60.0f;
-    p->turn_rate = 2.1f;
-    p->hull_max = 100.0f;
-    p->hull = p->hull_max;
-    p->shield_max = 80.0f;
-    p->shield = p->shield_max;
     p->heat = 0;
     p->fire_cool = 0;
     p->team = TEAM_PLAYER;
-    /* Starter mounts (full outfitting arrives in Phase 7). */
-    p->n_weapons = 0;
-    p->active_w = 0;
-    ship_fit_weapon(PLAYER, 0, WPN_PULSE_M);
-    ship_fit_weapon(PLAYER, 1, WPN_AUTOCANNON);
-    ship_fit_weapon(PLAYER, 2, WPN_HOMING);
+    player_apply_to_ship();      /* hull, tiers, mounts, skills */
+    p->hull = p->hull_max;
+    p->shield = p->shield_max;
 }
 
 /* --- POI content ---------------------------------------------------------
@@ -156,12 +150,19 @@ static void spawn_poi_content(void) {
 }
 
 /* Re-anchor the local frame at a system-space position. */
+static const Mesh *s_station_mesh;   /* generated for the anchored station */
+
 static void drop_anchor(Vec3 pos_mm, const Poi *poi) {
     s_anchor_mm = pos_mm;
     s_anchor_has_poi = (poi != NULL);
     if (poi) s_anchor_poi = *poi;
+    if (poi && poi->kind == POI_STATION)
+        s_station_mesh = station_gen_mesh(
+            (uint32_t)(system_info()->seed >> 8) ^
+            (uint32_t)(poi->index * 0x9E3779B9u));
     ships_despawn_npcs();
     fx_init();
+    loot_init();
     s_target = -1;
 }
 
@@ -284,6 +285,14 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
     ai_tick(dt);
     combat_tick(dt);
     fx_tick(dt);
+    {
+        const char *scooped = loot_tick(dt);
+        if (scooped) {
+            snprintf(s_scoop_toast, sizeof s_scoop_toast, "%s", scooped);
+            s_scoop_toast_t = 2.0f;
+        }
+        if (s_scoop_toast_t > 0) s_scoop_toast_t -= dt;
+    }
 
     for (int i = 0; i < MAX_SHIPS; i++) {
         Ship *s = &g_ships[i];
@@ -315,14 +324,14 @@ static void tick_supercruise(const CraftRawButtons *btn, float dt) {
     float standoff = 0.0f;
     if (s_sc_has_dest && s_sc_dest.kind == POI_PLANET)
         standoff = system_info()->planets[s_sc_dest.index].radius_mm * 3.5f;
-    float vmax = 2000.0f;
+    float vmax = 3000.0f;
     float dist = 1e9f;
     if (s_sc_has_dest) {
         dist = v3_len(v3_sub(s_sc_dest.pos_mm, s_sc_pos_mm));
         float eff = dist - standoff;
         if (eff < 0.0f) eff = 0.0f;
-        /* eff/4 decay + 1 Mm/s floor: brisk approach, ~30-40s hops. */
-        float lim = eff * 0.25f + 1.0f;
+        /* eff/2 decay + 2 Mm/s floor: ~20s hops (user: less waiting). */
+        float lim = eff * 0.5f + 2.0f;
         if (lim < vmax) vmax = lim;
     }
     float want = p->throttle * vmax;
@@ -367,6 +376,7 @@ static void tick_hyperjump(float dt) {
         if (g_player.fuel < 0) g_player.fuel = 0;
         arrive_in_system(s_jump_target);
         r3d_starfield_init((uint32_t)(system_info()->seed >> 16));
+        g_player.xp_piloting += 2;
         elite_input_reset();
         s_state = ST_FLIGHT;
     }
@@ -409,6 +419,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         m3_orthonormalize(&p->basis);
         fx_tick(dt);
         if (s_dock_t >= 2.2f) {
+            g_player.xp_piloting += 1;
             station_open(s_anchor_poi.index);
             s_state = ST_DOCKED;
         }
@@ -438,8 +449,15 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         break;
     }
 
+    case ST_STATUS:
+        if (status_tick(btn, dt)) {
+            elite_input_reset();
+            s_state = ST_FLIGHT;
+        }
+        break;
+
     case ST_PAUSE: {
-        static const int N_ITEMS = 3;
+        static const int N_ITEMS = 4;
         bool up = btn->up, down = btn->down;
         static bool pu, pd;
         if (up && !pu && s_pause_cursor > 0) s_pause_cursor--;
@@ -455,6 +473,9 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         } else if (a_edge && s_pause_cursor == 2) {
             map_system_open(cam_pos_mm());
             s_state = ST_SYSTEM_MAP;
+        } else if (a_edge && s_pause_cursor == 3) {
+            status_open();
+            s_state = ST_STATUS;
         }
         break;
     }
@@ -493,7 +514,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             p->basis.r[2] = fwd;
             p->basis.r[0] = v3_norm(v3_cross(up0, fwd));
             p->basis.r[1] = v3_cross(fwd, p->basis.r[0]);
-            p->throttle = 0.7f;
+            p->throttle = 1.0f;     /* full burn by default */
             p->pos = v3(0, 0, 0);
             p->vel = v3(0, 0, 0);
             elite_input_reset();
@@ -520,6 +541,7 @@ void elite_game_render_begin(void) {
     case ST_GALAXY_MAP:
     case ST_SYSTEM_MAP:
     case ST_DOCKED:
+    case ST_STATUS:
         /* Fullscreen UI: minimal empty scene (UI fills the band). */
         r3d_scene_begin(&p->basis, 60.0f);
         break;
@@ -527,6 +549,8 @@ void elite_game_render_begin(void) {
     case ST_SUPERCRUISE:
         r3d_scene_begin(&p->basis, 60.0f);
         r3d_planet_emit(cam_pos_mm());
+        fx_sc_dust_emit(s_sc_pos_mm,
+                        v3_scale(p->basis.r[2], s_sc_speed));
         break;
 
     default: {   /* FLIGHT + PAUSE render the world */
@@ -536,8 +560,8 @@ void elite_game_render_begin(void) {
         /* Anchored POI structure (station / beacon). */
         if (s_anchor_has_poi && s_anchor_poi.kind != POI_PLANET) {
             R3DObject obj;
-            obj.mesh = (s_anchor_poi.kind == POI_STATION) ? &mesh_station
-                                                          : &mesh_beacon;
+            obj.mesh = (s_anchor_poi.kind == POI_STATION && s_station_mesh)
+                           ? s_station_mesh : &mesh_beacon;
             obj.basis = m3_identity();
             /* Slow majestic spin. */
             m3_rotate_local(&obj.basis, 1, s_time * 0.05f);
@@ -553,6 +577,7 @@ void elite_game_render_begin(void) {
             obj.pos = v3_sub(g_ships[i].pos, p->pos);
             r3d_scene_add_object(&obj);
         }
+        loot_render(p->pos);
         fx_emit_all(p->pos, p->vel);
         proj_emit(p->pos);
         break;
@@ -600,16 +625,17 @@ static void draw_hyperjump_overlay(uint16_t *fb) {
 
 static void draw_pause_overlay(uint16_t *fb) {
     /* Dim panel. */
-    for (int y = 38; y < 92; y++)
+    for (int y = 38; y < 100; y++)
         for (int x = 28; x < 100; x++)
             fb[y * ELITE_FB_W + x] = RGB565C(10, 14, 24);
     for (int x = 28; x < 100; x++) {
         fb[38 * ELITE_FB_W + x] = RGB565C(95, 110, 140);
-        fb[91 * ELITE_FB_W + x] = RGB565C(95, 110, 140);
+        fb[99 * ELITE_FB_W + x] = RGB565C(95, 110, 140);
     }
     craft_font_draw(fb, "PAUSED", 52, 43, RGB565C(200, 210, 225));
-    static const char *items[3] = { "RESUME", "GALAXY CHART", "SYSTEM MAP" };
-    for (int i = 0; i < 3; i++) {
+    static const char *items[4] = { "RESUME", "GALAXY CHART", "SYSTEM MAP",
+                                    "SHIP STATUS" };
+    for (int i = 0; i < 4; i++) {
         uint16_t c = (i == s_pause_cursor) ? RGB565C(120, 255, 120)
                                            : RGB565C(120, 126, 145);
         if (i == s_pause_cursor) craft_font_draw(fb, ">", 34, 56 + i * 9, c);
@@ -627,6 +653,7 @@ void elite_game_draw_overlay(uint16_t *fb) {
     case ST_SYSTEM_MAP: map_system_draw(fb); return;
     case ST_HYPERJUMP:  draw_hyperjump_overlay(fb); return;
     case ST_DOCKED:     station_draw(fb); return;
+    case ST_STATUS:     status_draw(fb); return;
     default: break;
     }
 
@@ -655,6 +682,10 @@ void elite_game_draw_overlay(uint16_t *fb) {
             .show_perf = 1,
         };
         ui_hud_draw(fb, &info);
+        if (s_scoop_toast_t > 0)
+            craft_font_draw(fb, s_scoop_toast,
+                            64 - craft_font_width(s_scoop_toast) / 2, 38,
+                            RGB565C(255, 200, 60));
         if (s_state == ST_DOCKING)
             craft_font_draw(fb, "DOCKING...", 44, 30, RGB565C(120, 230, 255));
         else if (can_dock())

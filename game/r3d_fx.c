@@ -271,6 +271,45 @@ static void fireballs_emit(Vec3 cam_pos) {
     }
 }
 
+/* --- Supercruise debris -------------------------------------------------
+ * Mm-scale wrapping motes. The wrap box grows with speed so there is
+ * always *something* streaming past; streaks stretch with velocity. */
+#define SC_DUST_N 26
+static Vec3 s_sc_dust[SC_DUST_N];
+static int  s_sc_seeded;
+
+void fx_sc_dust_emit(Vec3 cam_pos_mm, Vec3 vel_mms) {
+    float speed = v3_len(vel_mms);
+    float R = speed * 0.35f;
+    if (R < 1.2f) R = 1.2f;
+    if (R > 260.0f) R = 260.0f;
+    if (!s_sc_seeded) {
+        s_sc_seeded = 1;
+        for (int i = 0; i < SC_DUST_N; i++)
+            s_sc_dust[i] = v3_add(cam_pos_mm,
+                                  v3(frand(-R, R), frand(-R, R), frand(-R, R)));
+    }
+    Vec3 streak = v3_scale(vel_mms, 0.05f);
+    uint16_t c = RGB565C(130, 140, 165);
+    for (int i = 0; i < SC_DUST_N; i++) {
+        dust_wrap(&s_sc_dust[i], cam_pos_mm, R);
+        Vec3 rel = v3_scale(v3_sub(s_sc_dust[i], cam_pos_mm), 1.0e6f);
+        float sx, sy;
+        uint16_t d;
+        if (!r3d_scene_project(rel, &sx, &sy, &d)) continue;
+        if (sx < -8 || sx > 136 || sy < -8 || sy > 136) continue;
+        if (speed > 0.02f) {
+            float ex, ey;
+            uint16_t ed;
+            Vec3 rel2 = v3_add(rel, v3_scale(streak, 1.0e6f));
+            if (r3d_scene_project(rel2, &ex, &ey, &ed))
+                r3d_scene_add_line(sx, sy, d, ex, ey, ed, c);
+        } else {
+            r3d_scene_add_point(sx, sy, d, c, 1);
+        }
+    }
+}
+
 void fx_emit_all(Vec3 cam_pos, Vec3 cam_vel) {
     dust_emit(cam_pos, cam_vel);
     fireballs_emit(cam_pos);

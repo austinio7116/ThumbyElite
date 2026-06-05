@@ -24,6 +24,7 @@ typedef struct {
     Vec3  pos, vel;
     float life;
     float trail_accum;
+    float dmg_mult;
 } Proj;
 
 static Proj s_proj[MAX_PROJ];
@@ -40,6 +41,11 @@ int proj_count(void) {
 
 void proj_spawn(WeaponType type, int owner, int8_t target,
                 Vec3 pos, Vec3 dir, Vec3 inherit_vel) {
+    proj_spawn_ex(type, owner, target, pos, dir, inherit_vel, 1.0f);
+}
+
+void proj_spawn_ex(WeaponType type, int owner, int8_t target,
+                   Vec3 pos, Vec3 dir, Vec3 inherit_vel, float dmg_mult) {
     const WeaponDef *w = &k_weapons[type];
     for (int i = 0; i < MAX_PROJ; i++) {
         if (s_proj[i].alive) continue;
@@ -52,6 +58,7 @@ void proj_spawn(WeaponType type, int owner, int8_t target,
         p->vel = v3_add(v3_scale(dir, w->speed), inherit_vel);
         p->life = w->range / w->speed;
         p->trail_accum = 0;
+        p->dmg_mult = dmg_mult;
         return;
     }
 }
@@ -74,7 +81,8 @@ static void detonate(Proj *p) {
     const WeaponDef *w = &k_weapons[p->type];
     if (w->aoe > 0) {
         fx_spawn_explosion(p->pos, v3(0, 0, 0));
-        combat_explosion_damage(p->owner, p->pos, w->aoe, w->dmg);
+        combat_explosion_damage(p->owner, p->pos, w->aoe,
+                                w->dmg * p->dmg_mult);
     } else {
         fx_spawn_spark(p->pos, v3(0, 0, 0));
     }
@@ -122,7 +130,8 @@ void proj_tick(float dt) {
             if (w->aoe > 0) {
                 detonate(p);
             } else {
-                combat_direct_damage(p->owner, hit, w->dmg, p->pos);
+                combat_direct_damage(p->owner, hit,
+                                     w->dmg * p->dmg_mult, p->pos);
                 p->alive = false;
             }
             continue;

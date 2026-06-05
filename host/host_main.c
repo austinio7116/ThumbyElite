@@ -227,6 +227,69 @@ int main(int argc, char **argv) {
         #undef TAPB
     }
 
+    /* Salvage test: force component drops next to the player, scoop. */
+    if (getenv("ELITE_LOOTTEST")) {
+        extern void loot_on_kill(Vec3 pos, Vec3 vel, int tier);
+        CraftRawButtons none = {0};
+        for (int k = 0; k < 10; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        Ship *p = &g_ships[0];
+        p->vel = v3(0, 0, 0);
+        p->throttle = 0;
+        for (int i = 0; i < 8; i++)
+            loot_on_kill(v3_add(p->pos, v3(5, 0, 14)), v3(0, 0, 0), 4);
+        for (int k = 0; k < 90; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        int rack = 0;
+        for (int i = 0; i < MAX_SALVAGE; i++)
+            if (g_player.salvage[i].in_use) rack++;
+        printf("[loot] rack=%d cargo=%d xp_tech=%d\n",
+               rack, player_cargo_total(), g_player.xp_tech);
+        render_frame(); dump_ppm("/tmp/loot.ppm");
+        return 0;
+    }
+
+    /* Shop test: rich pilot docks, buys a dreadnought + gear. */
+    if (getenv("ELITE_SHOPTEST")) {
+        CraftRawButtons none = {0}, b;
+        #define TAPS(field, settle_n) do { \
+            b = none; b.field = true; \
+            elite_game_tick(&b, 1.0f / 30.0f); \
+            for (int k = 0; k < (settle_n); k++) \
+                elite_game_tick(&none, 1.0f / 30.0f); \
+        } while (0)
+        g_player.credits = 250000;
+        for (int k = 0; k < 30; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        TAPS(menu, 4); TAPS(down, 3); TAPS(down, 3); TAPS(a, 4);
+        int target_poi = atoi(getenv("ELITE_SHOPTEST"));
+        for (int i = 0; i < target_poi; i++) TAPS(down, 2);
+        TAPS(a, 4);
+        int f = 0;
+        while (elite_game_state() == 1 && f++ < 30 * 240)
+            elite_game_tick(&none, 1.0f / 30.0f);
+        b = none; b.lb = b.rb = true;
+        for (int k = 0; k < 8; k++) elite_game_tick(&b, 1.0f / 30.0f);
+        while (elite_game_state() == 6) elite_game_tick(&none, 1.0f / 30.0f);
+        for (int k = 0; k < 4; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        TAPS(down, 2); TAPS(a, 4);                    /* SHIPYARD */
+        for (int i = 0; i < 9; i++) TAPS(down, 2);    /* BASILISK */
+        render_frame(); dump_ppm("/tmp/shop_0_yard.ppm");
+        TAPS(a, 4);
+        printf("[shop] hull=%d credits=%d\n", g_player.hull_id,
+               g_player.credits);
+        TAPS(menu, 3);
+        TAPS(down, 2); TAPS(a, 4);                    /* OUTFITTING */
+        render_frame(); dump_ppm("/tmp/shop_1_outfit.ppm");
+        TAPS(down, 2); TAPS(down, 2); TAPS(down, 2);  /* shield upgrade row */
+        TAPS(a, 4);
+        printf("[shop] shield_tier=%d credits=%d\n", g_player.shield_tier,
+               g_player.credits);
+        render_frame(); dump_ppm("/tmp/shop_2_upgrade.ppm");
+        TAPS(menu, 3);
+        TAPS(down, 2); TAPS(a, 4);                    /* STATUS */
+        render_frame(); dump_ppm("/tmp/shop_3_status.ppm");
+        return 0;
+        #undef TAPS
+    }
+
     /* Hyperjump test: galaxy map, nudge cursor right until a new system
      * highlights in range, engage, ride the tunnel. */
     if (getenv("ELITE_JUMPTEST")) {

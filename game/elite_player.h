@@ -1,26 +1,76 @@
 /*
- * ThumbyElite — persistent player state (credits, cargo, fuel).
+ * ThumbyElite — persistent player state (the save serialises this).
  *
- * Grows into the full pilot/RPG sheet in Phase 7; the save system
- * (Phase 9) serialises exactly this struct.
+ * Weapons are INSTANCES: type + quality tier + integrity. Salvaged
+ * components arrive damaged and cheap — repair them, fit them, or sell
+ * them (the MechWarrior Mercenaries loop). Hull id gates slots, cargo
+ * and upgrade tiers (see elite_ships).
  */
 #ifndef ELITE_PLAYER_H
 #define ELITE_PLAYER_H
 
 #include "econ.h"
+#include "elite_ships.h"
+#include "elite_weapons.h"
 #include <stdint.h>
+
+/* Component quality tiers (price/damage multipliers in elite_player.c). */
+typedef enum {
+    Q_SALVAGED = 0, Q_STANDARD, Q_REINFORCED, Q_MILITARY, Q_PROTOTYPE
+} Quality;
+
+typedef struct {
+    uint8_t type;        /* WeaponType */
+    uint8_t quality;     /* Quality */
+    uint8_t integrity;   /* 0..100; reduces output below 100 */
+    uint8_t in_use;      /* slot occupied */
+} WeaponInst;
+
+#define MAX_SALVAGE 4
 
 typedef struct {
     int32_t credits;
+    uint8_t hull_id;
     uint8_t cargo[N_GOODS];
-    uint8_t cargo_cap;
-    float   fuel;          /* light-years of jump range remaining */
+    float   fuel;
     float   fuel_max;
+
+    WeaponInst mounts[HULL_SLOTS];      /* fitted weapons */
+    WeaponInst salvage[MAX_SALVAGE];    /* loose components in the hold */
+    uint8_t shield_tier;                /* 0..hull max */
+    uint8_t hull_tier;
+
+    /* Pilot skills: XP accumulators (levels derived). */
+    uint16_t xp_gunnery;    /* kills */
+    uint16_t xp_trading;    /* profitable sales */
+    uint16_t xp_tech;       /* salvage scooped + repairs */
+    uint16_t xp_piloting;   /* jumps + docks */
 } PlayerState;
 
 extern PlayerState g_player;
 
 void player_init(void);
 int  player_cargo_total(void);
+int  player_cargo_cap(void);
+
+/* Quality multipliers. */
+float quality_dmg_mult(int q);       /* 0.8 .. 1.35 */
+int   weapon_price(int type, int q); /* shop price for an instance */
+
+/* Effective damage/heat for a mounted instance (quality + integrity). */
+float mount_dmg_mult(const WeaponInst *w);
+
+/* Skill levels 0..9 from XP, plus their gameplay effects. */
+int skill_level(uint16_t xp);
+float skill_heat_mult(void);      /* gunnery: less heat per shot */
+float skill_turn_mult(void);      /* piloting: tighter handling */
+float skill_price_mult(void);     /* trading: better prices (<=1 buy) */
+float skill_repair_mult(void);    /* tech: cheaper repairs */
+
+/* Apply hull + tiers + skills to the live player ship entity. */
+void player_apply_to_ship(void);
+
+/* The player WeaponInst behind a live ship weapon slot. */
+const WeaponInst *player_mount_for_ship_slot(int slot);
 
 #endif

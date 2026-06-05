@@ -26,6 +26,11 @@ void fx_beam(Vec3 from, Vec3 to, uint16_t color);
  * space-dust streaks (sense of speed). */
 void fx_emit_all(Vec3 cam_pos, Vec3 cam_vel);
 
+/* Supercruise debris: a wrapping mote field in SYSTEM (Mm) coordinates
+ * whose streak length follows the cruise velocity — warp lines at full
+ * tilt, drifting sparks near drop speed. */
+void fx_sc_dust_emit(Vec3 cam_pos_mm, Vec3 vel_mms);
+
 int fx_alive_count(void);
 
 #endif

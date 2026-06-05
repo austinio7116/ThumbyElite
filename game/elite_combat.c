@@ -7,6 +7,8 @@
  */
 #include "elite_combat.h"
 #include "elite_proj.h"
+#include "elite_player.h"
+#include "elite_loot.h"
 #include "r3d_fx.h"
 #include "elite_types.h"
 
@@ -65,8 +67,14 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
     if (v->hull <= 0.0f) {
         v->alive = false;
         fx_spawn_explosion(v->pos, v->vel);
-        if (victim != PLAYER) s_kills++;
-        if (shooter == PLAYER) s_killmark = 0.7f;
+        if (victim != PLAYER) {
+            s_kills++;
+            loot_on_kill(v->pos, v->vel, v->tier);
+        }
+        if (shooter == PLAYER) {
+            s_killmark = 0.7f;
+            if (victim != PLAYER) g_player.xp_gunnery++;
+        }
     }
 }
 
@@ -88,8 +96,16 @@ int combat_fire(int shooter, float spread, int target) {
     if (!combat_can_fire(s)) return -1;
     const WeaponDef *w = &k_weapons[s->weapons[s->active_w]];
 
+    /* Player: component quality/integrity + gunnery skill modify output. */
+    float dmg_mult = 1.0f, heat_mult = 1.0f;
+    if (shooter == PLAYER) {
+        const WeaponInst *wi = player_mount_for_ship_slot(s->active_w);
+        if (wi) dmg_mult = mount_dmg_mult(wi);
+        heat_mult = skill_heat_mult();
+    }
+
     s->fire_cool = w->cooldown;
-    s->heat += w->heat;
+    s->heat += w->heat * heat_mult;
     if (w->ammo_max) s->ammo[s->active_w]--;
 
     Vec3 dir = s->basis.r[2];
@@ -118,8 +134,8 @@ int combat_fire(int shooter, float spread, int target) {
 
     /* Projectile weapons: hand off and we're done. */
     if (w->speed > 0.0f) {
-        proj_spawn((WeaponType)s->weapons[s->active_w], shooter,
-                   (int8_t)target, muzzle, dir, s->vel);
+        proj_spawn_ex((WeaponType)s->weapons[s->active_w], shooter,
+                      (int8_t)target, muzzle, dir, s->vel, dmg_mult);
         return -1;
     }
 
@@ -134,7 +150,8 @@ int combat_fire(int shooter, float spread, int target) {
     }
     Vec3 end = v3_add(s->pos, v3_scale(dir, best >= 0 ? best_t : w->range));
     fx_beam(muzzle, end, w->color);
-    if (best >= 0) combat_direct_damage(shooter, best, w->dmg, end);
+    if (best >= 0)
+        combat_direct_damage(shooter, best, w->dmg * dmg_mult, end);
     return best;
 }
 

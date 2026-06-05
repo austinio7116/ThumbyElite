@@ -76,6 +76,14 @@ UF2: `build_device/thumbyelite.uf2` → copy to workspace root `firmware_thumbye
 - **Shields recharge slowly** (meaningful downtime after collapse).
 - **AI tiers** determine speed, accuracy, weapons fitted, and power.
 
+## Station variety (user-specified 2026-06-05)
+
+- Stations must not be dull grey cubes: procedural station-shape generation
+  (module accretion / CA-like growth from the station seed) — habitat boxes,
+  panel wings, antennae, docking bay face; mirror/rotational symmetry;
+  per-station palette tints. Every station unique, deterministic, zero baked
+  storage.
+
 ## Combat & flight
 
 - **Flight model**: Newtonian-lite + flight assist (velocity bleeds toward nose; assist-off = full drift toggle). Speed/turn/accel derived from engine HP/quality, mass, power
