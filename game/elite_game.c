@@ -978,7 +978,7 @@ void elite_game_draw_overlay(uint16_t *fb) {
             .throttle = p->throttle,
             .fuel01 = g_player.fuel / g_player.fuel_max,
             .render_ms = s_frame_ms,
-            .show_perf = 1,
+            .show_perf = 0,   /* perf validated on device; readout off */
         };
         ui_hud_draw_sc(fb, &info);
         return;
@@ -996,7 +996,7 @@ void elite_game_draw_overlay(uint16_t *fb) {
             .kills = combat_kills(),
             .fuel01 = g_player.fuel / g_player.fuel_max,
             .render_ms = s_frame_ms,
-            .show_perf = 1,
+            .show_perf = 0,   /* perf validated on device; readout off */
         };
         ui_hud_draw(fb, &info);
         if (s_scoop_toast_t > 0)
