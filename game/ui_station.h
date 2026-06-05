@@ -10,6 +10,7 @@
 typedef enum { DOCK_NONE = 0, DOCK_LAUNCH } DockAction;
 
 void station_open(int station_idx);
+void station_toast(const char *msg);
 DockAction station_tick(const CraftRawButtons *btn, float dt);
 void station_draw(uint16_t *fb);
 

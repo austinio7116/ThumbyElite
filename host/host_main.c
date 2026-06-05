@@ -17,6 +17,8 @@
 #include "elite_entity.h"
 #include "elite_player.h"
 #include "elite_combat.h"
+#include "mission.h"
+#include "system_sim.h"
 #include "meshes_gen.h"
 #include "craft_buttons.h"
 
@@ -288,6 +290,88 @@ int main(int argc, char **argv) {
         render_frame(); dump_ppm("/tmp/shop_3_status.ppm");
         return 0;
         #undef TAPS
+    }
+
+    /* Mission test: dock, accept a cull, launch, slaughter, re-dock,
+     * verify the payout + rep. */
+    if (getenv("ELITE_MISTEST")) {
+        extern Mission g_missions[];
+        extern int8_t g_rep[];
+        extern void combat_direct_damage(int, int, float, Vec3);
+        CraftRawButtons none = {0}, b;
+        #define TAPM(field, settle_n) do { \
+            b = none; b.field = true; \
+            elite_game_tick(&b, 1.0f / 30.0f); \
+            for (int k = 0; k < (settle_n); k++) \
+                elite_game_tick(&none, 1.0f / 30.0f); \
+        } while (0)
+        for (int k = 0; k < 30; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        /* travel to station + dock */
+        TAPM(menu, 4); TAPM(down, 3); TAPM(down, 3); TAPM(a, 4);
+        int poi = atoi(getenv("ELITE_MISTEST"));
+        for (int i = 0; i < poi; i++) TAPM(down, 2);
+        TAPM(a, 4);
+        int f = 0;
+        while (elite_game_state() == 1 && f++ < 30 * 240)
+            elite_game_tick(&none, 1.0f / 30.0f);
+        b = none; b.lb = b.rb = true;
+        for (int k = 0; k < 8; k++) elite_game_tick(&b, 1.0f / 30.0f);
+        while (elite_game_state() == 6) elite_game_tick(&none, 1.0f / 30.0f);
+        for (int k = 0; k < 4; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        /* MISSIONS = home row 3 */
+        TAPM(down, 2); TAPM(down, 2); TAPM(down, 2); TAPM(a, 4);
+        render_frame(); dump_ppm("/tmp/mis_0_board.ppm");
+        /* Find the CULL row in this visit's deterministic offers. Offers
+         * were generated when the screen opened; regenerating with the
+         * same visit salt would advance nothing — but make_offers uses
+         * s_visit_salt which on_docked bumped BEFORE the screen opened,
+         * so a direct call now matches what's displayed. */
+        /* Engine-level accept: reroll offers (visit salt) until a cull
+         * appears, then accept directly (the UI path is the same code). */
+        Mission probe[MISSION_OFFERS];
+        int cull_row = -1;
+        for (int reroll = 0; reroll < 10 && cull_row < 0; reroll++) {
+            mission_make_offers(system_info(), 0, probe);
+            for (int r = 0; r < MISSION_OFFERS; r++)
+                if (probe[r].type == MIS_CULL) { cull_row = r; break; }
+            if (cull_row < 0) mission_on_docked(system_info(), 0);
+        }
+        printf("[mis] cull offer at row %d\n", cull_row);
+        if (cull_row < 0) return 1;
+        mission_accept(&probe[cull_row]);
+        int accepted = -1;
+        for (int m = 0; m < 4; m++)
+            if (g_missions[m].type == MIS_CULL) accepted = m;
+        printf("[mis] accepted=%d label=%s count=%d reward=%d\n",
+               accepted, accepted >= 0 ? g_missions[accepted].label : "-",
+               accepted >= 0 ? g_missions[accepted].count : 0,
+               accepted >= 0 ? g_missions[accepted].reward : 0);
+        render_frame(); dump_ppm("/tmp/mis_1_log.ppm");
+        if (accepted < 0) return 1;
+        int need = g_missions[accepted].count;
+        /* launch (home row 7) */
+        TAPM(menu, 3);
+        for (int i = 0; i < 7; i++) TAPM(down, 2);
+        TAPM(a, 8);
+        printf("[mis] launched state=%d\n", elite_game_state());
+        /* spawn + execute pirates */
+        elite_game_debug_spawn(need);
+        for (int i = 1; i < 16; i++)
+            if (g_ships[i].alive)
+                combat_direct_damage(0, i, 9999.0f, g_ships[i].pos);
+        elite_game_tick(&none, 1.0f / 30.0f);
+        printf("[mis] after cull: done=%d credits_before_pay=%d\n",
+               g_missions[accepted].done, g_player.credits);
+        /* re-dock */
+        b = none; b.lb = b.rb = true;
+        for (int k = 0; k < 8; k++) elite_game_tick(&b, 1.0f / 30.0f);
+        while (elite_game_state() == 6) elite_game_tick(&none, 1.0f / 30.0f);
+        for (int k = 0; k < 4; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        printf("[mis] paid: credits=%d rep=[%d %d %d]\n", g_player.credits,
+               g_rep[0], g_rep[1], g_rep[2]);
+        render_frame(); dump_ppm("/tmp/mis_2_paid.ppm");
+        return 0;
+        #undef TAPM
     }
 
     /* Hyperjump test: galaxy map, nudge cursor right until a new system

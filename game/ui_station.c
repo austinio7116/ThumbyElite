@@ -13,6 +13,7 @@
 #include "elite_ships.h"
 #include "ui_status.h"
 #include "elite_entity.h"
+#include "mission.h"
 #include "elite_weapons.h"
 #include "craft_font.h"
 #include <stdio.h>
@@ -29,7 +30,8 @@
 #define COL_ILL    RGB565C(220, 100, 200)
 
 typedef enum {
-    SCR_HOME = 0, SCR_MARKET, SCR_SHIPYARD, SCR_OUTFIT, SCR_STATUS
+    SCR_HOME = 0, SCR_MARKET, SCR_SHIPYARD, SCR_OUTFIT, SCR_STATUS,
+    SCR_MISSIONS, SCR_BAR
 } Screen;
 
 static Screen s_screen;
@@ -42,13 +44,12 @@ static float s_hold_a, s_hold_b, s_repeat;
 static char s_toast[24];
 static float s_toast_t;
 
-#define HOME_ITEMS 6
+#define HOME_ITEMS 8
 static const char *k_home[HOME_ITEMS] = {
-    "MARKET", "SHIPYARD", "OUTFITTING", "STATUS", "REFUEL", "LAUNCH",
+    "MARKET", "SHIPYARD", "OUTFITTING", "MISSIONS", "BAR", "STATUS",
+    "REFUEL", "LAUNCH",
 };
-static const bool k_home_enabled[HOME_ITEMS] = {
-    true, true, true, true, true, true,
-};
+static Mission s_offers[MISSION_OFFERS];
 
 void station_open(int station_idx) {
     s_screen = SCR_HOME;
@@ -66,6 +67,11 @@ void station_open(int station_idx) {
 static void toast(const char *msg) {
     snprintf(s_toast, sizeof s_toast, "%s", msg);
     s_toast_t = 1.6f;
+}
+
+void station_toast(const char *msg) {
+    snprintf(s_toast, sizeof s_toast, "%s", msg);
+    s_toast_t = 2.8f;
 }
 
 static void try_buy(int good) {
@@ -316,9 +322,14 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
             if (s_cursor == 0) { s_screen = SCR_MARKET; s_cursor = 0; s_scroll = 0; }
             else if (s_cursor == 1) { s_screen = SCR_SHIPYARD; s_cursor = 0; s_scroll = 0; }
             else if (s_cursor == 2) { s_screen = SCR_OUTFIT; s_cursor = 0; s_scroll = 0; }
-            else if (s_cursor == 3) { s_screen = SCR_STATUS; status_open(); }
-            else if (s_cursor == 4) try_refuel();
-            else if (s_cursor == 5) act = DOCK_LAUNCH;
+            else if (s_cursor == 3) {
+                mission_make_offers(system_info(), s_station, s_offers);
+                s_screen = SCR_MISSIONS; s_cursor = 0;
+            }
+            else if (s_cursor == 4) { s_screen = SCR_BAR; }
+            else if (s_cursor == 5) { s_screen = SCR_STATUS; status_open(); }
+            else if (s_cursor == 6) try_refuel();
+            else if (s_cursor == 7) act = DOCK_LAUNCH;
         }
         if (back) act = DOCK_LAUNCH;           /* MENU = leave */
         break;
@@ -343,8 +354,27 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
         if (back) { s_screen = SCR_HOME; s_cursor = 2; }
         break;
 
+    case SCR_MISSIONS: {
+        if (up && s_cursor > 0) s_cursor--;
+        if (down && s_cursor < MISSION_OFFERS - 1) s_cursor++;
+        if (a_edge) {
+            const Mission *m = &s_offers[s_cursor];
+            if (m->type == MIS_NONE) toast("NO OFFER");
+            else if (mission_accept(m)) {
+                toast("ACCEPTED");
+                s_offers[s_cursor].type = MIS_NONE;
+            } else toast("LOG/HOLD FULL");
+        }
+        if (back) { s_screen = SCR_HOME; s_cursor = 3; }
+        break;
+    }
+
+    case SCR_BAR:
+        if (back || a_edge) { s_screen = SCR_HOME; s_cursor = 4; }
+        break;
+
     case SCR_STATUS:
-        if (status_tick(btn, dt)) { s_screen = SCR_HOME; s_cursor = 3; }
+        if (status_tick(btn, dt)) { s_screen = SCR_HOME; s_cursor = 5; }
         s_prev = *btn;
         return act;
 
@@ -393,12 +423,9 @@ static void draw_home(uint16_t *fb) {
     craft_font_draw(fb, buf, 2, 13, COL_DIM);
 
     for (int i = 0; i < HOME_ITEMS; i++) {
-        uint16_t c = !k_home_enabled[i] ? RGB565C(60, 66, 84)
-                   : (i == s_cursor) ? COL_CUR : COL_DIM;
-        if (i == s_cursor) craft_font_draw(fb, ">", 8, 28 + i * 11, COL_CUR);
-        craft_font_draw(fb, k_home[i], 16, 28 + i * 11, c);
-        if (!k_home_enabled[i])
-            craft_font_draw(fb, "SOON", 90, 28 + i * 11, RGB565C(60, 66, 84));
+        uint16_t c = (i == s_cursor) ? COL_CUR : COL_DIM;
+        if (i == s_cursor) craft_font_draw(fb, ">", 8, 23 + i * 9, COL_CUR);
+        craft_font_draw(fb, k_home[i], 16, 23 + i * 9, c);
     }
 
     char fuel[24];
@@ -577,11 +604,113 @@ static void draw_outfit(uint16_t *fb) {
     craft_font_draw(fb, "MENU:BACK", 2, 123, COL_DIM);
 }
 
+static void draw_missions(uint16_t *fb) {
+    draw_header(fb);
+    craft_font_draw(fb, "MISSIONS", 2, 12, COL_DIM);
+    char buf[34];
+    Faction fac = system_faction(system_info()->addr);
+    snprintf(buf, sizeof buf, "%s REP %d", k_faction_names[fac], g_rep[fac]);
+    craft_font_draw(fb, buf, 56, 12, COL_DIM);
+    hl(fb, 19, COL_GRID);
+
+    /* Log. */
+    int y = 22;
+    craft_font_draw(fb, "LOG:", 2, y, COL_HDR);
+    y += 8;
+    int any = 0;
+    for (int i = 0; i < MAX_MISSIONS; i++) {
+        const Mission *m = &g_missions[i];
+        if (m->type == MIS_NONE) continue;
+        any = 1;
+        uint16_t c = m->done ? COL_CRED : COL_DIM;
+        snprintf(buf, sizeof buf, "%s%s", m->label, m->done ? " DONE" : "");
+        craft_font_draw(fb, buf, 6, y, c);
+        y += 8;
+    }
+    if (!any) { craft_font_draw(fb, "(EMPTY)", 6, y, COL_DIM); y += 8; }
+
+    /* Offers. */
+    y += 3;
+    craft_font_draw(fb, "OFFERS:", 2, y, COL_HDR);
+    y += 8;
+    for (int i = 0; i < MISSION_OFFERS; i++) {
+        const Mission *m = &s_offers[i];
+        uint16_t c = (i == s_cursor) ? COL_CUR : COL_DIM;
+        if (i == s_cursor) craft_font_draw(fb, ">", 2, y, COL_CUR);
+        if (m->type == MIS_NONE) {
+            craft_font_draw(fb, "----", 6, y, c);
+        } else {
+            craft_font_draw(fb, m->label, 6, y, c);
+            snprintf(buf, sizeof buf, "%d", m->reward);
+            craft_font_draw(fb, buf, 128 - craft_font_width(buf) - 2, y,
+                            COL_CRED);
+        }
+        y += 9;
+    }
+    hl(fb, 113, COL_GRID);
+    craft_font_draw(fb, "A:ACCEPT MENU:BACK", 2, 116, COL_DIM);
+    craft_font_draw(fb, "PAY ON RETURN TO ANY DOCK", 2, 123, COL_DIM);
+}
+
+static void draw_bar(uint16_t *fb) {
+    draw_header(fb);
+    craft_font_draw(fb, "THE BAR", 2, 12, COL_DIM);
+    hl(fb, 19, COL_GRID);
+    const SystemInfo *si = system_info();
+    char buf[34];
+    int y = 26;
+    /* Rumours: seeded flavour + a genuine trade tip. */
+    uint32_t h = (uint32_t)(si->seed >> 20) ^ (uint32_t)(s_station * 131);
+    h ^= h >> 13; h *= 1274126177u; h ^= h >> 16;
+    static const char *k_chatter[6] = {
+        "\"PIRATES THICK OUT BY",
+        "\"DOMINION PATROLS ARE",
+        "\"SAW A DERELICT NEAR",
+        "\"FUEL PRICES CLIMBING",
+        "\"LOST A WING AT THE",
+        "\"KEEP YOUR SCANNER ON",
+    };
+    craft_font_draw(fb, k_chatter[h % 6u], 2, y, COL_DIM);
+    craft_font_draw(fb, " THE BEACON...\"", 2, y + 7, COL_DIM);
+    y += 20;
+    /* Trade tip: what this economy exports cheap. */
+    int best = 0;
+    int best_price = 999999;
+    for (int g = 0; g < 16; g++) {
+        int p = econ_price(si, s_station, g, true);
+        if (p > 0 && p * 100 / (k_goods[g].base + 1) < best_price) {
+            best_price = p * 100 / (k_goods[g].base + 1);
+            best = g;
+        }
+    }
+    snprintf(buf, sizeof buf, "TIP: %s IS CHEAP HERE", k_goods[best].name);
+    craft_font_draw(fb, buf, 2, y, COL_TXT);
+    y += 12;
+    if (econ_has_black_market(si)) {
+        craft_font_draw(fb, "BACK ROOM: ILLEGAL GOODS", 2, y, COL_ILL);
+        craft_font_draw(fb, "TRADE AT THE MARKET", 2, y + 7, COL_ILL);
+    } else {
+        craft_font_draw(fb, "(LAWFUL STATION -", 2, y, COL_DIM);
+        craft_font_draw(fb, " NO BLACK MARKET)", 2, y + 7, COL_DIM);
+    }
+    y += 20;
+    for (int f = 0; f < N_FACTIONS; f++) {
+        snprintf(buf, sizeof buf, "%-10s REP %d", k_faction_names[f],
+                 g_rep[f]);
+        craft_font_draw(fb, buf, 2, y, COL_DIM);
+        y += 8;
+    }
+    hl(fb, 118, COL_GRID);
+    craft_font_draw(fb, "A/MENU:BACK", 2, 121, COL_DIM);
+}
+
 void station_draw(uint16_t *fb) {
     fill(fb, COL_BG);
     if (s_screen == SCR_MARKET) draw_market(fb);
     else if (s_screen == SCR_SHIPYARD) draw_shipyard(fb);
     else if (s_screen == SCR_OUTFIT) draw_outfit(fb);
+    else if (s_screen == SCR_MISSIONS) draw_missions(fb);
+    else if (s_screen == SCR_BAR) draw_bar(fb);
     else if (s_screen == SCR_STATUS) { status_draw(fb); return; }
     else draw_home(fb);
 

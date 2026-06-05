@@ -50,6 +50,7 @@ typedef struct {
 
     uint8_t team;
     uint8_t tier;         /* AI skill 0..4 (HARMLESS..ELITE) */
+    uint8_t is_mark;      /* bounty-mission target */
     uint8_t ai_state;
     float   ai_timer;
     int8_t  target;       /* entity index, -1 none */

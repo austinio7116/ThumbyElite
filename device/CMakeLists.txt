@@ -96,6 +96,7 @@ add_executable(thumbyelite
     ${GAME}/elite_weapons.c
     ${GAME}/elite_proj.c
     ${GAME}/elite_loot.c
+    ${GAME}/mission.c
     ${GAME}/elite_ai.c
     ${GAME}/ui_hud.c
     ${GAME}/ui_map.c

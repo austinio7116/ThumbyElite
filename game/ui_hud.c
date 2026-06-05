@@ -189,8 +189,9 @@ static void target_box(uint16_t *fb, int target) {
         COL_SHIELD);
     bar(fb, 100, 24, 22, t->hull / (t->hull_max > 0 ? t->hull_max : 1),
         COL_HULL);
-    craft_font_draw(fb, k_tier_names[t->tier > 4 ? 4 : t->tier], 98, 28,
-                    COL_TARGET);
+    craft_font_draw(fb, t->is_mark ? "** MARK **"
+                                   : k_tier_names[t->tier > 4 ? 4 : t->tier],
+                    98, 28, COL_TARGET);
 }
 
 void ui_hud_draw(uint16_t *fb, const HudInfo *info) {

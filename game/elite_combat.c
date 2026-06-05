@@ -9,6 +9,7 @@
 #include "elite_proj.h"
 #include "elite_player.h"
 #include "elite_loot.h"
+#include "mission.h"
 #include "r3d_fx.h"
 #include "elite_types.h"
 
@@ -70,6 +71,8 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
         if (victim != PLAYER) {
             s_kills++;
             loot_on_kill(v->pos, v->vel, v->tier);
+            if (shooter == PLAYER)
+                mission_on_kill(v->tier, v->is_mark != 0);
         }
         if (shooter == PLAYER) {
             s_killmark = 0.7f;

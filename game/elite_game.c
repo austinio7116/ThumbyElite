@@ -22,6 +22,7 @@
 #include "elite_combat.h"
 #include "elite_proj.h"
 #include "elite_loot.h"
+#include "mission.h"
 #include "elite_ai.h"
 #include "ui_hud.h"
 #include "ui_map.h"
@@ -147,6 +148,18 @@ static void spawn_poi_content(void) {
             ship_set_tier(idx, tier);
         }
     }
+
+    /* Bounty mark: a flagged ace waits at the beacon. */
+    if (s_anchor_has_poi && s_anchor_poi.kind == POI_BEACON &&
+        mission_bounty_here(s_addr)) {
+        float a = frand(0, 6.2831f);
+        Vec3 pos = v3(cosf(a) * 800.0f, frand(-150, 150), sinf(a) * 800.0f);
+        int idx = ship_spawn(&mesh_cutter, pos, TEAM_HOSTILE);
+        if (idx > 0) {
+            ship_set_tier(idx, 4);
+            g_ships[idx].is_mark = 1;
+        }
+    }
 }
 
 /* Re-anchor the local frame at a system-space position. */
@@ -206,6 +219,7 @@ void elite_game_init(uint32_t seed) {
     elite_input_reset();
     spawn_player();
     player_init();
+    missions_init();
     s_state = ST_FLIGHT;
     s_prev_menu = s_prev_a = false;
 
@@ -421,6 +435,13 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         if (s_dock_t >= 2.2f) {
             g_player.xp_piloting += 1;
             station_open(s_anchor_poi.index);
+            mission_on_docked(system_info(), s_anchor_poi.index);
+            int paid = mission_collect(system_info(), s_anchor_poi.index);
+            if (paid > 0) {
+                char buf[24];
+                snprintf(buf, sizeof buf, "MISSION PAY %dCR", paid);
+                station_toast(buf);
+            }
             s_state = ST_DOCKED;
         }
         break;
