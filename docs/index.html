@@ -105,7 +105,7 @@
 </header>
 
 <nav>
-  <a href="#start">Start</a><a href="#controls">Controls</a><a href="#hud">HUD</a><a href="#flight">Flight</a><a href="#combat">Combat</a><a href="#weapons">Weapons</a><a href="#equipment">Equipment</a><a href="#salvage">Salvage</a><a href="#travel">Travel</a><a href="#galaxy">Galaxy</a><a href="#trading">Trading</a><a href="#stations">Stations</a><a href="#ships">Ships</a><a href="#missions">Missions</a><a href="#skills">Skills</a><a href="#death">Death &amp; Saves</a>
+  <a href="#start">Start</a><a href="#controls">Controls</a><a href="#hud">HUD</a><a href="#flight">Flight</a><a href="#combat">Combat</a><a href="#weapons">Weapons</a><a href="#equipment">Equipment</a><a href="#salvage">Salvage</a><a href="#travel">Travel</a><a href="#galaxy">Galaxy</a><a href="#trading">Trading</a><a href="#stations">Stations</a><a href="#ships">Ships</a><a href="#missions">Missions</a><a href="#skills">Skills</a><a href="#death">Death &amp; Saves</a><a href="#field">Field Manual</a>
 </nav>
 
 <main>
@@ -574,7 +574,7 @@ computer takes over and glides you in. On arrival, the station:</p>
 <ul>
 <li><b>repairs and rearms nothing automatically</b> — REPAIR (outfitting), REARM and REFUEL are paid services you choose,</li>
 <li>pays out any completed missions,</li>
-<li><b>saves your game</b> (this is the checkpoint system — see <a href="#death">Death &amp; Saves</a>).</li>
+<li><b>saves your game</b> (this is the checkpoint system — see <a href="#death">Death &amp; Saves</a><a href="#field">Field Manual</a>).</li>
 </ul>
 <p>Services: <b>MARKET</b> (trade), <b>SHIPYARD</b> (hulls), <b>OUTFITTING</b>
 (the armoury — stock varies per terminal — plus equipment, repairs, salvage), <b>MISSIONS</b> (the board),
@@ -677,6 +677,130 @@ salvage business. Check your levels any time in SHIP STATUS.</p>
 <div class="warn"><b class="r">GOLDEN RULE</b> — made money? Dock. The
 five minutes of swagger between a big score and the station pad is where
 fortunes vanish.</div>
+
+<h2 id="field">Field Manual — the non-obvious systems, step by step</h2>
+<p>Every entry: how to do it, and <b>exactly what you'll see and hear
+when it's working</b>.</p>
+
+<h3>⛽ Fuel scooping</h3>
+<p><b>Do:</b> fit a FUELSCOOP (T7+ bays, ~2,600&nbsp;cr). In supercruise,
+point the nose at the sun and close until it dominates the screen —
+inside ~4.5× the star's radius the scoop runs by itself; no button.</p>
+<p><b>Signals:</b> a pulsing <span class="tag y">SCOOPING 14.2 LY</span>
+toast with your rising total · the <b>F bar</b> refilling (1.6&nbsp;LY/s —
+empty to full in ~19&nbsp;s) · the <b class="y">T bar climbing</b> at
+9/s. Linger past the klaxon and your weapons cut out until you cool.
+Pull off, cool, dive again. Pays for itself in ~7 tanks; its real value
+is jumping through station-less systems without stranding.</p>
+
+<h3>🎯 Railgun charge</h3>
+<p><b>Do:</b> select RAILGUN (<span class="key">B</span>), then <b>hold
+<span class="key">A</span></b>. Release at full charge to fire; release
+early and nothing happens (no ammo spent).</p>
+<p><b>Signals while holding:</b> four rising arm-tones · reticle
+brackets closing inward · at full charge (0.8&nbsp;s) the brackets snap
+<b>bright white</b> — that's your release cue. Then: the crack-and-sing
+report, a thick helix wake, 90 damage delivered.</p>
+
+<h3>💨 Chaff</h3>
+<p><b>Do:</b> fit a CHAFF pod (T5+). When <span class="tag r">!
+INCOMING !</span> flashes and the urgent two-beep alarm sounds, press
+<b><span class="key">LB</span>&nbsp;held +
+<span class="key">B</span></b>.</p>
+<p><b>Signals:</b> a white particle burst behind your ship · a sharp
+hiss · a <span class="tag y">CHAFF! 2 LOCKS BROKEN</span> toast (the
+blinded missiles fly straight on — dodge the dumb line they're now on) ·
+your <b>C#</b> counter on the dash ticks down. 4 charges; REARM refills
+at 20&nbsp;cr each.</p>
+
+<h3>🧲 Tractor beam — two tools</h3>
+<p><b>Grapple a ship:</b> lock a hostile (<span class="key">LB</span>),
+close inside 300&nbsp;m, select TRACTOR, hold <span class="key">A</span>.
+A <b class="y">gold beam</b> connects and shimmer dances on their hull —
+their speed bleeds away to a stop in ~1&nbsp;s and their drives drag
+while you hold. Prey bigger than ~1.3× your hull barely feels it.
+The play: grapple, <span class="key">B</span> to your gun, execute
+before they recover.</p>
+<p><b>Reel salvage:</b> with no hostiles, <span class="key">LB</span>
+locks the nearest canister (gold brackets) — hold
+<span class="key">A</span> and watch the distance readout tick down as
+it's dragged to you at 26&nbsp;m/s. Scoop fires automatically at
+22&nbsp;m.</p>
+
+<h3>🛸 Drift mode (flight assist off)</h3>
+<p><b>Do:</b> tap <span class="key">RB</span>. The <b class="y">DR</b>
+light appears — your nose now turns <i>without changing your
+velocity</i>.</p>
+<p><b>The technique:</b> build speed at a target, tap
+<span class="key">RB</span>, then turn freely — you keep sliding on the
+old vector while your guns track sideways, the classic strafe-by. Tap
+<span class="key">RB</span> again to re-couple and the ship leans back
+onto the nose. Watch SP vs TH: in drift, SP no longer chases TH.</p>
+
+<h3>🔫 The auto-turret (MULE / ATLAS / BASILISK)</h3>
+<p><b>Do:</b> get any <b>Z1 weapon onto your rack</b> (buy one, or unfit
+one with <span class="key">B</span>), then in outfitting select the
+TURRET row and press <span class="key">A</span> — "TURRET ARMED".</p>
+<p><b>Signals:</b> with a target <b>locked</b>, the turret fires by
+itself whenever they're in range — you'll hear its (quieter) report and
+see tracers leaving your ship at angles your nose isn't pointing.
+Full-sphere coverage, 60% damage, energy-fed (never spends ammo). No
+lock = no turret — locking is the trigger.</p>
+
+<h3>⚡ The ion play</h3>
+<p><b>Do:</b> fit ION + a kinetic gun. Open with ion until the target's
+<b class="c">blue shimmer</b> stops (shield down) — on the strip they're
+<b>SCRAMBLED</b>: blue arcs crawl on their hull and they can't shoot for
+2.5&nbsp;s. <span class="key">B</span> to your kinetic, unload into bare
+hull (<b class="r">orange sparks</b> confirm).</p>
+<p><b>Defensively:</b> when YOUR shield breaks to ion fire you'll hear
+the klaxon and see <span class="tag c">SYSTEMS SCRAMBLED</span> — your
+trigger is dead. Don't line up a shot; evade until it clears.</p>
+
+<h3>💣 Mine laying</h3>
+<p><b>Do:</b> select MINE, tap <span class="key">A</span> — it drops
+<b>astern</b> with a soft clunk, drifts to a stop and arms (blinking red
+light). Best used while running: drop 2–3 in your wake through a
+pursuer's line.</p>
+<p><b>Signals:</b> the blinking red dot behind you · a 45-damage blast
+with 18&nbsp;m trigger radius when anything (not you — it knows its
+owner) comes close · unspent mines self-destruct after 25&nbsp;s.</p>
+
+<h3>🔧 Wear, repair &amp; the refurbish business</h3>
+<p>Combat <b>wears your gear</b>: every hull hit chips armor integrity,
+every shield collapse chips the generator, firing doesn't wear guns but
+salvaged ones arrive pre-worn. Integrity scales output (×0.6 at zero) —
+check the % on every status row. <b>Repair</b> in outfitting
+(<span class="key">A</span> on the row; cost scales with damage and the
+item's value; Tech skill −5%/level).</p>
+<p><b>The business:</b> a MILITARY gauss scooped at 45% sells for a
+fraction of its value — repair it first and the sale price rises with
+integrity. Repair-then-sell beats sell-as-is whenever your Tech level
+keeps the repair under the value gained. That margin IS the salvage
+profession.</p>
+
+<h3>🛰️ The lock chain</h3>
+<p><span class="key">LB</span> locks, in priority order: <b>nearest
+hostile</b> (red box, lock chirp) → no hostiles? <b>nearest salvage</b>
+(gold brackets + distance) → no salvage? <b>the local station</b> (cyan
+diamond, STN distance) — your compass home when you've drifted off the
+dock. Tap again to cycle outward through hostiles.</p>
+
+<h3>🔋 Boost</h3>
+<p><b>Do:</b> double-tap <span class="key">RB</span>. <b class="c">BS</b>
+light + 1.8× speed for 2.2&nbsp;s (4&nbsp;s with an AB TANK), engine
+note swells, SP needle passes the normal bar range. One burn at a time —
+it must expire before the next.</p>
+
+<h3>🛬 Docking</h3>
+<p><b>Do:</b> fly to a station (lock it via the chain above if lost),
+kill speed inside <b>600&nbsp;m</b>, press
+<span class="key">LB</span>+<span class="key">RB</span> together. The
+docking computer takes the stick — hands off — and glides you in
+(~2&nbsp;s).</p>
+<p><b>On the pad, automatically:</b> missions pay out (toast) · the game
+<b>saves</b> · nothing else is free: REPAIR, REARM and REFUEL are
+chosen, priced line items in the services menu.</p>
 
 <h2>Quick-start: your first hour</h2>
 <ol>
