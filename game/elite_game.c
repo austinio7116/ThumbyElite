@@ -356,13 +356,18 @@ static void start_new_game(uint32_t seed) {
     missions_init();
     s_state = ST_FLIGHT;
 
-    /* Find a starting system: spiral out from the origin for the first
-     * system WITH A STATION (a home dock for fuel/trade), falling back
-     * to any populated sector if the neighbourhood is barren. */
+    /* Find a starting system: spiral out from the origin for a system
+     * that (a) has a station and (b) sits in a REACHABLE CLUSTER — at
+     * least 2 neighbours within a starter ship's jump range, one of
+     * them with its own station (user req: never strand a new game
+     * 12+ ly from everything). Best candidate wins; barren-galaxy
+     * fallbacks keep the old behaviour. */
     SysAddr start = {0, 0, 0};
+    SysAddr station_fallback = {0, 0, 0};
     SysAddr fallback = {0, 0, 0};
-    bool found = false, have_fallback = false;
-    for (int ring = 0; ring < 10 && !found; ring++)
+    const float START_JUMP = 6.0f;     /* SKIFF range with margin */
+    bool found = false, have_st_fb = false, have_fallback = false;
+    for (int ring = 0; ring < 14 && !found; ring++)
         for (int sy = -ring; sy <= ring && !found; sy++)
             for (int sx = -ring; sx <= ring && !found; sx++) {
                 if (sx > -ring && sx < ring && sy > -ring && sy < ring)
@@ -373,10 +378,36 @@ static void start_new_game(uint32_t seed) {
                     if (!have_fallback) { fallback = a; have_fallback = true; }
                     SystemInfo probe;
                     galaxy_generate(a, &probe);
-                    if (probe.n_stations > 0) { start = a; found = true; }
+                    if (probe.n_stations == 0) continue;
+                    if (!have_st_fb) { station_fallback = a; have_st_fb = true; }
+                    /* Count starter-range neighbours. */
+                    float px, py;
+                    galaxy_star_pos(a, &px, &py);
+                    int near = 0, near_station = 0;
+                    for (int ny = a.sy - 1; ny <= a.sy + 1; ny++)
+                        for (int nx = a.sx - 1; nx <= a.sx + 1; nx++) {
+                            int nn = galaxy_sector_stars(nx, ny);
+                            for (int j = 0; j < nn; j++) {
+                                SysAddr b = { nx, ny, (uint8_t)j };
+                                if (sysaddr_eq(b, a)) continue;
+                                float bx, by;
+                                galaxy_star_pos(b, &bx, &by);
+                                float dx = bx - px, dy = by - py;
+                                if (dx * dx + dy * dy >
+                                    START_JUMP * START_JUMP) continue;
+                                near++;
+                                if (near_station == 0) {
+                                    SystemInfo nb;
+                                    galaxy_generate(b, &nb);
+                                    if (nb.n_stations > 0) near_station = 1;
+                                }
+                            }
+                        }
+                    if (near >= 2 && near_station) { start = a; found = true; }
                 }
             }
-    arrive_in_system(found ? start : fallback);
+    if (!found) start = have_st_fb ? station_fallback : fallback;
+    arrive_in_system(start);
     r3d_starfield_init((uint32_t)(system_info()->seed >> 16));
 }
 

@@ -98,6 +98,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_LOOTTEST") || getenv("ELITE_SHOPTEST") ||
         getenv("ELITE_MISTEST") || getenv("ELITE_STATUSTEST") ||
         getenv("ELITE_BTEST") ||
+        getenv("ELITE_STARTCHECK") ||
         getenv("ELITE_SHOT")) {
         /* Harnesses start in-game: skip the title via NEW GAME. */
         remove("thumbyelite.sav");
@@ -107,6 +108,36 @@ int main(int argc, char **argv) {
         tb.down = false; elite_game_tick(&tb, 1.0f / 30.0f);
         tb.a = true; elite_game_tick(&tb, 1.0f / 30.0f);
         tb.a = false; elite_game_tick(&tb, 1.0f / 30.0f);
+    }
+
+    /* Start-cluster audit: roll N seeds, report each start's
+     * starter-range neighbourhood. */
+    if (getenv("ELITE_STARTCHECK")) {
+        CraftRawButtons none = {0};
+        for (int k = 0; k < 8; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        const SystemInfo *si = system_info();
+        float px, py;
+        galaxy_star_pos(si->addr, &px, &py);
+        float best = 1e9f;
+        int in6 = 0, in8 = 0;
+        for (int ny = si->addr.sy - 2; ny <= si->addr.sy + 2; ny++)
+            for (int nx = si->addr.sx - 2; nx <= si->addr.sx + 2; nx++) {
+                int nn = galaxy_sector_stars(nx, ny);
+                for (int j = 0; j < nn; j++) {
+                    SysAddr b = { nx, ny, (uint8_t)j };
+                    if (sysaddr_eq(b, si->addr)) continue;
+                    float bx, by;
+                    galaxy_star_pos(b, &bx, &by);
+                    float d = sqrtf((bx - px) * (bx - px) +
+                                    (by - py) * (by - py));
+                    if (d < best) best = d;
+                    if (d <= 6.0f) in6++;
+                    if (d <= 8.0f) in8++;
+                }
+            }
+        printf("[startcheck] %s nearest=%.1f in6=%d in8=%d stations=%d\n",
+               si->name, best, in6, in8, si->n_stations);
+        return 0;
     }
 
     /* Title screen capture. */
