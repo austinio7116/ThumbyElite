@@ -438,14 +438,18 @@ static void outfit_action_a(int row) {
         break;
     }
     case ROW_SHOP: {
-        int price = (int)(weapon_price(r->index, Q_STANDARD) *
-                          skill_price_mult());
-        int slot = free_slot_for(r->index);
+        /* r->index is an ARMOURY list index, not a weapon type — the
+         * pre-armoury code here checked/bought by list position
+         * (user-reported: Z1 autocannon refused 'NO FREE SLOT'). */
+        const ArmoryItem *it = &s_armory[r->index];
+        int price = (int)(it->price * skill_price_mult());
+        int slot = free_slot_for(it->type);
         if (slot < 0) { toast("NO FREE SLOT"); return; }
         if (g_player.credits < price) { toast("NO CREDITS"); return; }
         g_player.credits -= price;
-        g_player.mounts[slot] =
-            (WeaponInst){ (uint8_t)r->index, Q_STANDARD, 100, 1 };
+        g_player.mounts[slot] = (WeaponInst){ it->type, it->quality,
+                                              100, 1, 0, {0} };
+        player_load_mount_ammo(slot, 1.0f);   /* sold fully loaded */
         player_apply_to_ship();
         toast("FITTED");
         break;
