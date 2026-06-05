@@ -200,6 +200,16 @@ int combat_fire(int shooter, float spread, int target) {
     /* Player: component quality/integrity + affix + gunnery skill. */
     float dmg_mult = 1.0f, heat_mult = 1.0f, cd_mult = 1.0f;
     float range_mult = 1.0f;
+    if (shooter != PLAYER) {
+        /* NPC tier damage scalar — the difficulty curve's clean global
+         * lever (siege-sim tuned: ~55/30/14/7/3s vs standard shield). */
+        /* NOT monotone — it compensates each tier's payload (t3 packs
+         * PULSE-M streams, t2 often autocannon) so the COLLAPSE TIMES
+         * are the smooth curve, not this table. */
+        static const float k_npc_dmg[5] = { 0.60f, 0.62f, 0.95f,
+                                            0.38f, 0.74f };
+        dmg_mult = k_npc_dmg[s->tier > 4 ? 4 : s->tier];
+    }
     if (shooter == PLAYER) {
         const WeaponInst *wi = player_mount_for_ship_slot(s->active_w);
         if (wi) {
@@ -383,16 +393,43 @@ void combat_tick(float dt) {
                 Vec3 rel = v3_sub(g_ships[tgt].pos, s->pos);
                 float dist = v3_len(rel);
                 if (dist < tw->range * 0.9f && s->heat < HEAT_MAX - 8) {
-                    s->turret_cool = tw->cooldown * 1.6f;
+                    /* NPC turrets fire at HALF the player's turret
+                     * cadence, carry the tier damage scalar and real
+                     * spread — the perfect-aim bypass here was pinning
+                     * the heavy-hull siege times at ~2s regardless of
+                     * every other tuning knob. */
+                    int npc = (i != PLAYER);
+                    s->turret_cool = tw->cooldown * (npc ? 3.2f : 1.6f);
                     s->heat += tw->heat * 0.6f;
                     float mult = 0.6f;
                     if (i == PLAYER)
                         mult *= mount_dmg_mult(&g_player.turret_eq);
+                    else {
+                        static const float k_td[5] = { 0.60f, 0.62f,
+                                                       0.80f, 0.80f,
+                                                       0.90f };
+                        mult *= k_td[s->tier > 4 ? 4 : s->tier];
+                    }
                     /* Lead the target. */
                     float tt = tw->speed > 0 ? dist / tw->speed : 0;
                     Vec3 aim = v3_add(g_ships[tgt].pos,
                                       v3_scale(v3_sub(g_ships[tgt].vel,
                                                       s->vel), tt));
+                    if (npc) {
+                        /* spread: reuse the ai jitter scale ~tier 2 */
+                        uint32_t r2 = (uint32_t)(s->pos.x * 57.0f)
+                                      ^ (uint32_t)(s->heat * 977.0f) ^ i;
+                        r2 ^= r2 << 13; r2 ^= r2 >> 17; r2 ^= r2 << 5;
+                        float ja = ((r2 & 0xFF) / 255.0f - 0.5f) * 0.05f
+                                   * dist;
+                        r2 ^= r2 << 13; r2 ^= r2 >> 17; r2 ^= r2 << 5;
+                        float jb = (((r2 >> 8) & 0xFF) / 255.0f - 0.5f)
+                                   * 0.05f * dist;
+                        aim = v3_add(aim, v3_add(v3_scale(s->basis.r[0],
+                                                          ja),
+                                                 v3_scale(s->basis.r[1],
+                                                          jb)));
+                    }
                     Vec3 dir2 = v3_norm(v3_sub(aim, s->pos));
                     Vec3 muz = v3_add(s->pos,
                                       v3_scale(dir2,

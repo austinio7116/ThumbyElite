@@ -157,6 +157,8 @@ int main(int argc, char **argv) {
                            v3_add(pl->pos, v3(80, 20, 320)),
                            TEAM_HOSTILE);
         if (e > 0) ship_set_tier(e, tier, 2 + tier);
+        if (e > 0 && getenv("ELITE_SIEGE_NOTURRET"))
+            g_ships[e].turret_type = 0;
         CraftRawButtons none = {0};
         float t_collapse = -1;
         for (int f = 0; f < 60 * 30; f++) {

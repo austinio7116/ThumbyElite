@@ -18,8 +18,11 @@
 #define AI_BREAK_TIME  1.5f     /* quick turnaround between passes */
 
 /* Per-tier trigger discipline. */
-static const float k_refire[5] = { 1.05f, 0.85f, 0.65f, 0.48f, 0.34f };
-static const float k_spread[5] = { 0.050f, 0.034f, 0.022f, 0.013f, 0.007f };
+static const float k_refire[5] = { 0.80f, 0.70f, 0.60f, 0.75f, 0.42f };
+/* Spread compensates PAYLOAD, not just tier — tier 3 packs gauss, so
+ * its number sits wider than tier 2's; the curve that matters is the
+ * siege-sim collapse times (target ~55/30/14/7/3s vs standard shield). */
+static const float k_spread[5] = { 0.024f, 0.020f, 0.016f, 0.024f, 0.0105f };
 static const float k_cone[5]   = { 0.970f, 0.978f, 0.984f, 0.988f, 0.992f };
 
 /* Steer s so its nose tips toward world-space dir (unit). */

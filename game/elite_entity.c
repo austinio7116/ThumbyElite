@@ -121,8 +121,10 @@ void ship_set_tier(int idx, int tier, int hull_class) {
                               : (idx & 1) ? WPN_AUTOCANNON : WPN_PULSE_M);
         break;
     case 3:
+        /* Skilled, not ace: autocannon streams are dodgeable in a way
+         * gauss sniping wasn't (gauss stays tier-4 territory). */
         ship_fit_weapon(idx, 0, (idx % 3 == 0) ? WPN_FLAK : WPN_PULSE_M);
-        ship_fit_weapon(idx, 1, WPN_GAUSS);
+        ship_fit_weapon(idx, 1, WPN_AUTOCANNON);
         break;
     default:
         /* ELITE aces: heavy mains; some pack railguns or ion. */
