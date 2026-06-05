@@ -77,6 +77,15 @@ add_custom_command(
 )
 add_custom_target(generate_elite_meshes DEPENDS ${MESHES_GEN_C})
 
+# Save backend: standalone uses a dedicated flash sector; the ThumbyOne
+# slot writes the dock-checkpoint blob to the shared FAT so it survives
+# reflashing and shows up over the lobby's USB MSC.
+if (THUMBYONE_SLOT_MODE)
+    set(ELITE_SAVE_SRC ${DEVICE}/elite_save_fatfs.c)
+else()
+    set(ELITE_SAVE_SRC ${DEVICE}/elite_save_flash.c)
+endif()
+
 add_executable(thumbyelite
     # Platform layer.
     ${DEVICE}/elite_device_main.c
@@ -84,7 +93,7 @@ add_executable(thumbyelite
     ${DEVICE}/craft_buttons.c
     ${DEVICE}/craft_audio_pwm.c
     ${DEVICE}/craft_rumble.c
-    ${DEVICE}/elite_save_flash.c
+    ${ELITE_SAVE_SRC}
 
     # Game + renderer (platform-independent).
     ${GAME}/elite_game.c
@@ -124,8 +133,30 @@ add_executable(thumbyelite
 )
 add_dependencies(thumbyelite generate_elite_meshes)
 
+# Slot mode: FatFs + ThumbyOne shared helpers (FS mount, LED, backlight,
+# settings, handoff for return-to-lobby).
+if (THUMBYONE_SLOT_MODE)
+    target_sources(thumbyelite PRIVATE
+        ${THUMBYONE_COMMON_SRC}
+        ${THUMBYONE_FATFS_SRC}
+        ${THUMBYONE_COMMON_FS_SRC}
+        ${THUMBYONE_COMMON_LED_SRC}
+        ${THUMBYONE_COMMON_BACKLIGHT_SRC}
+        ${THUMBYONE_COMMON_SETTINGS_SRC}
+    )
+endif()
+
 target_include_directories(thumbyelite PRIVATE
     ${GAME} ${DEVICE} ${CMAKE_CURRENT_BINARY_DIR}/generated)
+if (THUMBYONE_SLOT_MODE)
+    target_include_directories(thumbyelite PRIVATE
+        ${THUMBYONE_FATFS_INCLUDE}
+        ${THUMBYONE_COMMON_INCLUDE}
+        ${THUMBYONE_COMMON_LED_INCLUDE}
+        ${THUMBYONE_COMMON_BACKLIGHT_INCLUDE}
+        ${THUMBYONE_COMMON_SETTINGS_INCLUDE}
+    )
+endif()
 
 target_compile_options(thumbyelite PRIVATE
     -O3 -g -Wall -Wextra
@@ -139,6 +170,9 @@ target_link_libraries(thumbyelite
     hardware_spi hardware_dma hardware_pwm hardware_irq
     hardware_flash hardware_sync hardware_clocks hardware_gpio
 )
+if (THUMBYONE_SLOT_MODE)
+    target_link_libraries(thumbyelite hardware_pio hardware_adc)
+endif()
 
 if (THUMBYONE_SLOT_MODE)
     set(ELITE_HEAP_SIZE 0x2000)

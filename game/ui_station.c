@@ -396,6 +396,15 @@ static WeaponInst *equip_slot(int which) {
     return which ? &g_player.armor_eq : &g_player.shield_eq;
 }
 
+/* Buy overflow: no compatible slot free -> the purchase goes to the
+ * hold rack instead (user req: full mounts must not block buying). */
+static bool buy_to_rack(const WeaponInst *inst) {
+    int sl = player_free_rack_slot();
+    if (sl < 0 || player_cargo_total() >= player_cargo_cap()) return false;
+    g_player.salvage[sl] = *inst;
+    return true;
+}
+
 /* Can this row open a detail sheet? Single source of truth for the LB
  * open gate AND the in-sheet LB/RB cycle (they had drifted apart and
  * the new row types couldn't open at all — user report). */
@@ -486,12 +495,19 @@ static void outfit_action_a(int row) {
         int slot = -1;
         for (int u = 0; u < player_util_slots(); u++)
             if (!g_player.util_eq[u].in_use) { slot = u; break; }
-        if (slot < 0) { toast("BAYS FULL"); return; }
-        g_player.credits -= price;
-        g_player.util_eq[slot] = (WeaponInst){ .type = (uint8_t)type,
-            .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
-        if (type == EQ_CHAFF) g_player.chaff_charges = 4;
-        toast("FITTED");
+        WeaponInst inst = { .type = (uint8_t)type, .quality = Q_STANDARD,
+                            .integrity = 100, .in_use = 1 };
+        if (slot >= 0) {
+            g_player.credits -= price;
+            g_player.util_eq[slot] = inst;
+            if (type == EQ_CHAFF) g_player.chaff_charges = 4;
+            toast("FITTED");
+        } else if (buy_to_rack(&inst)) {
+            g_player.credits -= price;
+            toast("TO HOLD");
+        } else {
+            toast("NO SPACE");
+        }
         break;
     }
     case ROW_TURRET: {
@@ -525,17 +541,22 @@ static void outfit_action_a(int row) {
                           vprice * skill_price_mult());
         if (g_player.credits < price) { toast("NO CREDITS"); return; }
         WeaponInst *e = equip_slot(r->index);
-        /* Trade in the old unit at 40% of its value. */
-        if (e->in_use)
-            g_player.credits += (int)(equip_price(e->type, e->tier,
-                                                  e->quality) * 0.4f *
-                                      (0.5f + 0.5f * e->integrity * 0.01f));
-        g_player.credits -= price;
-        *e = (WeaponInst){ .type = (uint8_t)type, .quality = Q_STANDARD,
-                           .integrity = 100, .in_use = 1,
-                           .tier = (uint8_t)r->tier, .affix = variant };
-        player_apply_to_ship();
-        toast("FITTED");
+        WeaponInst inst = { .type = (uint8_t)type, .quality = Q_STANDARD,
+                            .integrity = 100, .in_use = 1,
+                            .tier = (uint8_t)r->tier, .affix = variant };
+        if (!e->in_use) {
+            g_player.credits -= price;
+            *e = inst;
+            player_apply_to_ship();
+            toast("FITTED");
+        } else if (buy_to_rack(&inst)) {
+            /* Slot occupied: the new unit goes to the hold — swap it in
+             * from the rack later; no more forced trade-in. */
+            g_player.credits -= price;
+            toast("TO HOLD");
+        } else {
+            toast("NO SPACE");
+        }
         break;
     }
     case ROW_SALV: {
@@ -571,7 +592,11 @@ static void outfit_action_a(int row) {
         if (slot < 0) { toast("NO FREE SLOT"); return; }
         g_player.mounts[slot] = *sv;
         sv->in_use = 0;
-        player_load_mount_ammo(slot, 0.4f);     /* salvage: part-loaded */
+        /* Factory-fresh (100%) racked guns come sealed with a full
+         * magazine; battle salvage arrives part-loaded. */
+        player_load_mount_ammo(slot,
+                               g_player.mounts[slot].integrity >= 100
+                                   ? 1.0f : 0.4f);
         player_apply_to_ship();
         toast("FITTED");
         break;
@@ -582,17 +607,23 @@ static void outfit_action_a(int row) {
          * (user-reported: Z1 autocannon refused 'NO FREE SLOT'). */
         const ArmoryItem *it = &s_armory[r->index];
         int price = (int)(it->price * skill_price_mult());
-        int slot = free_slot_for(it->type);
-        if (slot < 0) { toast("NO FREE SLOT"); return; }
         if (g_player.credits < price) { toast("NO CREDITS"); return; }
-        g_player.credits -= price;
-        g_player.mounts[slot] = (WeaponInst){ .type = it->type,
-                                              .quality = it->quality,
-                                              .integrity = 100, .in_use = 1,
-                                              .affix = it->affix };
-        player_load_mount_ammo(slot, 1.0f);   /* sold fully loaded */
-        player_apply_to_ship();
-        toast("FITTED");
+        WeaponInst inst = { .type = it->type, .quality = it->quality,
+                            .integrity = 100, .in_use = 1,
+                            .affix = it->affix };
+        int slot = free_slot_for(it->type);
+        if (slot >= 0) {
+            g_player.credits -= price;
+            g_player.mounts[slot] = inst;
+            player_load_mount_ammo(slot, 1.0f);   /* sold fully loaded */
+            player_apply_to_ship();
+            toast("FITTED");
+        } else if (buy_to_rack(&inst)) {
+            g_player.credits -= price;
+            toast("TO HOLD");
+        } else {
+            toast("NO SPACE");
+        }
         break;
     }
     }

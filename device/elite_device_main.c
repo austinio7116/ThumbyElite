@@ -16,6 +16,14 @@
 #include "craft_buttons.h"
 #include "craft_audio_pwm.h"
 #include "craft_rumble.h"
+#ifdef THUMBYONE_SLOT_MODE
+#include "ff.h"
+#include "thumbyone_fs.h"
+#include "thumbyone_handoff.h"
+#include "thumbyone_led.h"
+static FATFS   g_fs;
+static uint8_t g_fs_work[FF_MAX_SS] __attribute__((aligned(4)));
+#endif
 #include "elite_audio.h"
 #include "elite_types.h"
 #include "elite_game.h"
@@ -44,6 +52,13 @@ int main(void) {
     craft_rumble_init();
     craft_audio_pwm_init();
 
+#ifdef THUMBYONE_SLOT_MODE
+    /* Honour the lobby's brightness + LED, then mount the shared FAT so
+     * plat_save/plat_load reach /thumbyelite/run.sav. Must run BEFORE
+     * elite_game_init, whose title screen checks save_exists(). */
+    thumbyone_slot_init_brightness_and_led(true);
+    (void)thumbyone_fs_mount_or_format(&g_fs, g_fs_work, sizeof g_fs_work);
+#endif
     elite_game_init(get_rand_32());
 
     multicore_launch_core1(core1_entry);
@@ -57,6 +72,21 @@ int main(void) {
         if (dt > 0.1f) dt = 0.1f;
         last_ms = now_ms;
 
+#ifdef THUMBYONE_SLOT_MODE
+        /* Hold MENU ~1.2s to return to the lobby (short taps still pause).
+         * Progress = the last dock save, same as a power cycle — the
+         * insurance model applies. */
+        static uint32_t s_menu_held_ms = 0;
+        if (btn.menu) {
+            s_menu_held_ms += (uint32_t)(dt * 1000.0f);
+            if (s_menu_held_ms >= 1200u) {
+                craft_lcd_wait_idle();
+                thumbyone_handoff_request_lobby();   /* reboots; no return */
+            }
+        } else {
+            s_menu_held_ms = 0;
+        }
+#endif
         elite_game_tick(&btn, dt);
         craft_rumble_tick(dt);
 
