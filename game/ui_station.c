@@ -396,6 +396,25 @@ static WeaponInst *equip_slot(int which) {
     return which ? &g_player.armor_eq : &g_player.shield_eq;
 }
 
+/* Can this row open a detail sheet? Single source of truth for the LB
+ * open gate AND the in-sheet LB/RB cycle (they had drifted apart and
+ * the new row types couldn't open at all — user report). */
+static bool row_detailable(const OutfitRow *r) {
+    switch (r->kind) {
+    case ROW_MOUNT:  return g_player.mounts[r->index].in_use;
+    case ROW_EQUIP:  return equip_slot(r->index)->in_use;
+    case ROW_UTIL:   return g_player.util_eq[r->index].in_use;
+    case ROW_TURRET: return g_player.turret_eq.in_use;
+    case ROW_SALV:
+    case ROW_SHOP:
+    case ROW_EQSHOP:
+    case ROW_UTILSHOP:
+        return true;
+    default:
+        return false;
+    }
+}
+
 static int repair_cost(const WeaponInst *w) {
     int base = weapon_price(w->type, w->quality);
     return (int)((100 - w->integrity) * base / 100 * 0.6f *
@@ -733,33 +752,7 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
                 int n = s_cursor;
                 for (int tries = 0; tries < s_n_rows; tries++) {
                     n = (n + dir + s_n_rows) % s_n_rows;
-                    const OutfitRow *rr = &s_rows[n];
-                    bool ok = false;
-                    switch (rr->kind) {
-                    case ROW_MOUNT:
-                        ok = g_player.mounts[rr->index].in_use;
-                        break;
-                    case ROW_EQUIP: {
-                        const WeaponInst *e = equip_slot(rr->index);
-                        ok = e->in_use;
-                        break;
-                    }
-                    case ROW_UTIL:
-                        ok = g_player.util_eq[rr->index].in_use;
-                        break;
-                    case ROW_TURRET:
-                        ok = g_player.turret_eq.in_use;
-                        break;
-                    case ROW_SALV:
-                    case ROW_SHOP:
-                    case ROW_EQSHOP:
-                    case ROW_UTILSHOP:
-                        ok = true;
-                        break;
-                    default:
-                        break;
-                    }
-                    if (ok) { s_cursor = n; break; }
+                    if (row_detailable(&s_rows[n])) { s_cursor = n; break; }
                 }
             }
             if (a_edge) { outfit_action_a(s_cursor); s_detail = 0; }
@@ -780,12 +773,8 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
         }
         if (s_cursor < s_scroll) s_scroll = s_cursor;
         if (s_cursor > s_scroll + 8) s_scroll = s_cursor - 8;
-        if (lb_edge) {
-            const OutfitRow *r = &s_rows[s_cursor];
-            if (r->kind == ROW_MOUNT ? g_player.mounts[r->index].in_use
-                : (r->kind == ROW_SALV || r->kind == ROW_SHOP))
-                s_detail = 1;
-        }
+        if (lb_edge && row_detailable(&s_rows[s_cursor]))
+            s_detail = 1;
         if (a_edge) outfit_action_a(s_cursor);
         if (b_edge) outfit_action_b(s_cursor);
         if (back) { s_screen = SCR_HOME; s_cursor = 2; }
