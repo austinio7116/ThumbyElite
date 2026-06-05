@@ -285,9 +285,9 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
     float zb = -len * 0.5f, zf = len * 0.5f;
     float w_mid = len * ((family == 5) ? rndf(0.16f, 0.22f)
                                        : rndf(0.09f, 0.14f));
-    float flat = (family == 5) ? rndf(0.7f, 0.95f) : rndf(0.42f, 0.68f);
-    float ch = rndf(0.30f, 0.60f);           /* section chamfer */
-    float rake = rndf(0.0f, 0.18f) * len;    /* tail-up spine curve */
+    float flat = (family == 5) ? rndf(0.65f, 1.0f) : rndf(0.36f, 0.74f);
+    float ch = rndf(0.22f, 0.68f);           /* section chamfer */
+    float rake = rndf(-0.06f, 0.22f) * len;  /* spine curve (can droop) */
     float nose_len = len * ((family == 2) ? rndf(0.30f, 0.42f)
                                           : rndf(0.18f, 0.30f));
 
@@ -315,28 +315,43 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             cap_back(e, HULL);
             cap_front(f2, HULL2);
         }
-        /* 4 foils in X: upper + lower pairs, swept slightly back */
-        float span = len * rndf(0.34f, 0.46f);
-        float dihed = span * rndf(0.45f, 0.7f);
-        float wz0 = zb2 + len * rndf(0.12f, 0.22f);
-        float wz1 = wz0 + len * rndf(0.16f, 0.22f);
-        float sweep = len * rndf(0.04f, 0.12f);
-        wings(wz0, wz1, w * 0.9f, h * 0.4f, h * 0.14f,
-              w + span, wz0 - sweep, wz0 - sweep + len * 0.1f,
-              h * 0.4f + dihed, HULL2);
-        wings(wz0, wz1, w * 0.9f, -h * 0.4f, h * 0.14f,
-              w + span, wz0 - sweep, wz0 - sweep + len * 0.1f,
-              -h * 0.4f - dihed, HULL2);
-        /* wingtip cannons (mirrored x by tip_gun calls per side) */
-        float gl = len * rndf(0.2f, 0.3f);
-        tip_gun(w + span, h * 0.4f + dihed, wz0 - sweep, gl, w * 0.16f,
-                ACC, RGB565C(40, 40, 48));
-        tip_gun(-(w + span), h * 0.4f + dihed, wz0 - sweep, gl, w * 0.16f,
-                ACC, RGB565C(40, 40, 48));
-        tip_gun(w + span, -h * 0.4f - dihed, wz0 - sweep, gl, w * 0.16f,
-                ACC, RGB565C(40, 40, 48));
-        tip_gun(-(w + span), -h * 0.4f - dihed, wz0 - sweep, gl, w * 0.16f,
-                ACC, RGB565C(40, 40, 48));
+        /* Foils: the X is just one configuration now — dihedrals roll
+         * independently per pair, pairs can scissor fore/aft, sweep
+         * can run forward, and some frames are Y-foils (user req:
+         * every X-wing had the same angles). */
+        float span = len * rndf(0.30f, 0.50f);
+        float dihed_u = span * rndf(0.25f, 0.95f);
+        float dihed_l = span * rndf(0.25f, 0.95f);
+        float wz0 = zb2 + len * rndf(0.10f, 0.26f);
+        float wz1 = wz0 + len * rndf(0.14f, 0.24f);
+        float scissor = len * rndf(0.0f, 0.14f);     /* lower pair aft */
+        float sweep = len * rndf(-0.06f, 0.14f);     /* - = forward */
+        int yfoil = (rnd() % 5u) == 0;               /* 20%: 3 foils */
+        float gl = len * rndf(0.16f, 0.32f);
+        uint16_t GMUZ = RGB565C(40, 40, 48);
+        /* upper pair (or single dorsal blade on Y-foils) */
+        if (yfoil) {
+            fin(0, wz0, wz1, h * 0.8f, w * 0.18f,
+                dihed_u * 1.2f, wz0 - sweep, wz0 - sweep + len * 0.1f,
+                1.0f, HULL2);
+        } else {
+            wings(wz0, wz1, w * 0.9f, h * 0.4f, h * 0.14f,
+                  w + span, wz0 - sweep, wz0 - sweep + len * 0.1f,
+                  h * 0.4f + dihed_u, HULL2);
+            tip_gun(w + span, h * 0.4f + dihed_u, wz0 - sweep, gl,
+                    w * 0.16f, ACC, GMUZ);
+            tip_gun(-(w + span), h * 0.4f + dihed_u, wz0 - sweep, gl,
+                    w * 0.16f, ACC, GMUZ);
+        }
+        /* lower pair, possibly scissored aft with its own dihedral */
+        wings(wz0 + scissor, wz1 + scissor, w * 0.9f, -h * 0.4f,
+              h * 0.14f, w + span, wz0 + scissor - sweep,
+              wz0 + scissor - sweep + len * 0.1f,
+              -h * 0.4f - dihed_l, HULL2);
+        tip_gun(w + span, -h * 0.4f - dihed_l, wz0 + scissor - sweep, gl,
+                w * 0.16f, ACC, GMUZ);
+        tip_gun(-(w + span), -h * 0.4f - dihed_l, wz0 + scissor - sweep,
+                gl, w * 0.16f, ACC, GMUZ);
         goto finish;
     }
     if (arch == 2) {
@@ -570,9 +585,12 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
         break;
     }
     case 3: { /* gunship: prongs + twin canted fins */
-        float px = w_mid * rndf(0.5f, 0.75f);
-        for (int s2 = 0; s2 < 2; s2++) {
-            float sx = s2 ? -px : px;
+        float px = w_mid * rndf(0.4f, 0.85f);
+        int npr = rndi(1, 2) * 2;            /* 2 or 4 prongs */
+        for (int s2 = 0; s2 < npr; s2++) {
+            float sx = (s2 & 1) ? -px : px;
+            float sy2 = (s2 >= 2) ? -h2 * 0.8f : h2 * 0.3f;
+            (void)sy2;
             int g0[8], g1[8];
             ring(z3 - len * 0.05f, w_mid * 0.10f, w_mid * 0.10f, 0, 0.4f, g0);
             ring(zf + len * 0.08f, w_mid * 0.07f, w_mid * 0.07f, 0, 0.4f, g1);
@@ -589,15 +607,48 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             w_mid * 0.05f, h0 * 1.6f, z0, z0 + len * 0.08f, 1.0f, ACC);
         break;
     }
-    case 4: { /* cruiser: dorsal + ventral fins, mid winglets */
-        fin(0, z1, z1 + len * 0.25f, h1 * 0.9f, w_mid * 0.06f,
-            h1 * rndf(1.4f, 2.4f), z1, z1 + len * 0.12f, 1.0f, HULL2);
-        fin(0, z1 + len * 0.05f, z1 + len * 0.2f, -h1 * 0.9f,
-            w_mid * 0.05f, h1 * 1.2f, z1 + len * 0.05f,
-            z1 + len * 0.12f, -1.0f, ACC);
-        wings(z2 - len * 0.05f, z2 + len * 0.1f, w_mid * 0.9f, 0,
-              h2 * 0.10f, w_mid + span * 0.5f, z2 - len * 0.12f,
-              z2 - len * 0.04f, 0, HULL2);
+    case 4: { /* cruiser: four superstructure schools (user req: the
+                 dreadnought class read as clones) */
+        int cstyle = rndi(0, 3);
+        if (cstyle == 0) {
+            /* classic: dorsal + ventral fins, mid winglets */
+            fin(0, z1, z1 + len * 0.25f, h1 * 0.9f, w_mid * 0.06f,
+                h1 * rndf(1.4f, 2.4f), z1, z1 + len * 0.12f, 1.0f, HULL2);
+            fin(0, z1 + len * 0.05f, z1 + len * 0.2f, -h1 * 0.9f,
+                w_mid * 0.05f, h1 * 1.2f, z1 + len * 0.05f,
+                z1 + len * 0.12f, -1.0f, ACC);
+            wings(z2 - len * 0.05f, z2 + len * 0.1f, w_mid * 0.9f, 0,
+                  h2 * 0.10f, w_mid + span * 0.5f, z2 - len * 0.12f,
+                  z2 - len * 0.04f, 0, HULL2);
+        } else if (cstyle == 1) {
+            /* twin canted dorsal blades + belly keel */
+            for (int sd2 = 0; sd2 < 2; sd2++) {
+                float sx2 = sd2 ? -1.0f : 1.0f;
+                fin(sx2 * w_mid * 0.45f, z1, z1 + len * 0.20f,
+                    h1 * 0.8f, w_mid * 0.05f, h1 * rndf(1.2f, 2.0f),
+                    z1, z1 + len * 0.10f, 1.0f, ACC);
+            }
+            fin(0, z1, z1 + len * rndf(0.3f, 0.45f), -h1 * 0.9f,
+                w_mid * 0.06f, h1 * rndf(0.8f, 1.4f),
+                z1, z1 + len * 0.2f, -1.0f, HULL2);
+        } else if (cstyle == 2) {
+            /* side sponsons (gun cheeks) + small tail fin */
+            nacelle(w_mid * 1.05f, 0, z1, z2 + len * 0.05f,
+                    w_mid * rndf(0.28f, 0.4f), HULL2, GLOW, 1);
+            fin(0, z0 + len * 0.02f, z0 + len * 0.18f, h0 * 0.8f,
+                w_mid * 0.05f, h0 * rndf(1.0f, 1.8f),
+                z0, z0 + len * 0.08f, 1.0f, ACC);
+        } else {
+            /* spine of stepped fins down the back */
+            int nf2 = rndi(3, 5);
+            for (int k = 0; k < nf2; k++) {
+                float fz = z1 + (z3 - z1) * (float)k / (float)nf2;
+                fin(0, fz, fz + len * 0.07f, h1 * 0.85f,
+                    w_mid * 0.05f, h1 * (0.7f + 0.35f * (float)k),
+                    fz, fz + len * 0.05f, 1.0f,
+                    (k & 1) ? ACC : HULL2);
+            }
+        }
         break;
     }
     default:  /* hauler: side pods (cargo nacelles) */
