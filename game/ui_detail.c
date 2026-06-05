@@ -109,6 +109,15 @@ void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
     craft_font_draw(fb, w->name, 32, 4, COL_HDR);
     craft_font_draw(fb, k_qual_long[wi->quality > 4 ? 4 : wi->quality],
                     32, 11, (wi->quality >= Q_MILITARY) ? COL_CRED : COL_DIM);
+    if (cw) {
+        /* Comparison benchmark as a two-row header tag, top right —
+         * the deltas below are measured against this. */
+        int tw = craft_font_width("VS");
+        craft_font_draw(fb, "VS", 126 - tw, 4, COL_DIM);
+        tw = craft_font_width(cw->name);
+        craft_font_draw(fb, cw->name, 126 - tw, 11,
+                        RGB565C(90, 170, 220));
+    }
     hl(fb, 19, COL_GRID);
 
     float dm = mount_dmg_mult(wi);
@@ -157,11 +166,6 @@ void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
     stat(fb, y, "INTEGRITY", buf,
          wi->integrity < 60 ? COL_WARN : COL_VAL); y += 8;
 
-    if (cw) {
-        snprintf(buf, sizeof buf, "VS FITTED %s", cw->name);
-        craft_font_draw(fb, buf, 4, y + 1, COL_DIM);
-        y += 8;
-    }
     if (price >= 0) {
         hl(fb, y + 1, COL_GRID);
         snprintf(buf, sizeof buf, "%s %dCR", price_label, price);
