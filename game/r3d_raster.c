@@ -8,6 +8,7 @@
  * of per-pixel barycentrics, so the inner loop is 4 fadds + 2 compares.
  */
 #include "r3d_raster.h"
+#include <math.h>
 #include <string.h>
 
 static uint16_t *s_fb;
@@ -18,6 +19,8 @@ static uint16_t s_depth[ELITE_FB_W * ELITE_FB_H];
 void r3d_raster_set_fb(uint16_t *fb) {
     s_fb = fb;
 }
+
+uint16_t *r3d_depth_buffer(void) { return s_depth; }
 
 void r3d_depth_clear(int y_min, int y_max) {
     if (y_min < 0) y_min = 0;

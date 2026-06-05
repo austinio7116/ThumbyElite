@@ -29,6 +29,7 @@
 #define COL_CANOPY  RGB565C( 55,  65,  88)
 #define COL_PILLAR  RGB565C( 30,  38,  55)
 #define COL_GRID    RGB565C( 32,  44,  62)
+#define COL_CUR_DEST RGB565C(120, 230, 255)   /* supercruise destination */
 
 /* Dashboard geometry. */
 #define DASH_TOP   101
@@ -232,13 +233,98 @@ void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
     bar(fb, 101, 112, 22, p->hull / p->hull_max, COL_HULL);
     craft_font_draw(fb, "T", 94, 116, COL_HEAT);
     bar(fb, 101, 119, 22, p->heat / 100.0f, COL_HEAT);
-    snprintf(buf, sizeof buf, "W%d K%d", info->wave, info->kills);
-    craft_font_draw(fb, buf, 94, 122, COL_TEXT);
+    craft_font_draw(fb, "F", 94, 122, COL_NUM);
+    bar(fb, 101, 124, 22, info->fuel01, COL_NUM);
+    snprintf(buf, sizeof buf, "K%d", info->kills);
+    craft_font_draw(fb, buf, 2, 124, COL_TEXT);
 
     scanner(fb);
 
     if (info->target >= 0 && g_ships[info->target].alive)
         target_box(fb, info->target);
+
+    if (info->show_perf) {
+        snprintf(buf, sizeof buf, "%d.%dMS %dT",
+                 (int)info->render_ms,
+                 ((int)(info->render_ms * 10.0f)) % 10,
+                 r3d_scene_tri_count());
+        craft_font_draw(fb, buf, 40, 2, COL_TEXT);
+    }
+}
+
+/* --- Supercruise HUD ---------------------------------------------------*/
+void ui_hud_draw_sc(uint16_t *fb, const HudScInfo *info) {
+    const Ship *p = &g_ships[PLAYER];
+    char buf[32];
+
+    dashboard(fb);
+
+    /* Crosshair. */
+    hline(fb, 59, 61, 64, COL_CROSS);
+    hline(fb, 67, 69, 64, COL_CROSS);
+    vline(fb, 64, 59, 61, COL_CROSS);
+    vline(fb, 64, 67, 69, COL_CROSS);
+
+    /* Destination marker: project the direction (clamped to an edge
+     * arrow when off-screen), plus distance/alignment readout. */
+    if (info->dest_name) {
+        Vec3 rel_m = v3_scale(info->dest_rel_mm, 1.0e6f);
+        float sx, sy;
+        uint16_t d;
+        if (r3d_scene_project(rel_m, &sx, &sy, &d) &&
+            sx >= 4 && sx < 124 && sy >= 12 && sy < 92) {
+            int x = (int)sx, y = (int)sy;
+            /* Diamond reticle. */
+            for (int k = 3; k <= 5; k++) {
+                px(fb, x + k, y, COL_CUR_DEST); px(fb, x - k, y, COL_CUR_DEST);
+                px(fb, x, y + k, COL_CUR_DEST); px(fb, x, y - k, COL_CUR_DEST);
+            }
+        } else {
+            Vec3 v = m3_mul_v3_t(&p->basis, rel_m);
+            float ax = v.x, ay = -v.y;
+            if (v.z < 0) { ax = -ax; ay = -ay; }
+            float al = sqrtf(ax * ax + ay * ay);
+            if (al < 1e-4f) { ax = 1; ay = 0; al = 1; }
+            ax /= al; ay /= al;
+            int ex = 64 + (int)(ax * 52.0f), ey = 60 + (int)(ay * 44.0f);
+            for (int k = 0; k <= 4; k++)
+                px(fb, ex - (int)(ax * k), ey - (int)(ay * k), COL_CUR_DEST);
+        }
+        float dist = v3_len(info->dest_rel_mm);
+        snprintf(buf, sizeof buf, "%s", info->dest_name);
+        craft_font_draw(fb, buf, 2, 12, COL_CUR_DEST);
+        if (dist >= 100.0f)
+            snprintf(buf, sizeof buf, "%dMM", (int)dist);
+        else
+            snprintf(buf, sizeof buf, "%d.%dMM", (int)dist,
+                     ((int)(dist * 10)) % 10);
+        craft_font_draw(fb, buf, 2, 19, COL_NUM);
+        float eta = (info->speed_mms > 0.001f) ? dist / info->speed_mms : 999;
+        if (eta < 999) {
+            snprintf(buf, sizeof buf, "ETA %dS", (int)eta);
+            craft_font_draw(fb, buf, 2, 26, COL_NUM);
+        }
+    }
+
+    craft_font_draw(fb, "SUPERCRUISE", 42, 110, COL_SHIELD);
+
+    /* Left panel: speed (Mm/s) + throttle. */
+    craft_font_draw(fb, "SP", 2, 102, COL_TEXT);
+    bar(fb, 13, 105, 20, info->speed_mms / 50.0f, COL_TEXT);
+    craft_font_draw(fb, "TH", 2, 109, COL_NUM);
+    bar(fb, 13, 112, 20, info->throttle, COL_NUM);
+    if (info->speed_mms >= 1.0f)
+        snprintf(buf, sizeof buf, "%dMM/S", (int)info->speed_mms);
+    else
+        snprintf(buf, sizeof buf, "%dKM/S", (int)(info->speed_mms * 1000.0f));
+    craft_font_draw(fb, buf, 2, 118, COL_NUM);
+
+    /* Right panel: fuel + hull (shields don't matter in SC). */
+    craft_font_draw(fb, "H", 94, 102, COL_HULL);
+    bar(fb, 101, 105, 22, p->hull / p->hull_max, COL_HULL);
+    craft_font_draw(fb, "F", 94, 109, COL_NUM);
+    bar(fb, 101, 112, 22, info->fuel01, COL_NUM);
+    craft_font_draw(fb, "B:DROP", 94, 122, COL_NUM);
 
     if (info->show_perf) {
         snprintf(buf, sizeof buf, "%d.%dMS %dT",

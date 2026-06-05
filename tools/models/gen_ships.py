@@ -220,8 +220,47 @@ def freighter():
     b.write(os.path.join(OUT, "freighter.obj"), "freighter")
 
 
+def station():
+    """Orbital outpost — hub cube with a glowing docking face, two arms
+    carrying solar panels. ~60 tris, ~90m across."""
+    b = Builder()
+    # Hub with docking bay on +z.
+    b.tapered_box(-14, 14, 14, -14, 14, 14, -14, 14, "hull",
+                  {"front": "glass", "back": "dark"})
+    # Arms.
+    b.box([(-26, -2.5, -2.5), (-14, -2.5, -2.5), (-14, 2.5, -2.5),
+           (-26, 2.5, -2.5), (-26, -2.5, 2.5), (-14, -2.5, 2.5),
+           (-14, 2.5, 2.5), (-26, 2.5, 2.5)], "hull2")
+    b.box([(14, -2.5, -2.5), (26, -2.5, -2.5), (26, 2.5, -2.5),
+           (14, 2.5, -2.5), (14, -2.5, 2.5), (26, -2.5, 2.5),
+           (26, 2.5, 2.5), (14, 2.5, 2.5)], "hull2")
+    # Solar panels (thin, broad).
+    b.box([(-44, -0.8, -12), (-26, -0.8, -12), (-26, 0.8, -12),
+           (-44, 0.8, -12), (-44, -0.8, 12), (-26, -0.8, 12),
+           (-26, 0.8, 12), (-44, 0.8, 12)], "glass")
+    b.box([(26, -0.8, -12), (44, -0.8, -12), (44, 0.8, -12),
+           (26, 0.8, -12), (26, -0.8, 12), (44, -0.8, 12),
+           (44, 0.8, 12), (26, 0.8, 12)], "glass")
+    # Beacon mast.
+    b.wedge_y([(-1, 14, -1), (1, 14, -1), (1, 14, 1), (-1, 14, 1)],
+              [(0, 22, -0.5), (0, 22, 0.5)], "accent")
+    b.write(os.path.join(OUT, "station.obj"), "station")
+
+
+def beacon():
+    """Nav beacon — small octahedron, accent-coloured. ~12 tris, 12m."""
+    b = Builder()
+    base = [(-3, 0, -3), (3, 0, -3), (3, 0, 3), (-3, 0, 3)]   # outward -y
+    b.pyramid(base, (0, 6, 0), "accent")
+    base2 = [(-3, 0, -3), (-3, 0, 3), (3, 0, 3), (3, 0, -3)]  # outward +y
+    b.pyramid(base2, (0, -6, 0), "hull2")
+    b.write(os.path.join(OUT, "beacon.obj"), "beacon")
+
+
 if __name__ == "__main__":
     write_mtl()
     fighter()
     viper()
     freighter()
+    station()
+    beacon()

@@ -1,14 +1,20 @@
 /*
  * ThumbyElite — top-level game module.
  *
- * Phase 3: combat arena. Cockpit-view dogfight against waves of AI
- * hostiles — full chord controls, pulse lasers, shields/hull/heat,
- * engine trails, explosions and the Elite scanner. Dying respawns you
- * after a beat; clearing a wave spawns a bigger one.
+ * Phase 4: the galaxy. State machine over flight / supercruise /
+ * hyperspace / maps / pause. TWO COORDINATE SCALES:
+ *
+ *   system space  — megameters (Mm), f32: planet/station/beacon layout
+ *   local space   — meters relative to s_anchor_mm: ships, combat, FX
+ *
+ * Every supercruise drop RE-ANCHORS the local frame, so combat floats
+ * stay tiny no matter where in the system you are. Planet impostors are
+ * fed the camera's absolute Mm position and handle their own scaling.
  */
 #include "elite_game.h"
 #include "elite_types.h"
 #include "r3d_scene.h"
+#include "r3d_planet.h"
 #include "r3d_fx.h"
 #include "elite_entity.h"
 #include "elite_input.h"
@@ -16,17 +22,47 @@
 #include "elite_combat.h"
 #include "elite_ai.h"
 #include "ui_hud.h"
+#include "ui_map.h"
+#include "system_sim.h"
+#include "galaxy_gen.h"
 #include "craft_font.h"
 #include "meshes_gen.h"
 #include <stdio.h>
+#include <string.h>
 
+typedef enum {
+    ST_FLIGHT = 0, ST_SUPERCRUISE, ST_HYPERJUMP,
+    ST_GALAXY_MAP, ST_SYSTEM_MAP, ST_PAUSE,
+} GState;
+
+#define FUEL_MAX   30.0f
+#define JUMP_RANGE 7.5f
+#define HYPER_TIME 2.6f
+#define SC_DROP_MM 1.2f          /* auto-drop distance to destination */
+
+static GState  s_state;
+static SysAddr s_addr;           /* current system */
+static Vec3    s_anchor_mm;      /* local-frame origin in system space */
+static Poi     s_anchor_poi;     /* what we're anchored at */
+static bool    s_anchor_has_poi;
+
+static Vec3    s_sc_pos_mm;      /* supercruise position */
+static Poi     s_sc_dest;
+static bool    s_sc_has_dest;
+static float   s_sc_speed;
+
+static float   s_fuel = FUEL_MAX;
+static SysAddr s_jump_target;
+static float   s_jump_dist;
+static float   s_hyper_t;
+static uint32_t s_hyper_seed;
+
+static int   s_target = -1;      /* combat lock */
 static float s_frame_ms;
-static int   s_target = -1;
-static int   s_wave;
-static float s_wave_timer;     /* countdown to next wave / respawn */
-static float s_respawn_timer;
-static uint32_t s_rng;
+static int   s_pause_cursor;
+static bool  s_prev_menu, s_prev_a;
 
+static uint32_t s_rng;
 static uint32_t xorshift32(void) {
     s_rng ^= s_rng << 13; s_rng ^= s_rng >> 17; s_rng ^= s_rng << 5;
     return s_rng;
@@ -35,6 +71,30 @@ static float frand(float lo, float hi) {
     return lo + (hi - lo) * (float)(xorshift32() & 0xFFFF) * (1.0f / 65535.0f);
 }
 
+/* Wall-clock-ish for ambient animation (sum of frame steps). */
+static float s_time;
+float elite_game_time(void) { return s_time; }
+
+int elite_game_state(void) { return (int)s_state; }
+
+/* Debug/demo: force-spawn hostiles around the player (host harness). */
+void elite_game_debug_spawn(int n) {
+    extern const Mesh mesh_viper, mesh_fighter;
+    for (int i = 0; i < n; i++) {
+        float a = frand(0, 6.2831f);
+        float r = frand(500, 800);
+        Vec3 pos = v3(cosf(a) * r, frand(-150, 150), sinf(a) * r);
+        ship_spawn((i & 1) ? &mesh_viper : &mesh_fighter, pos, TEAM_HOSTILE);
+    }
+}
+
+/* Camera position in system space (Mm) for planet projection. */
+static Vec3 cam_pos_mm(void) {
+    if (s_state == ST_SUPERCRUISE) return s_sc_pos_mm;
+    return v3_add(s_anchor_mm, v3_scale(g_ships[PLAYER].pos, 1.0e-6f));
+}
+
+/* --- player ------------------------------------------------------------*/
 static void spawn_player(void) {
     Ship *p = &g_ships[PLAYER];
     p->alive = true;
@@ -42,7 +102,7 @@ static void spawn_player(void) {
     p->pos = v3(0, 0, 0);
     p->basis = m3_identity();
     p->vel = v3(0, 0, 0);
-    p->throttle = 0.4f;
+    p->throttle = 0.3f;
     p->assist = true;
     p->boost_t = 0;
     p->max_speed = 120.0f;
@@ -57,84 +117,124 @@ static void spawn_player(void) {
     p->team = TEAM_PLAYER;
 }
 
-static void spawn_wave(int wave) {
-    int n = 1 + wave;          /* wave 1 = a gentle pair */
-    if (n > 7) n = 7;
-    Vec3 pp = g_ships[PLAYER].pos;
-    for (int i = 0; i < n; i++) {
-        /* Ring around the player, outside gun range. */
+/* --- POI content ---------------------------------------------------------
+ * Spawned once per supercruise drop / jump arrival. Pirates scale with
+ * system threat; high-security space is quiet. */
+static void spawn_poi_content(void) {
+    const SystemInfo *si = system_info();
+    int pirates = 0;
+    if (si->threat >= 1 && s_anchor_has_poi) {
+        /* Beacons and planets attract trouble; stations are patrolled. */
+        int roll = (int)(xorshift32() % 100u);
+        int chance = (s_anchor_poi.kind == POI_STATION) ? 25 : 55;
+        if (roll < chance) pirates = 1 + (int)(xorshift32() % si->threat);
+        if (pirates > 4) pirates = 4;
+    }
+    for (int i = 0; i < pirates; i++) {
         float a = frand(0, 6.2831f);
-        float r = frand(500, 800);
-        Vec3 pos = v3(pp.x + cosf(a) * r, pp.y + frand(-150, 150),
-                      pp.z + sinf(a) * r);
-        const Mesh *m = (wave >= 2 && (i & 3) == 3) ? &mesh_freighter
-                       : (i & 1) ? &mesh_viper : &mesh_fighter;
-        int idx = ship_spawn(m, pos, TEAM_HOSTILE);
-        if (idx > 0) {
-            /* Face roughly toward the player. */
-            g_ships[idx].basis = m3_identity();
-            g_ships[idx].throttle = 0.8f;
-        }
+        float r = frand(600, 1000);
+        Vec3 pos = v3(cosf(a) * r, frand(-200, 200), sinf(a) * r);
+        const Mesh *m = (i & 1) ? &mesh_viper : &mesh_fighter;
+        ship_spawn(m, pos, TEAM_HOSTILE);
     }
 }
 
+/* Re-anchor the local frame at a system-space position. */
+static void drop_anchor(Vec3 pos_mm, const Poi *poi) {
+    s_anchor_mm = pos_mm;
+    s_anchor_has_poi = (poi != NULL);
+    if (poi) s_anchor_poi = *poi;
+    ships_despawn_npcs();
+    fx_init();
+    s_target = -1;
+}
+
+static void arrive_in_system(SysAddr addr) {
+    s_addr = addr;
+    system_enter(addr);
+    Poi beacon;
+    Poi pois[MAX_POIS];
+    int n = system_pois(pois, MAX_POIS);
+    beacon = pois[0];                       /* beacon is always first */
+    (void)n;
+    drop_anchor(beacon.pos_mm, &beacon);
+    Ship *p = &g_ships[PLAYER];
+    p->pos = v3(frand(-300, 300), frand(-100, 100), -700.0f);
+    p->vel = v3_scale(p->basis.r[2], 40.0f);
+    spawn_poi_content();
+}
+
+/* --- target cycling (unchanged from Phase 3) ----------------------------*/
 static void cycle_target(void) {
-    /* Nearest-first cycling: order hostiles by distance, pick the one
-     * after the current target (wraps). */
     Vec3 pp = g_ships[PLAYER].pos;
-    int best = -1, cur_found = 0;
+    int best = -1, first = -1;
     float cur_d = -1.0f, best_d = 1e30f, first_d = 1e30f;
-    int first = -1;
     if (s_target >= 0 && g_ships[s_target].alive)
         cur_d = v3_len(v3_sub(g_ships[s_target].pos, pp));
     for (int i = 1; i < MAX_SHIPS; i++) {
         if (!g_ships[i].alive || g_ships[i].team != TEAM_HOSTILE) continue;
         float d = v3_len(v3_sub(g_ships[i].pos, pp));
         if (d < first_d) { first_d = d; first = i; }
-        if (cur_d >= 0.0f &&
-            (d > cur_d || (d == cur_d && i > s_target)) && d < best_d) {
-            best_d = d;
-            best = i;
-        }
-        (void)cur_found;
+        if (cur_d >= 0.0f && d > cur_d && d < best_d) { best_d = d; best = i; }
     }
     s_target = (best >= 0) ? best : first;
 }
 
 void elite_game_init(uint32_t seed) {
     s_rng = seed | 1u;
-    r3d_starfield_init(seed ^ 0x5EEDu);
     ships_init();
     fx_init();
     combat_init();
     elite_input_reset();
     spawn_player();
-    s_wave = 1;
-    s_wave_timer = 0;
-    s_respawn_timer = 0;
-    s_target = -1;
-    spawn_wave(s_wave);
+    s_fuel = FUEL_MAX;
+    s_state = ST_FLIGHT;
+    s_prev_menu = s_prev_a = false;
+
+    /* Find a starting system: first populated sector spiralling out from
+     * the origin — deterministic for a given galaxy (which is fixed). */
+    SysAddr start = {0, 0, 0};
+    bool found = false;
+    for (int ring = 0; ring < 8 && !found; ring++)
+        for (int sy = -ring; sy <= ring && !found; sy++)
+            for (int sx = -ring; sx <= ring && !found; sx++) {
+                if (sx > -ring && sx < ring && sy > -ring && sy < ring)
+                    continue;
+                if (galaxy_sector_stars(sx, sy) > 0) {
+                    start.sx = sx; start.sy = sy; start.idx = 0;
+                    found = true;
+                }
+            }
+    arrive_in_system(start);
+    r3d_starfield_init((uint32_t)(system_info()->seed >> 16));
 }
 
 void elite_game_set_frame_ms(float ms) { s_frame_ms = ms; }
 
-void elite_game_tick(const CraftRawButtons *btn, float dt) {
+/* --- state ticks ---------------------------------------------------------*/
+static void tick_flight(const CraftRawButtons *btn, float dt) {
     FlightInput in;
     elite_input_update(btn, dt, &in);
 
     Ship *p = &g_ships[PLAYER];
-    static bool s_dead_latch = false;
+    static bool dead_latch = false;
+    static float respawn_t;
     if (p->alive) {
-        s_dead_latch = false;
+        dead_latch = false;
         flight_apply_input(&in, dt);
         if (in.fire) combat_fire_laser(PLAYER, 0.0f);
         if (in.cycle_target) cycle_target();
     } else {
-        if (!s_dead_latch) { s_dead_latch = true; s_respawn_timer = 2.5f; }
-        s_respawn_timer -= dt;
-        if (s_respawn_timer <= 0.0f) {
+        if (!dead_latch) { dead_latch = true; respawn_t = 2.5f; }
+        respawn_t -= dt;
+        if (respawn_t <= 0.0f) {
+            /* Limp back to the beacon with a fresh hull. */
             spawn_player();
-            s_target = -1;
+            Poi pois[MAX_POIS];
+            system_pois(pois, MAX_POIS);
+            drop_anchor(pois[0].pos_mm, &pois[0]);
+            p->pos = v3(0, 0, -700.0f);
+            spawn_poi_content();
         }
     }
 
@@ -143,8 +243,6 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
     combat_tick(dt);
     fx_tick(dt);
 
-    /* Engine trails for every thrusting ship (incl. the player — visible
-     * when looking back over the shoulder later; cheap either way). */
     for (int i = 0; i < MAX_SHIPS; i++) {
         Ship *s = &g_ships[i];
         if (!s->alive) continue;
@@ -152,52 +250,321 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
                                             s->mesh->bound_r * 0.8f));
         fx_engine_trail(rear, s->vel, s->throttle, dt);
     }
-
-    /* Auto-drop dead targets; wave logic. */
     if (s_target >= 0 && !g_ships[s_target].alive) s_target = -1;
-    if (ships_alive_hostile() == 0) {
-        if (s_wave_timer <= 0.0f) s_wave_timer = 3.0f;
-        s_wave_timer -= dt;
-        if (s_wave_timer <= 0.0f) {
-            s_wave++;
-            spawn_wave(s_wave);
-            s_wave_timer = 0;
+}
+
+static void tick_supercruise(const CraftRawButtons *btn, float dt) {
+    FlightInput in;
+    elite_input_update(btn, dt, &in);
+    Ship *p = &g_ships[PLAYER];
+
+    float tr = p->turn_rate * 0.6f * dt;     /* heavier helm at SC speed */
+    if (in.pitch != 0.0f) m3_rotate_local(&p->basis, 0, in.pitch * tr);
+    if (in.yaw   != 0.0f) m3_rotate_local(&p->basis, 1, in.yaw * tr);
+    if (in.roll  != 0.0f) m3_rotate_local(&p->basis, 2, in.roll * tr * 1.5f);
+    m3_orthonormalize(&p->basis);
+    p->throttle += in.throttle_delta * 0.9f * dt;
+    if (p->throttle < 0.0f) p->throttle = 0.0f;
+    if (p->throttle > 1.0f) p->throttle = 1.0f;
+
+    /* Speed envelope: approach-limited near the destination so arrival
+     * is automatic, opening to 500 Mm/s in deep space. Planets keep a
+     * standoff so we don't cruise into the lithosphere. */
+    float standoff = 0.0f;
+    if (s_sc_has_dest && s_sc_dest.kind == POI_PLANET)
+        standoff = system_info()->planets[s_sc_dest.index].radius_mm * 3.5f;
+    float vmax = 2000.0f;
+    float dist = 1e9f;
+    if (s_sc_has_dest) {
+        dist = v3_len(v3_sub(s_sc_dest.pos_mm, s_sc_pos_mm));
+        float eff = dist - standoff;
+        if (eff < 0.0f) eff = 0.0f;
+        /* eff/4 decay + 1 Mm/s floor: brisk approach, ~30-40s hops. */
+        float lim = eff * 0.25f + 1.0f;
+        if (lim < vmax) vmax = lim;
+    }
+    float want = p->throttle * vmax;
+    /* Smooth speed chase. */
+    s_sc_speed += (want - s_sc_speed) * (dt * 2.0f > 1 ? 1 : dt * 2.0f);
+    s_sc_pos_mm = v3_add(s_sc_pos_mm,
+                         v3_scale(p->basis.r[2], s_sc_speed * dt));
+
+    /* Arrival / manual drop. */
+    bool arrived = s_sc_has_dest && dist < standoff + SC_DROP_MM;
+    if (arrived || in.secondary) {
+        Vec3 drop_mm = s_sc_pos_mm;
+        const Poi *poi = NULL;
+        if (arrived) {
+            /* Drop at the standoff point on our approach line. */
+            Vec3 in_dir = v3_norm(v3_sub(s_sc_dest.pos_mm, s_sc_pos_mm));
+            drop_mm = v3_sub(s_sc_dest.pos_mm, v3_scale(in_dir, standoff));
+            poi = &s_sc_dest;
         }
+        drop_anchor(drop_mm, poi);
+        Ship *pl = &g_ships[PLAYER];
+        if (arrived) {
+            /* Place the ship short of the POI, nose on it (closer for
+             * man-made structures so they fill some screen). */
+            float back = (s_sc_dest.kind == POI_PLANET) ? 900.0f : 350.0f;
+            Vec3 in_dir = v3_norm(v3_sub(s_sc_dest.pos_mm, s_sc_pos_mm));
+            pl->pos = v3_scale(in_dir, -back);
+        } else {
+            pl->pos = v3(0, 0, 0);
+        }
+        pl->vel = v3_scale(pl->basis.r[2], 60.0f);
+        pl->throttle = 0.5f;
+        s_state = ST_FLIGHT;
+        spawn_poi_content();
     }
 }
 
+static void tick_hyperjump(float dt) {
+    s_hyper_t += dt;
+    if (s_hyper_t >= HYPER_TIME) {
+        s_fuel -= s_jump_dist;
+        if (s_fuel < 0) s_fuel = 0;
+        arrive_in_system(s_jump_target);
+        r3d_starfield_init((uint32_t)(system_info()->seed >> 16));
+        s_state = ST_FLIGHT;
+    }
+}
+
+void elite_game_tick(const CraftRawButtons *btn, float dt) {
+    bool menu_edge = btn->menu && !s_prev_menu;
+    s_prev_menu = btn->menu;
+    bool a_edge = btn->a && !s_prev_a;
+    s_prev_a = btn->a;
+
+    switch (s_state) {
+    case ST_FLIGHT:
+        if (menu_edge) { s_state = ST_PAUSE; s_pause_cursor = 0; break; }
+        tick_flight(btn, dt);
+        break;
+
+    case ST_SUPERCRUISE:
+        if (menu_edge) { s_state = ST_PAUSE; s_pause_cursor = 0; break; }
+        tick_supercruise(btn, dt);
+        break;
+
+    case ST_HYPERJUMP:
+        tick_hyperjump(dt);
+        break;
+
+    case ST_PAUSE: {
+        static const int N_ITEMS = 3;
+        bool up = btn->up, down = btn->down;
+        static bool pu, pd;
+        if (up && !pu && s_pause_cursor > 0) s_pause_cursor--;
+        if (down && !pd && s_pause_cursor < N_ITEMS - 1) s_pause_cursor++;
+        pu = up; pd = down;
+        if (menu_edge || (a_edge && s_pause_cursor == 0)) s_state = ST_FLIGHT;
+        else if (a_edge && s_pause_cursor == 1) {
+            map_galaxy_open(s_addr, s_fuel, JUMP_RANGE);
+            s_state = ST_GALAXY_MAP;
+        } else if (a_edge && s_pause_cursor == 2) {
+            map_system_open(cam_pos_mm());
+            s_state = ST_SYSTEM_MAP;
+        }
+        break;
+    }
+
+    case ST_GALAXY_MAP: {
+        SysAddr target;
+        float dist;
+        MapAction act = map_galaxy_tick(btn, dt, &target, &dist);
+        if (act == MAP_CLOSE) s_state = ST_FLIGHT;
+        else if (act == MAP_ENGAGE_JUMP) {
+            s_jump_target = target;
+            s_jump_dist = dist;
+            s_hyper_t = 0;
+            s_hyper_seed = xorshift32();
+            ships_despawn_npcs();
+            s_state = ST_HYPERJUMP;
+        }
+        break;
+    }
+
+    case ST_SYSTEM_MAP: {
+        Poi dest;
+        MapAction act = map_system_tick(btn, dt, &dest);
+        if (act == MAP_CLOSE) s_state = ST_FLIGHT;
+        else if (act == MAP_ENGAGE_SC) {
+            s_sc_dest = dest;
+            s_sc_has_dest = true;
+            s_sc_pos_mm = cam_pos_mm();
+            s_sc_speed = 0.01f;
+            ships_despawn_npcs();
+            fx_init();
+            /* Auto-align the nose at the destination. */
+            Ship *p = &g_ships[PLAYER];
+            Vec3 fwd = v3_norm(v3_sub(dest.pos_mm, s_sc_pos_mm));
+            Vec3 up0 = (fabsf(fwd.y) < 0.95f) ? v3(0, 1, 0) : v3(1, 0, 0);
+            p->basis.r[2] = fwd;
+            p->basis.r[0] = v3_norm(v3_cross(up0, fwd));
+            p->basis.r[1] = v3_cross(fwd, p->basis.r[0]);
+            p->throttle = 0.7f;
+            p->pos = v3(0, 0, 0);
+            p->vel = v3(0, 0, 0);
+            s_state = ST_SUPERCRUISE;
+        }
+        break;
+    }
+    }
+}
+
+/* --- rendering -----------------------------------------------------------*/
 void elite_game_render_begin(void) {
     Ship *p = &g_ships[PLAYER];
-    r3d_scene_begin(&p->basis, 60.0f);
 
-    for (int i = 1; i < MAX_SHIPS; i++) {
-        if (!g_ships[i].alive) continue;
-        R3DObject obj;
-        obj.mesh = g_ships[i].mesh;
-        obj.basis = g_ships[i].basis;
-        obj.pos = v3_sub(g_ships[i].pos, p->pos);   /* camera-relative */
-        r3d_scene_add_object(&obj);
+    switch (s_state) {
+    case ST_HYPERJUMP: {
+        /* Witchspace: empty scene, tumbling slowly — streaks drawn in
+         * the overlay. */
+        Mat3 cam = p->basis;
+        m3_rotate_local(&cam, 2, s_hyper_t * 0.4f);
+        r3d_scene_begin(&cam, 60.0f);
+        break;
     }
-    fx_emit_all(p->pos, p->vel);
+    case ST_GALAXY_MAP:
+    case ST_SYSTEM_MAP:
+        /* Fullscreen UI: minimal empty scene (map fills the band). */
+        r3d_scene_begin(&p->basis, 60.0f);
+        break;
+
+    case ST_SUPERCRUISE:
+        r3d_scene_begin(&p->basis, 60.0f);
+        r3d_planet_emit(cam_pos_mm());
+        break;
+
+    default: {   /* FLIGHT + PAUSE render the world */
+        r3d_scene_begin(&p->basis, 60.0f);
+        r3d_planet_emit(cam_pos_mm());
+
+        /* Anchored POI structure (station / beacon). */
+        if (s_anchor_has_poi && s_anchor_poi.kind != POI_PLANET) {
+            R3DObject obj;
+            obj.mesh = (s_anchor_poi.kind == POI_STATION) ? &mesh_station
+                                                          : &mesh_beacon;
+            obj.basis = m3_identity();
+            /* Slow majestic spin. */
+            m3_rotate_local(&obj.basis, 1, s_time * 0.05f);
+            obj.pos = v3_sub(v3(0, 0, 0), p->pos);
+            r3d_scene_add_object(&obj);
+        }
+
+        for (int i = 1; i < MAX_SHIPS; i++) {
+            if (!g_ships[i].alive) continue;
+            R3DObject obj;
+            obj.mesh = g_ships[i].mesh;
+            obj.basis = g_ships[i].basis;
+            obj.pos = v3_sub(g_ships[i].pos, p->pos);
+            r3d_scene_add_object(&obj);
+        }
+        fx_emit_all(p->pos, p->vel);
+        break;
+    }
+    }
 }
 
 void elite_game_render(uint16_t *fb, int y_min, int y_max) {
     r3d_scene_raster(fb, y_min, y_max);
 }
 
+/* --- overlays ------------------------------------------------------------*/
+static void draw_hyperjump_overlay(uint16_t *fb) {
+    /* Radial witchspace streaks. */
+    float t = s_hyper_t;
+    for (int i = 0; i < 28; i++) {
+        uint32_t h = s_hyper_seed ^ (uint32_t)(i * 2654435761u);
+        h ^= h >> 13; h *= 1274126177u; h ^= h >> 16;
+        float ang = (float)(h & 0xFF) * (6.2831853f / 256.0f);
+        float phase = (float)((h >> 8) & 0xFF) * (1.0f / 256.0f);
+        float r0 = fmodf(t * (30.0f + (float)((h >> 16) & 31)) + phase * 60.0f,
+                         60.0f);
+        float r1 = r0 + 6.0f + r0 * 0.5f;
+        float ca = cosf(ang), sa = sinf(ang);
+        int x0 = 64 + (int)(ca * r0), y0 = 64 + (int)(sa * r0);
+        int x1 = 64 + (int)(ca * r1), y1 = 64 + (int)(sa * r1);
+        uint16_t c = (r0 > 40.0f) ? RGB565C(200, 215, 255)
+                   : (r0 > 18.0f) ? RGB565C(120, 140, 220)
+                                  : RGB565C(60, 70, 140);
+        /* simple line */
+        int steps = 12;
+        for (int s = 0; s <= steps; s++) {
+            int x = x0 + (x1 - x0) * s / steps;
+            int y = y0 + (y1 - y0) * s / steps;
+            if ((unsigned)x < ELITE_FB_W && (unsigned)y < ELITE_FB_H)
+                fb[y * ELITE_FB_W + x] = c;
+        }
+    }
+    char name[14];
+    galaxy_system_name(s_jump_target, name);
+    char buf[28];
+    snprintf(buf, sizeof buf, "JUMPING: %s", name);
+    craft_font_draw(fb, buf, 30, 100, RGB565C(150, 170, 255));
+}
+
+static void draw_pause_overlay(uint16_t *fb) {
+    /* Dim panel. */
+    for (int y = 38; y < 92; y++)
+        for (int x = 28; x < 100; x++)
+            fb[y * ELITE_FB_W + x] = RGB565C(10, 14, 24);
+    for (int x = 28; x < 100; x++) {
+        fb[38 * ELITE_FB_W + x] = RGB565C(95, 110, 140);
+        fb[91 * ELITE_FB_W + x] = RGB565C(95, 110, 140);
+    }
+    craft_font_draw(fb, "PAUSED", 52, 43, RGB565C(200, 210, 225));
+    static const char *items[3] = { "RESUME", "GALAXY CHART", "SYSTEM MAP" };
+    for (int i = 0; i < 3; i++) {
+        uint16_t c = (i == s_pause_cursor) ? RGB565C(120, 255, 120)
+                                           : RGB565C(120, 126, 145);
+        if (i == s_pause_cursor) craft_font_draw(fb, ">", 34, 56 + i * 9, c);
+        craft_font_draw(fb, items[i], 41, 56 + i * 9, c);
+    }
+}
+
 void elite_game_draw_overlay(uint16_t *fb) {
+    /* s_time advances here (called once per frame, post-render). */
+    /* (dt not available; approximate from frame ms readout) */
+    s_time += 0.033f;
+
+    switch (s_state) {
+    case ST_GALAXY_MAP: map_galaxy_draw(fb); return;
+    case ST_SYSTEM_MAP: map_system_draw(fb); return;
+    case ST_HYPERJUMP:  draw_hyperjump_overlay(fb); return;
+    default: break;
+    }
+
     Ship *p = &g_ships[PLAYER];
+    if (s_state == ST_SUPERCRUISE) {
+        HudScInfo info = {
+            .dest_name = s_sc_has_dest ? s_sc_dest.name : NULL,
+            .dest_rel_mm = s_sc_has_dest
+                ? v3_sub(s_sc_dest.pos_mm, s_sc_pos_mm) : v3(0, 0, 1),
+            .speed_mms = s_sc_speed,
+            .throttle = p->throttle,
+            .fuel01 = s_fuel / FUEL_MAX,
+            .render_ms = s_frame_ms,
+            .show_perf = 1,
+        };
+        ui_hud_draw_sc(fb, &info);
+        return;
+    }
+
     if (p->alive) {
         HudInfo info = {
             .target = s_target,
-            .wave = s_wave,
             .kills = combat_kills(),
+            .fuel01 = s_fuel / FUEL_MAX,
             .render_ms = s_frame_ms,
             .show_perf = 1,
         };
         ui_hud_draw(fb, &info);
     } else {
         craft_font_draw_2x(fb, "SHIP LOST", 28, 52, RGB565C(255, 80, 60));
-        craft_font_draw(fb, "RESPAWNING...", 38, 70, RGB565C(170, 170, 180));
+        craft_font_draw(fb, "RETURNING TO BEACON", 26, 70,
+                        RGB565C(170, 170, 180));
     }
+
+    if (s_state == ST_PAUSE) draw_pause_overlay(fb);
 }

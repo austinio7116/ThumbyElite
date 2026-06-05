@@ -49,6 +49,10 @@ int ship_spawn(const Mesh *mesh, Vec3 pos, uint8_t team) {
     return -1;
 }
 
+void ships_despawn_npcs(void) {
+    for (int i = 1; i < MAX_SHIPS; i++) g_ships[i].alive = false;
+}
+
 int ships_alive_hostile(void) {
     int n = 0;
     for (int i = 1; i < MAX_SHIPS; i++)

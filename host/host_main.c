@@ -64,6 +64,7 @@ int main(int argc, char **argv) {
     if (getenv("ELITE_DEMO")) {
         int secs = atoi(getenv("ELITE_DEMO"));
         if (secs < 1) secs = 20;
+        if (ships_alive_hostile() == 0) elite_game_debug_spawn(3);
         for (int f = 0; f < secs * 30; f++) {
             CraftRawButtons b = {0};
             b.a = true;                       /* fire */
@@ -121,6 +122,90 @@ int main(int argc, char **argv) {
         }
         render_frame();
         dump_ppm(shot_path ? shot_path : "firetest.ppm");
+        return 0;
+    }
+
+    /* Travel test: pause menu -> system map -> pick a POI -> supercruise
+     * to arrival, dumping shots along the way. ELITE_TRAVELTEST=poi_index. */
+    if (getenv("ELITE_TRAVELTEST")) {
+        int poi = atoi(getenv("ELITE_TRAVELTEST"));
+        CraftRawButtons none = {0}, b;
+        char path[64];
+        int shot = 0;
+        #define TAP(field, settle_n) do { \
+            b = none; b.field = true; \
+            elite_game_tick(&b, 1.0f / 30.0f); \
+            for (int k = 0; k < (settle_n); k++) \
+                elite_game_tick(&none, 1.0f / 30.0f); \
+        } while (0)
+        #define SNAP(tag) do { \
+            render_frame(); \
+            snprintf(path, sizeof path, "/tmp/travel_%d_%s.ppm", shot++, tag); \
+            dump_ppm(path); \
+        } while (0)
+        for (int k = 0; k < 30; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        SNAP("start");
+        TAP(menu, 4);                       /* pause */
+        TAP(down, 3); TAP(down, 3);         /* -> SYSTEM MAP */
+        TAP(a, 4);
+        SNAP("sysmap");
+        for (int i = 0; i < poi; i++) TAP(down, 2);
+        TAP(a, 4);                          /* engage supercruise */
+        SNAP("sc0");
+        printf("[travel] state after engage: %d (1=SC)\n", elite_game_state());
+        int f = 0;
+        while (elite_game_state() == 1 && f < 30 * 240) {
+            elite_game_tick(&none, 1.0f / 30.0f);
+            f++;
+            if (f == 300 || f == 1800) SNAP("cruise");
+        }
+        printf("[travel] arrived after %ds, state=%d\n", f / 30,
+               elite_game_state());
+        for (int k = 0; k < 20; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        SNAP("arrived");
+        return 0;
+        #undef TAP
+        #undef SNAP
+    }
+
+    /* Hyperjump test: galaxy map, nudge cursor right until a new system
+     * highlights in range, engage, ride the tunnel. */
+    if (getenv("ELITE_JUMPTEST")) {
+        CraftRawButtons none = {0}, b;
+        for (int k = 0; k < 10; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        b = none; b.menu = true; elite_game_tick(&b, 1.0f / 30.0f);
+        for (int k = 0; k < 4; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        b = none; b.down = true; elite_game_tick(&b, 1.0f / 30.0f);
+        for (int k = 0; k < 3; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        b = none; b.a = true; elite_game_tick(&b, 1.0f / 30.0f);   /* galaxy map */
+        for (int k = 0; k < 4; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        render_frame(); dump_ppm("/tmp/jump_0_map.ppm");
+        /* Tap-snap each direction in rotation, trying A after each, until
+         * an in-range neighbour engages. */
+        int f = 0;
+        while (elite_game_state() == 3 && f < 64) {
+            b = none;
+            switch (f & 3) {
+            case 0: b.right = true; break;
+            case 1: b.up = true; break;
+            case 2: b.left = true; break;
+            case 3: b.down = true; break;
+            }
+            elite_game_tick(&b, 1.0f / 30.0f);
+            b = none; elite_game_tick(&b, 1.0f / 30.0f);
+            b = none; b.a = true; elite_game_tick(&b, 1.0f / 30.0f);
+            b = none; elite_game_tick(&b, 1.0f / 30.0f);
+            f++;
+        }
+        printf("[jump] state=%d after pan (2=hyperjump)\n", elite_game_state());
+        render_frame(); dump_ppm("/tmp/jump_1_engaged.ppm");
+        for (int k = 0; k < 40; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        render_frame(); dump_ppm("/tmp/jump_2_tunnel.ppm");
+        while (elite_game_state() == 2)
+            elite_game_tick(&none, 1.0f / 30.0f);
+        for (int k = 0; k < 10; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        render_frame(); dump_ppm("/tmp/jump_3_arrived.ppm");
+        printf("[jump] arrived, state=%d\n", elite_game_state());
         return 0;
     }
 

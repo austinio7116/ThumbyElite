@@ -50,5 +50,7 @@ void ships_init(void);
 /* Returns index or -1 (pool full). Slot 0 is reserved for the player. */
 int ship_spawn(const Mesh *mesh, Vec3 pos, uint8_t team);
 int ships_alive_hostile(void);
+/* Remove every NPC (anchor change: they live in the old local frame). */
+void ships_despawn_npcs(void);
 
 #endif

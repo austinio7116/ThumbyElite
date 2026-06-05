@@ -56,6 +56,8 @@ set(MESH_ARGS
     fighter=${MODELS}/fighter.obj
     viper=${MODELS}/viper.obj
     freighter=${MODELS}/freighter.obj
+    station=${MODELS}/station.obj
+    beacon=${MODELS}/beacon.obj
 )
 add_custom_command(
     OUTPUT ${MESHES_GEN_C}
@@ -63,7 +65,8 @@ add_custom_command(
     COMMAND ${CMAKE_CURRENT_BINARY_DIR}/baker/obj2mesh ${MESHES_GEN_C}
             ${CMAKE_CURRENT_BINARY_DIR}/generated/meshes_gen.h ${MESH_ARGS}
     DEPENDS thumbyelite_baker ${MODELS}/fighter.obj ${MODELS}/viper.obj
-            ${MODELS}/freighter.obj ${MODELS}/ships.mtl
+            ${MODELS}/freighter.obj ${MODELS}/station.obj
+            ${MODELS}/beacon.obj ${MODELS}/ships.mtl
     COMMENT "Baking ship meshes"
 )
 add_custom_target(generate_elite_meshes DEPENDS ${MESHES_GEN_C})
@@ -86,6 +89,11 @@ add_executable(thumbyelite
     ${GAME}/elite_combat.c
     ${GAME}/elite_ai.c
     ${GAME}/ui_hud.c
+    ${GAME}/ui_map.c
+    ${GAME}/galaxy_gen.c
+    ${GAME}/enames.c
+    ${GAME}/system_sim.c
+    ${GAME}/r3d_planet.c
     ${GAME}/craft_font.c
 
     ${MESHES_GEN_C}

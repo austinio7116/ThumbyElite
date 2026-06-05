@@ -64,6 +64,18 @@ UF2: `build_device/thumbyelite.uf2` → copy to workspace root `firmware_thumbye
 - **Travel**: hyperspace jumps gated by fuel/jump-range (drive + mass derived); 2–3s witchspace cinematic. In-system = supercruise time compression (15–40s hops, pirate interdiction pulls you to combat)
 - **Maps**: galaxy map (2D pan/select, jump-range ring), system map (schematic orbits, set-destination)
 
+## Phase 6 requirements (user-specified 2026-06-05)
+
+- **Weapon roster**: light/medium/heavy lasers, photon cannons, dumbfire
+  missiles, homing missiles, gauss guns, autocannons — plus beam laser, mines;
+  each with quality variations (damage/heat/cooldown/projectile speed).
+- **Weapon switching**: multiple weapons fitted simultaneously, player cycles
+  the ACTIVE weapon in flight (group/select UI on the HUD).
+- **Slots by hull**: ship size/cost determines weapon slots available; same
+  gating for shield generators and hull upgrades (cost/size tiers).
+- **Shields recharge slowly** (meaningful downtime after collapse).
+- **AI tiers** determine speed, accuracy, weapons fitted, and power.
+
 ## Combat & flight
 
 - **Flight model**: Newtonian-lite + flight assist (velocity bleeds toward nose; assist-off = full drift toggle). Speed/turn/accel derived from engine HP/quality, mass, power

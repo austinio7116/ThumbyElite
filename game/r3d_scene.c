@@ -9,6 +9,7 @@
  */
 #include "r3d_scene.h"
 #include "r3d_raster.h"
+#include "r3d_planet.h"
 #include "elite_types.h"
 #include <string.h>
 
@@ -171,6 +172,7 @@ void r3d_scene_raster(uint16_t *fb, int y0, int y1) {
     r3d_raster_set_fb(fb);
     r3d_depth_clear(y0, y1);
     starfield_raster(fb, y0, y1);
+    r3d_planet_raster(fb, y0, y1);   /* writes depth: ships pass behind */
 
     int n = s_ntris;
     for (int i = 0; i < n; i++) {
