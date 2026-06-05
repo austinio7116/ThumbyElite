@@ -49,10 +49,10 @@ static char s_toast[24];
 static float s_toast_t;
 static int s_detail;       /* 0 = list, 1 = detail sheet open */
 
-#define HOME_ITEMS 8
+#define HOME_ITEMS 9
 static const char *k_home[HOME_ITEMS] = {
     "MARKET", "SHIPYARD", "OUTFITTING", "MISSIONS", "BAR", "STATUS",
-    "REFUEL", "LAUNCH",
+    "REFUEL", "REARM", "LAUNCH",
 };
 static Mission s_offers[MISSION_OFFERS];
 
@@ -162,6 +162,18 @@ static void try_refuel(void) {
     g_player.credits -= cost;
     g_player.fuel = g_player.fuel_max;
     toast("REFUELLED");
+}
+
+static void try_rearm(void) {
+    int cost = player_rearm_cost();
+    if (cost <= 0) { toast("MAGAZINES FULL"); return; }
+    if (g_player.credits < cost) { toast("NO CREDITS"); return; }
+    g_player.credits -= cost;
+    player_rearm();
+    player_apply_to_ship();
+    char buf[24];
+    snprintf(buf, sizeof buf, "REARMED -%dCR", cost);
+    toast(buf);
 }
 
 /* --- shipyard ----------------------------------------------------------*/
@@ -450,7 +462,8 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
             else if (s_cursor == 4) { s_screen = SCR_BAR; }
             else if (s_cursor == 5) { s_screen = SCR_STATUS; status_open(); }
             else if (s_cursor == 6) try_refuel();
-            else if (s_cursor == 7) act = DOCK_LAUNCH;
+            else if (s_cursor == 7) try_rearm();
+            else if (s_cursor == 8) act = DOCK_LAUNCH;
         }
         if (back) act = DOCK_LAUNCH;           /* MENU = leave */
         break;
@@ -583,6 +596,20 @@ static void draw_home(uint16_t *fb) {
         uint16_t c = (i == s_cursor) ? COL_CUR : COL_DIM;
         if (i == s_cursor) craft_font_draw(fb, ">", 8, 23 + i * 9, COL_CUR);
         craft_font_draw(fb, k_home[i], 16, 23 + i * 9, c);
+        /* Live price hints on the service rows. */
+        if (i == 6) {
+            float need = g_player.fuel_max - g_player.fuel;
+            if (need >= 0.1f) {
+                snprintf(buf, sizeof buf, "%d", (int)(need * 12.0f) + 1);
+                craft_font_draw(fb, buf, 96, 23 + i * 9, COL_CRED);
+            }
+        } else if (i == 7) {
+            int rc = player_rearm_cost();
+            if (rc > 0) {
+                snprintf(buf, sizeof buf, "%d", rc);
+                craft_font_draw(fb, buf, 96, 23 + i * 9, COL_CRED);
+            }
+        }
     }
 
     char fuel[24];
