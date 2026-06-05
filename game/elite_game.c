@@ -845,35 +845,41 @@ void elite_game_render(uint16_t *fb, int y_min, int y_max) {
 
 /* --- overlays ------------------------------------------------------------*/
 static void draw_hyperjump_overlay(uint16_t *fb) {
-    /* Star-Wars-style starline field: stars distributed across the WHOLE
-     * screen stretch past with perspective — streaks are short near the
-     * centre, long at the edges, accelerating through the jump. */
+    /* Z-space starlines: each star is a fixed direction with a cycling
+     * depth; radius = F/z, so streaks are born dim near the centre and
+     * accelerate past the edges — continuous, no banding, no popping.
+     * Streak length = one frame of travel, stretched as speed builds. */
     float t = s_hyper_t;
-    float accel = t < 0.5f ? t * 2.0f : 1.0f;          /* spool up */
-    for (int i = 0; i < 56; i++) {
+    float spool = t < 0.6f ? t / 0.6f : 1.0f;
+    for (int i = 0; i < 90; i++) {
         uint32_t h = s_hyper_seed ^ (uint32_t)(i * 2654435761u);
         h ^= h >> 13; h *= 1274126177u; h ^= h >> 16;
         float ang = (float)(h & 0x3FF) * (6.2831853f / 1024.0f);
-        float base = (float)((h >> 10) & 0x3F);
-        /* Radius cycles outward; speed scales with radius (perspective). */
-        float r0 = 5.0f + fmodf(base + t * (18.0f + base * 1.6f) * accel,
-                                72.0f);
-        if (r0 > 88.0f) continue;
-        float len = (2.0f + r0 * 0.45f) * accel;       /* stretch w/ r */
-        float r1 = r0 + len;
-        float ca = cosf(ang), sa = sinf(ang);
-        /* Bright head, dimming tail. */
-        int steps = (int)len + 1;
-        if (steps > 26) steps = 26;
+        float spd = 0.5f + (float)((h >> 10) & 0xFF) * (1.0f / 255.0f);
+        float z0 = (float)((h >> 18) & 0x3FF) * (2.2f / 1024.0f);
+        float zz = z0 - t * spd * (0.6f + spool * 1.4f);
+        zz = zz - 2.2f * floorf(zz / 2.2f);          /* wrap 0..2.2 */
+        zz += 0.10f;
+        float dz = spd * (0.6f + spool * 1.4f) * 0.06f * (1.0f + spool);
+        float r1 = 9.5f / zz;
+        float r0 = 9.5f / (zz + dz);
+        if (r0 > 100.0f) continue;
+        if (r1 < 5.0f) continue;                     /* skip centre clump */
+        if (r1 > 100.0f) r1 = 100.0f;
+        float ca = cosf(ang), sa = sinf(ang) * 0.92f;
+        int steps = (int)(r1 - r0) + 1;
+        if (steps > 30) steps = 30;
         for (int s2 = 0; s2 <= steps; s2++) {
-            float rr = r1 - (r1 - r0) * (float)s2 / (float)steps;
+            float rr = r0 + (r1 - r0) * (float)s2 / (float)steps;
             int x = 64 + (int)(ca * rr);
-            int y = 60 + (int)(sa * rr * 0.92f);
+            int y = 60 + (int)(sa * rr);
             if ((unsigned)x >= ELITE_FB_W || (unsigned)y >= ELITE_FB_H)
                 continue;
-            uint16_t c = (s2 < 3) ? RGB565C(235, 240, 255)
-                       : (s2 < 9) ? RGB565C(150, 170, 240)
-                                  : RGB565C(70, 85, 170);
+            /* Head (far end of the streak) brightest. */
+            float k = (float)s2 / (float)steps;
+            uint16_t c = (k > 0.8f) ? RGB565C(240, 245, 255)
+                       : (k > 0.45f) ? RGB565C(150, 175, 245)
+                                     : RGB565C(60, 80, 165);
             fb[y * ELITE_FB_W + x] = c;
         }
     }

@@ -120,6 +120,29 @@ void fx_spawn_spark(Vec3 pos, Vec3 base_vel) {
     }
 }
 
+void fx_gauss_helix(Vec3 prev, Vec3 cur, Vec3 dir, float traveled) {
+    /* Spawn a helix point-pair every SPACING metres of flight; the pool
+     * holds ~100 live pairs at gauss speed, fading white -> deep blue.
+     * Slight outward drift makes the corkscrew visibly unwind. */
+    const float SPACING = 12.0f;
+    float seg = v3_len(v3_sub(cur, prev));
+    if (seg < 1e-3f) return;
+    Vec3 ref = (dir.y < 0.9f && dir.y > -0.9f) ? v3(0, 1, 0) : v3(1, 0, 0);
+    Vec3 e1 = v3_norm(v3_cross(dir, ref));
+    Vec3 e2 = v3_cross(dir, e1);
+    float t0 = traveled - seg;
+    float s2 = ((float)(int)(t0 / SPACING) + 1.0f) * SPACING;
+    for (; s2 <= traveled; s2 += SPACING) {
+        Vec3 base = v3_sub(cur, v3_scale(dir, traveled - s2));
+        float ang = s2 * 0.55f;
+        Vec3 off = v3_add(v3_scale(e1, cosf(ang)), v3_scale(e2, sinf(ang)));
+        spawn(v3_add(base, off), v3_scale(off, 2.2f), 0.55f,
+              RGB565C(225, 245, 255), RGB565C(30, 50, 130));
+        spawn(v3_sub(base, off), v3_scale(off, -2.2f), 0.55f,
+              RGB565C(160, 200, 255), RGB565C(25, 40, 110));
+    }
+}
+
 void fx_engine_trail(Vec3 rear_pos, Vec3 ship_vel, float throttle, float dt) {
     if (throttle < 0.15f) return;
     /* Emission rate scales with throttle; accumulate fractional spawns. */

@@ -15,6 +15,9 @@ void fx_init(void);
 void fx_tick(float dt);
 
 void fx_spawn_explosion(Vec3 pos, Vec3 base_vel);
+/* Gauss wake: twin-helix points along [prev..cur], persisting + fading.
+ * traveled = total metres flown at cur (phase continuity). */
+void fx_gauss_helix(Vec3 prev, Vec3 cur, Vec3 dir, float traveled);
 void fx_spawn_spark(Vec3 pos, Vec3 base_vel);
 /* Per-frame engine trail emission for a thrusting ship. */
 void fx_engine_trail(Vec3 rear_pos, Vec3 ship_vel, float throttle, float dt);

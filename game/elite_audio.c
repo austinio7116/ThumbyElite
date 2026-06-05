@@ -83,8 +83,11 @@ void sfx_weapon(int t, float amp) {
         break;
     case WPN_PHOTON:  play(W_SINE, 300, 900, 0.40f * amp, 0.010f, 0.18f); break;
     case WPN_GAUSS:
-        play(W_NOISE, 4000, 800, 0.35f * amp, 0.001f, 0.10f);
-        play(W_SINE, 360, 230, 0.30f * amp, 0.002f, 0.12f);
+        /* Whoosh + lasery zing (user spec): long airy noise sweep over
+         * a singing saw glide and a low body swell. */
+        play(W_NOISE, 3400, 500, 0.26f * amp, 0.010f, 0.30f);
+        play(W_SAW, 2200, 380, 0.20f * amp, 0.004f, 0.34f);
+        play(W_SINE, 520, 300, 0.22f * amp, 0.015f, 0.16f);
         break;
     case WPN_AUTOCANNON: play(W_NOISE, 3000, 1500, 0.22f * amp, 0.001f, 0.045f); break;
     default:          /* missiles: launch whoosh */
