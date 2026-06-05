@@ -15,4 +15,8 @@ const char *loot_tick(float dt);
 /* Add live canisters to the scene (camera-relative). */
 void loot_render(Vec3 cam_pos);
 
+/* Scanner support: fill out[] with live canister positions (and
+ * whether each holds a component). Returns the count. */
+int loot_positions(Vec3 *out, int *is_component, int max);
+
 #endif

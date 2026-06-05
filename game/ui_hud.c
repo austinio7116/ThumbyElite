@@ -10,6 +10,7 @@
 #include "elite_types.h"
 #include "elite_entity.h"
 #include "elite_combat.h"
+#include "elite_loot.h"
 #include "r3d_scene.h"
 #include "craft_font.h"
 #include "ui_icons.h"
@@ -23,6 +24,7 @@
 #define COL_TARGET  RGB565C(255,  90,  70)
 #define COL_BLIP_H  RGB565C(255,  80,  60)
 #define COL_BLIP_N  RGB565C(170, 170, 180)
+#define COL_BLIP_L  RGB565C(255, 210,  70)   /* loot canisters */
 #define COL_TEXT    RGB565C(120, 255, 120)
 #define COL_NUM     RGB565C(200, 210, 225)
 #define COL_CONSOLE RGB565C( 14,  18,  30)
@@ -139,6 +141,35 @@ static void scanner(uint16_t *fb) {
                   fy < fy + stalk ? fy + stalk : fy, c);
         px(fb, fx, fy + stalk, c);
         px(fb, fx + 1, fy + stalk, c);
+    }
+
+    /* Loot canisters: gold blips, blinking so they catch the eye.
+     * Components blink brighter than commodity pods. */
+    static uint8_t s_blink;
+    s_blink++;
+    Vec3 cans[6];
+    int comp[6];
+    int n = loot_positions(cans, comp, 6);
+    for (int i = 0; i < n; i++) {
+        if (!comp[i] && (s_blink & 16)) continue;       /* slow blink */
+        if (comp[i] && (s_blink & 8)) continue;         /* fast blink */
+        Vec3 local = m3_mul_v3_t(&p->basis, v3_sub(cans[i], p->pos));
+        float dx = local.x * (SC_RX / SC_RANGE);
+        float dz = -local.z * (SC_RY / SC_RANGE);
+        float e = (dx * dx) / (SC_RX * SC_RX) + (dz * dz) / (SC_RY * SC_RY);
+        if (e > 1.0f) {
+            float k = 1.0f / sqrtf(e);
+            dx *= k; dz *= k;
+        }
+        int fx = SC_CX + (int)dx, fy = SC_CY + (int)dz;
+        int stalk = (int)(-local.y * (40.0f / SC_RANGE));
+        if (stalk > 9) stalk = 9;
+        if (stalk < -9) stalk = -9;
+        if (stalk != 0)
+            vline(fb, fx, fy < fy + stalk ? fy : fy + stalk,
+                  fy < fy + stalk ? fy + stalk : fy,
+                  RGB565C(140, 110, 40));
+        px(fb, fx, fy + stalk, COL_BLIP_L);
     }
 }
 

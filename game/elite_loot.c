@@ -147,3 +147,14 @@ void loot_render(Vec3 cam_pos) {
         r3d_scene_add_object(&obj);
     }
 }
+
+int loot_positions(Vec3 *out, int *is_component, int max) {
+    int n = 0;
+    for (int i = 0; i < MAX_CANS && n < max; i++) {
+        if (!s_cans[i].alive) continue;
+        out[n] = s_cans[i].pos;
+        is_component[n] = s_cans[i].is_component;
+        n++;
+    }
+    return n;
+}
