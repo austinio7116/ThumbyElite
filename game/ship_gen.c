@@ -226,18 +226,52 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
         arch = (r < 55) ? 0 : (r < 75) ? 1 : (r < 87) ? 2 : 3;
         if (arch == 0) family = rndi(0, 5);
     } else {
+        /* Class hints BIAS the silhouette but every class draws from
+         * 3+ archetype/family combos — single-shape hints made whole
+         * classes feel cloned in-game (user report) even though the
+         * free-roll demo sheets were varied. */
+        int r2 = rndi(0, 99);
         switch (hint) {
-        case 0: arch = 0; family = rndi(0, 1) ? 0 : 5; break;  /* starter */
-        case 1: arch = 0; family = 0; break;                   /* courier */
-        case 2: arch = rndi(0, 1) ? 0 : 1; family = 1; break;  /* lt ftr */
-        case 3: arch = (rndi(0, 2) == 0) ? 1 : 0;
-                family = rndi(1, 2); break;                    /* patrol */
-        case 4: arch = rndi(0, 1) ? 0 : 2; family = 3; break;  /* raider */
-        case 5: arch = rndi(0, 1) ? 1 : 0; family = 3; break;  /* hv ftr */
-        case 6: arch = (rndi(0, 2) == 0) ? 3 : 0; family = 5; break;
-        case 7: arch = rndi(0, 1) ? 3 : 0; family = 5; break;  /* hauler */
-        case 8: arch = 0; family = 5; break;                   /* hv haul */
-        default: arch = 0; family = 4; break;                  /* dread */
+        case 0:   /* starter: scrappy anything-small */
+            arch = (r2 < 40) ? 0 : (r2 < 65) ? 0 : (r2 < 85) ? 3 : 2;
+            family = (r2 < 40) ? 0 : 5;
+            break;
+        case 1:   /* courier: slim + fast shapes */
+            arch = (r2 < 50) ? 0 : (r2 < 75) ? 1 : 3;
+            family = 0;
+            break;
+        case 2:   /* light fighter */
+            arch = (r2 < 40) ? 0 : (r2 < 75) ? 1 : 2;
+            family = 1;
+            break;
+        case 3:   /* patrol interceptor */
+            arch = (r2 < 35) ? 1 : (r2 < 75) ? 0 : 2;
+            family = rndi(1, 2);
+            break;
+        case 4:   /* raider */
+            arch = (r2 < 40) ? 0 : (r2 < 70) ? 2 : 1;
+            family = 3;
+            break;
+        case 5:   /* heavy fighter */
+            arch = (r2 < 40) ? 1 : (r2 < 75) ? 0 : 2;
+            family = 3;
+            break;
+        case 6:   /* light hauler */
+            arch = (r2 < 35) ? 3 : (r2 < 75) ? 0 : 2;
+            family = 5;
+            break;
+        case 7:   /* hauler */
+            arch = (r2 < 40) ? 3 : 0;
+            family = 5;
+            break;
+        case 8:   /* heavy hauler */
+            arch = (r2 < 60) ? 0 : 3;
+            family = 5;
+            break;
+        default:  /* dreadnought: long warships of all schools */
+            arch = (r2 < 55) ? 0 : (r2 < 80) ? 1 : 3;
+            family = (r2 < 55) ? 4 : 3;
+            break;
         }
     }
     float len = (family == 0) ? rndf(8, 12)

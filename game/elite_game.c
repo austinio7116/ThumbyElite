@@ -160,7 +160,8 @@ static void spawn_poi_content(void) {
         static const uint8_t k_tier_class[5] = { 1, 2, 3, 4, 5 };
         int cls = k_tier_class[tier > 4 ? 4 : tier];
         uint32_t mseed = (uint32_t)(si->seed >> 24) ^
-                         (uint32_t)(cls * 0x9E3779B9u) ^ (i & 1);
+                         (uint32_t)(cls * 0x9E3779B9u) ^
+                         (uint32_t)(i % 3);   /* 3 looks per wing */
         int idx = ship_spawn(hull_mesh(mseed, cls), pos, TEAM_HOSTILE);
         if (idx > 0) ship_set_tier(idx, tier, cls);
     }
