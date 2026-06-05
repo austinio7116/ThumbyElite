@@ -27,3 +27,50 @@ int upgrade_price(int hull_id, int tier) {
     int p = (int)((int64_t)k_hulls[hull_id].price * pct[tier] / 100);
     return p < 200 ? 200 : p;
 }
+
+/* --- procedural hull mesh cache ----------------------------------------*/
+#include "ship_gen.h"
+#include <string.h>
+
+#define HULL_CACHE_N 8
+#define HC_MAX_V 220
+#define HC_MAX_F 400
+
+typedef struct {
+    uint8_t  used;
+    uint32_t seed;
+    int8_t   hint;
+    MeshVert verts[HC_MAX_V];
+    MeshFace faces[HC_MAX_F];
+    Mesh     mesh;
+} HullCacheEntry;
+
+static HullCacheEntry s_hc[HULL_CACHE_N];
+static int s_hc_next;
+
+const Mesh *hull_mesh(uint32_t mesh_seed, int class_hint) {
+    for (int i = 0; i < HULL_CACHE_N; i++)
+        if (s_hc[i].used && s_hc[i].seed == mesh_seed &&
+            s_hc[i].hint == (int8_t)class_hint)
+            return &s_hc[i].mesh;
+    /* Fill the next slot (round-robin; reset() handles live refs). */
+    for (int tries = 0; tries < HULL_CACHE_N; tries++) {
+        HullCacheEntry *e = &s_hc[s_hc_next];
+        s_hc_next = (s_hc_next + 1) % HULL_CACHE_N;
+        if (e->used == 2) continue;            /* pinned (player) */
+        ship_gen_mesh_class(mesh_seed, class_hint);
+        ship_gen_copy(e->verts, HC_MAX_V, e->faces, HC_MAX_F, &e->mesh);
+        e->used = 1;
+        e->seed = mesh_seed;
+        e->hint = (int8_t)class_hint;
+        return &e->mesh;
+    }
+    return &s_hc[0].mesh;
+}
+
+void hull_cache_reset(const Mesh *keep) {
+    for (int i = 0; i < HULL_CACHE_N; i++) {
+        if (!s_hc[i].used) continue;
+        s_hc[i].used = (keep == &s_hc[i].mesh) ? 2 : 0;
+    }
+}

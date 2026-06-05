@@ -39,8 +39,39 @@ void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
                         int price, const char *price_label,
                         const char *footer) {
     fill(fb, COL_BG);
-    const WeaponDef *w = &k_weapons[wi->type];
     char buf[28];
+
+    if (wi->type >= WPN_COUNT) {
+        /* Equipment sheet: protection rather than firepower. */
+        icon_weapon_2x(fb, 4, 3, wi->type);
+        craft_font_draw(fb, item_name(wi->type), 32, 4, COL_HDR);
+        craft_font_draw(fb, k_qual_long[wi->quality > 4 ? 4 : wi->quality],
+                        32, 11,
+                        (wi->quality >= Q_MILITARY) ? COL_CRED : COL_DIM);
+        hl(fb, 19, COL_GRID);
+        int y = 24;
+        snprintf(buf, sizeof buf, "Z%d", wi->tier);
+        stat(fb, y, "SIZE", buf, COL_VAL); y += 8;
+        float mult = k_tier_mult[wi->tier > 3 ? 3 : wi->tier] *
+                     quality_dmg_mult(wi->quality) *
+                     (0.6f + 0.4f * wi->integrity * 0.01f);
+        snprintf(buf, sizeof buf, "X%d.%d", (int)mult,
+                 ((int)(mult * 10)) % 10);
+        stat(fb, y, "PROTECTION", buf, COL_VAL); y += 8;
+        snprintf(buf, sizeof buf, "%d%%", wi->integrity);
+        stat(fb, y, "INTEGRITY", buf,
+             wi->integrity < 60 ? COL_WARN : COL_VAL); y += 8;
+        if (price >= 0) {
+            hl(fb, y + 1, COL_GRID);
+            snprintf(buf, sizeof buf, "%s %dCR", price_label, price);
+            craft_font_draw(fb, buf, 4, y + 5, COL_CRED);
+        }
+        hl(fb, 118, COL_GRID);
+        craft_font_draw(fb, footer, 2, 121, COL_DIM);
+        return;
+    }
+
+    const WeaponDef *w = &k_weapons[wi->type];
 
     icon_weapon_2x(fb, 4, 3, wi->type);
     craft_font_draw(fb, w->name, 32, 4, COL_HDR);

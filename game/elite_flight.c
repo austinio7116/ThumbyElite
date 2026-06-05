@@ -7,18 +7,32 @@
 #define BOOST_MULT   1.8f
 #define THROTTLE_RATE 0.9f   /* full range per ~1.1s of held throttle */
 
+/* Turn ramp: first touch turns gently, full rate after ~0.45s held —
+ * fine aim on tap, fast slew on hold (user request). */
+static float s_ramp_pitch, s_ramp_yaw, s_ramp_roll;
+static float ramp(float *t, float active, float dt) {
+    if (active != 0.0f) *t += dt; else *t = 0.0f;
+    float k = *t / 0.45f;
+    if (k > 1.0f) k = 1.0f;
+    return 0.30f + 0.70f * k;
+}
+
 void flight_apply_input(const FlightInput *in, float dt) {
     Ship *p = &g_ships[PLAYER];
     if (!p->alive) return;
 
     float tr = p->turn_rate * dt;
+    float rp = ramp(&s_ramp_pitch, in->pitch, dt);
+    float ry = ramp(&s_ramp_yaw, in->yaw, dt);
+    float rr = ramp(&s_ramp_roll, in->roll, dt);
     /* Pitch about the ship's right axis, yaw about up, roll about forward.
      * Flight-stick convention (user-confirmed): d-pad UP = nose DOWN
      * ("push the stick forward"). An un-inverted option can join the
      * pause-menu settings later. */
-    if (in->pitch != 0.0f) m3_rotate_local(&p->basis, 0, in->pitch * tr);
-    if (in->yaw   != 0.0f) m3_rotate_local(&p->basis, 1,  in->yaw * tr);
-    if (in->roll  != 0.0f) m3_rotate_local(&p->basis, 2,  in->roll * tr * 1.5f);
+    if (in->pitch != 0.0f) m3_rotate_local(&p->basis, 0, in->pitch * tr * rp);
+    if (in->yaw   != 0.0f) m3_rotate_local(&p->basis, 1, in->yaw * tr * ry);
+    if (in->roll  != 0.0f)
+        m3_rotate_local(&p->basis, 2, in->roll * tr * 1.5f * rr);
     m3_orthonormalize(&p->basis);
 
     p->throttle += in->throttle_delta * THROTTLE_RATE * dt;

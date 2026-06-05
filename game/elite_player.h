@@ -20,25 +20,29 @@ typedef enum {
 } Quality;
 
 typedef struct {
-    uint8_t type;        /* WeaponType */
+    uint8_t type;        /* WeaponType or EQ_* */
     uint8_t quality;     /* Quality */
     uint8_t integrity;   /* 0..100; reduces output below 100 */
     uint8_t in_use;      /* slot occupied */
+    uint8_t tier;        /* equipment size 1..3 (weapons: unused) */
+    uint8_t pad[3];
 } WeaponInst;
 
 #define MAX_SALVAGE 4
 
 typedef struct {
     int32_t credits;
-    uint8_t hull_id;
+    uint8_t hull_id;        /* class (stats row) */
+    uint8_t pad_a[3];
+    uint32_t hull_seed;     /* the LOOK — rolled by the selling dockyard */
     uint8_t cargo[N_GOODS];
     float   fuel;
     float   fuel_max;
 
     WeaponInst mounts[HULL_SLOTS];      /* fitted weapons */
     WeaponInst salvage[MAX_SALVAGE];    /* loose components in the hold */
-    uint8_t shield_tier;                /* 0..hull max */
-    uint8_t hull_tier;
+    WeaponInst shield_eq;               /* fitted shield generator */
+    WeaponInst armor_eq;                /* fitted armor plating */
 
     /* Pilot skills: XP accumulators (levels derived). */
     uint16_t xp_gunnery;    /* kills */
@@ -55,7 +59,10 @@ int  player_cargo_cap(void);
 
 /* Quality multipliers. */
 float quality_dmg_mult(int q);       /* 0.8 .. 1.35 */
-int   weapon_price(int type, int q); /* shop price for an instance */
+int   weapon_price(int type, int q); /* shop price (weapons) */
+int   equip_price(int type, int tier, int q);
+/* Effective output of an equipment instance (quality x integrity). */
+float equip_mult(const WeaponInst *e);
 
 /* Effective damage/heat for a mounted instance (quality + integrity). */
 float mount_dmg_mult(const WeaponInst *w);

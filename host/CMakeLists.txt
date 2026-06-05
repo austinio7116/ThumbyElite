@@ -84,6 +84,7 @@ add_executable(thumbyelite_host
     ${GAME}/enames.c
     ${GAME}/system_sim.c
     ${GAME}/station_gen.c
+    ${GAME}/ship_gen.c
     ${GAME}/elite_ships.c
     ${GAME}/r3d_planet.c
     ${GAME}/craft_font.c

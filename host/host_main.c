@@ -326,7 +326,7 @@ int main(int argc, char **argv) {
         render_frame(); dump_ppm("/tmp/shop_1_outfit.ppm");
         TAPS(down, 2); TAPS(down, 2); TAPS(down, 2);  /* shield upgrade row */
         TAPS(a, 4);
-        printf("[shop] shield_tier=%d credits=%d\n", g_player.shield_tier,
+        printf("[shop] shield_tier=%d credits=%d\n", g_player.shield_eq.tier,
                g_player.credits);
         render_frame(); dump_ppm("/tmp/shop_2_upgrade.ppm");
         TAPS(menu, 3);

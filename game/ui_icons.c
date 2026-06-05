@@ -22,7 +22,9 @@ static void hbar(uint16_t *fb, int x0, int x1, int y, uint16_t c) {
 }
 
 void icon_weapon(uint16_t *fb, int x, int y, int wpn_type) {
-    uint16_t hot = k_weapons[wpn_type].color;
+    uint16_t hot = (wpn_type == EQ_SHIELD) ? RGB565C(80, 180, 255)
+                 : (wpn_type == EQ_ARMOR) ? RGB565C(255, 140, 70)
+                 : k_weapons[wpn_type].color;
     switch (wpn_type) {
     case WPN_PULSE_S:
         hbar(fb, x + 2, x + 7, y + 3, BODY);
@@ -72,6 +74,22 @@ void icon_weapon(uint16_t *fb, int x, int y, int wpn_type) {
         px(fb, x + 2, y + 2, BODY2); px(fb, x + 2, y + 4, BODY2);
         px(fb, x + 3, y + 2, BODY2); px(fb, x + 3, y + 4, BODY2);
         px(fb, x + 9, y + 3, hot); px(fb, x + 10, y + 3, hot);
+        break;
+    case EQ_SHIELD:
+        /* arc shell + core */
+        px(fb, x + 4, y + 1, hot); px(fb, x + 5, y + 1, hot);
+        px(fb, x + 6, y + 1, hot);
+        px(fb, x + 3, y + 2, hot); px(fb, x + 7, y + 2, hot);
+        px(fb, x + 2, y + 3, hot); px(fb, x + 8, y + 3, hot);
+        px(fb, x + 3, y + 4, hot); px(fb, x + 7, y + 4, hot);
+        px(fb, x + 5, y + 3, BODY);
+        break;
+    case EQ_ARMOR:
+        /* layered plates */
+        hbar(fb, x + 1, x + 9, y + 1, BODY);
+        hbar(fb, x + 2, x + 10, y + 3, BODY2);
+        hbar(fb, x + 1, x + 9, y + 5, BODY);
+        px(fb, x + 11, y + 3, hot);
         break;
     case WPN_HOMING:
         hbar(fb, x + 2, x + 7, y + 3, BODY);

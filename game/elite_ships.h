@@ -27,7 +27,14 @@ typedef struct {
     float hull_base, shield_base;
 } HullDef;
 
-extern const HullDef k_hulls[N_HULLS];
+extern const HullDef k_hulls[N_HULLS];   /* class STAT templates; the
+                                          * look comes from a mesh seed */
+
+/* Procedural hull mesh cache: ships are (class, mesh_seed) pairs now.
+ * Entries persist until hull_cache_reset (anchor changes), which keeps
+ * any mesh still referenced by the live player ship. */
+const Mesh *hull_mesh(uint32_t mesh_seed, int class_hint);
+void hull_cache_reset(const Mesh *keep);
 
 /* Upgrade tiers: multiplier + price scale with the hull price. */
 extern const float k_tier_mult[4];      /* 1.0 / 1.3 / 1.6 / 2.0 */

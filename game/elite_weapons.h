@@ -23,8 +23,20 @@ typedef enum {
     WPN_AUTOCANNON,    /* rapid ballistic stream */
     WPN_MISSILE,       /* dumbfire rocket, AoE */
     WPN_HOMING,        /* seeker missile, needs a target lock */
-    WPN_COUNT
+    WPN_COUNT,
+    /* Equipment shares the instance/rack/icon machinery: */
+    EQ_SHIELD = WPN_COUNT,
+    EQ_ARMOR,
+    ITEM_COUNT
 } WeaponType;
+
+/* Equipment catalogue (indexed EQ_x - WPN_COUNT). */
+typedef struct {
+    const char *name;
+    int16_t base_price;     /* tier 1; higher tiers scale x2 / x3.6 */
+} EquipDef;
+extern const EquipDef k_equip[2];
+const char *item_name(int type);
 
 typedef struct {
     const char *name;       /* HUD label, <= 8 chars */

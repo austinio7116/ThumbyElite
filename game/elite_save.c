@@ -13,7 +13,7 @@
 #include <string.h>
 
 #define SAVE_MAGIC   0x454C4954u   /* 'ELIT' */
-#define SAVE_VERSION 1
+#define SAVE_VERSION 3   /* v3: equipment instances */
 
 typedef struct {
     uint32_t magic, version, len, crc;

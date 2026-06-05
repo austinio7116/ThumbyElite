@@ -20,11 +20,14 @@ static const int16_t k_wpn_base[WPN_COUNT] = {
 void player_init(void) {
     memset(&g_player, 0, sizeof g_player);
     g_player.credits = 1000;
-    g_player.hull_id = 0;               /* the SKIFF — everyone starts low */
+    g_player.hull_id = 0;               /* starter class — everyone starts low */
+    g_player.hull_seed = 0xBEA7E12u;    /* replaced by test mode / shipyard */
     g_player.fuel_max = 30.0f;
     g_player.fuel = g_player.fuel_max;
-    /* One battered salvaged pulse laser. The dream starts here. */
-    g_player.mounts[0] = (WeaponInst){ WPN_PULSE_S, Q_SALVAGED, 70, 1 };
+    /* One battered salvaged pulse laser + bottom-shelf protection. */
+    g_player.mounts[0] = (WeaponInst){ WPN_PULSE_S, Q_SALVAGED, 70, 1, 0, {0} };
+    g_player.shield_eq = (WeaponInst){ EQ_SHIELD, Q_SALVAGED, 80, 1, 1, {0} };
+    g_player.armor_eq = (WeaponInst){ EQ_ARMOR, Q_SALVAGED, 75, 1, 1, {0} };
 }
 
 int player_cargo_total(void) {
@@ -40,7 +43,22 @@ int player_cargo_cap(void) { return k_hulls[g_player.hull_id].cargo; }
 float quality_dmg_mult(int q) { return k_qual_mult[q > 4 ? 4 : q]; }
 
 int weapon_price(int type, int q) {
+    if (type >= WPN_COUNT)
+        return equip_price(type, 1, q);
     return (int)(k_wpn_base[type] * k_qual_price[q > 4 ? 4 : q]);
+}
+
+int equip_price(int type, int tier, int q) {
+    static const float k_tier_price[4] = { 1.0f, 1.0f, 2.0f, 3.6f };
+    int base = k_equip[type - WPN_COUNT].base_price;
+    return (int)(base * k_tier_price[tier > 3 ? 3 : tier] *
+                 k_qual_price[q > 4 ? 4 : q]);
+}
+
+float equip_mult(const WeaponInst *e) {
+    if (!e->in_use) return 0.55f;        /* flying bare: weak baseline */
+    return quality_dmg_mult(e->quality) *
+           (0.6f + 0.4f * (float)e->integrity * 0.01f);
 }
 
 float mount_dmg_mult(const WeaponInst *w) {
@@ -81,12 +99,17 @@ const WeaponInst *player_mount_for_ship_slot(int slot) {
 void player_apply_to_ship(void) {
     Ship *p = &g_ships[PLAYER];
     const HullDef *h = &k_hulls[g_player.hull_id];
-    p->mesh = h->mesh;
+    p->mesh = hull_mesh(g_player.hull_seed, g_player.hull_id);
     p->max_speed = h->max_speed;
     p->accel = h->accel;
     p->turn_rate = h->turn_rate * skill_turn_mult();
-    p->hull_max = h->hull_base * k_tier_mult[g_player.hull_tier];
-    p->shield_max = h->shield_base * k_tier_mult[g_player.shield_tier];
+    /* Protection from fitted equipment: tier size x quality x wear. */
+    float sh_t = g_player.shield_eq.in_use
+                     ? k_tier_mult[g_player.shield_eq.tier] : 1.0f;
+    float ar_t = g_player.armor_eq.in_use
+                     ? k_tier_mult[g_player.armor_eq.tier] : 1.0f;
+    p->hull_max = h->hull_base * ar_t * equip_mult(&g_player.armor_eq);
+    p->shield_max = h->shield_base * sh_t * equip_mult(&g_player.shield_eq);
     if (p->hull > p->hull_max) p->hull = p->hull_max;
     if (p->shield > p->shield_max) p->shield = p->shield_max;
 

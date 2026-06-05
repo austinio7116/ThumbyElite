@@ -21,3 +21,14 @@ const WeaponDef k_weapons[WPN_COUNT] = {
     [WPN_MISSILE]   = { "MISSILE", 45, 0.80f, 2.0f,  220, 2000,  0,  22, 1,  8, RGB565C(255, 170,  90) },
     [WPN_HOMING]    = { "HOMING",  32, 1.10f, 2.0f,  190, 2600, 1.7f, 18, 2,  6, RGB565C(255, 120, 200) },
 };
+
+const EquipDef k_equip[2] = {
+    { "SHIELD", 1400 },
+    { "ARMOR", 1100 },
+};
+
+const char *item_name(int type) {
+    if (type >= WPN_COUNT && type < ITEM_COUNT)
+        return k_equip[type - WPN_COUNT].name;
+    return k_weapons[type].name;
+}

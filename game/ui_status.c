@@ -28,7 +28,7 @@
 #define COL_WARN  RGB565C(255, 120,  70)
 
 /* Row model. */
-typedef enum { RK_TEXT = 0, RK_MOUNT, RK_RACK, RK_CARGO } RowKind;
+typedef enum { RK_TEXT = 0, RK_MOUNT, RK_RACK, RK_CARGO, RK_EQ } RowKind;
 typedef struct {
     uint8_t kind, index;
     char text[30];
@@ -73,8 +73,7 @@ static const char *k_skill_names[4] = {
 static void build_rows(void) {
     const HullDef *h = &k_hulls[g_player.hull_id];
     s_n_rows = 0;
-    row(RK_TEXT, 0, COL_HDR, -1, "%s  S%d H%d", h->name,
-        g_player.shield_tier, g_player.hull_tier);
+    row(RK_TEXT, 0, COL_HDR, -1, "%s", h->name);
     row(RK_TEXT, 0, COL_DIM, -1, "SPD %d CRG %d", (int)h->max_speed,
         h->cargo);
     row(RK_TEXT, 0, COL_HDR, -1, "MOUNTS:");
@@ -89,6 +88,16 @@ static void build_rows(void) {
         else
             row(RK_TEXT, 0, COL_DIM, -1, "S%d ----", h->slot_size[i]);
     }
+    for (int i = 0; i < 2; i++) {
+        const WeaponInst *e = i ? &g_player.armor_eq : &g_player.shield_eq;
+        if (e->in_use)
+            row(RK_EQ, i, e->integrity < 50 ? COL_WARN : COL_DIM, e->type,
+                "   %s Z%d %s %d%%", item_name(e->type), e->tier,
+                k_qual_tag[e->quality], e->integrity);
+        else
+            row(RK_TEXT, 0, COL_WARN, -1, "%s ----",
+                item_name(WPN_COUNT + i));
+    }
     row(RK_TEXT, 0, COL_HDR, -1, "RACK:");
     int any = 0;
     for (int i = 0; i < MAX_SALVAGE; i++) {
@@ -96,7 +105,7 @@ static void build_rows(void) {
         if (!m->in_use) continue;
         any = 1;
         row(RK_RACK, i, COL_DIM, m->type, "   %s %s %d%%",
-            k_weapons[m->type].name, k_qual_tag[m->quality], m->integrity);
+            item_name(m->type), k_qual_tag[m->quality], m->integrity);
     }
     if (!any) row(RK_TEXT, 0, COL_DIM, -1, "(EMPTY)");
     row(RK_TEXT, 0, COL_HDR, -1, "CARGO %d/%d:", player_cargo_total(),
@@ -172,6 +181,9 @@ void status_draw(uint16_t *fb) {
         } else {
             const WeaponInst *wi = (r->kind == RK_MOUNT)
                                        ? &g_player.mounts[r->index]
+                                   : (r->kind == RK_EQ)
+                                       ? (r->index ? &g_player.armor_eq
+                                                   : &g_player.shield_eq)
                                        : &g_player.salvage[r->index];
             int v = (int)(weapon_price(wi->type, wi->quality) *
                           (0.35f + 0.30f * wi->integrity * 0.01f));

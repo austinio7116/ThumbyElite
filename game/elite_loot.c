@@ -59,7 +59,14 @@ void loot_on_kill(Vec3 pos, Vec3 vel, int tier) {
          * better-kept gear). */
         c->is_component = (rnd() % 100u) < (uint32_t)(30 + tier * 10);
         if (c->is_component) {
-            c->comp.type = (uint8_t)(rnd() % WPN_COUNT);
+            /* 1 in 4 components is equipment (shield/armor). */
+            if ((rnd() % 4u) == 0) {
+                c->comp.type = (uint8_t)(WPN_COUNT + (rnd() & 1));
+                c->comp.tier = (uint8_t)(1 + rnd() % 3u);
+            } else {
+                c->comp.type = (uint8_t)(rnd() % WPN_COUNT);
+                c->comp.tier = 0;
+            }
             int q = (int)(rnd() % 100u);
             c->comp.quality = (q < 50) ? Q_SALVAGED
                             : (q < 80) ? Q_STANDARD
@@ -104,7 +111,7 @@ const char *loot_tick(float dt) {
             g_player.salvage[slot] = c->comp;
             g_player.xp_tech += 2;
             snprintf(s_toast, sizeof s_toast, "SALVAGED %s",
-                     k_weapons[c->comp.type].name);
+                     item_name(c->comp.type));
         } else {
             int room = player_cargo_cap() - player_cargo_total();
             if (room <= 0) {

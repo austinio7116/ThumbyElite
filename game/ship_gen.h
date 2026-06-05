@@ -18,4 +18,14 @@
  * the next call. */
 const Mesh *ship_gen_mesh(uint32_t seed);
 
+/* Class-hinted variant for the per-universe hull catalogue: hint biases
+ * archetype/size so a "starter" rolls small+plain and a "dreadnought"
+ * rolls long+mean. Hints match hull catalogue rows 0..9. */
+const Mesh *ship_gen_mesh_class(uint32_t seed, int class_hint);
+
+/* Copy the last generated mesh into caller-owned buffers (the catalogue
+ * cache). Returns faces written. */
+int ship_gen_copy(MeshVert *verts, int max_v, MeshFace *faces, int max_f,
+                  Mesh *out);
+
 #endif

@@ -2,6 +2,7 @@
  * ThumbyElite — ship entity pool.
  */
 #include "elite_entity.h"
+#include "elite_ships.h"
 #include <string.h>
 
 Ship g_ships[MAX_SHIPS];
@@ -66,18 +67,22 @@ void ship_fit_weapon(int idx, int mount, WeaponType w) {
     if (mount >= s->n_weapons) s->n_weapons = (uint8_t)(mount + 1);
 }
 
-void ship_set_tier(int idx, int tier) {
+void ship_set_tier(int idx, int tier, int hull_class) {
     Ship *s = &g_ships[idx];
     if (tier < 0) tier = 0;
     if (tier > 4) tier = 4;
+    if (hull_class < 0) hull_class = 0;
+    if (hull_class >= N_HULLS) hull_class = N_HULLS - 1;
     s->tier = (uint8_t)tier;
-    /* Power scales with skill: faster, tighter, tougher. */
+    /* Class template stats, scaled down for NPCs and up with tier. */
+    const HullDef *h = &k_hulls[hull_class];
     float k = 1.0f + 0.13f * (float)tier;
-    s->max_speed *= 0.82f + 0.10f * (float)tier;
-    s->turn_rate *= 0.80f + 0.13f * (float)tier;
-    s->hull_max *= k;
+    s->max_speed = h->max_speed * (0.82f + 0.10f * (float)tier);
+    s->accel = h->accel;
+    s->turn_rate = h->turn_rate * (0.80f + 0.13f * (float)tier);
+    s->hull_max = h->hull_base * 0.55f * k;
     s->hull = s->hull_max;
-    s->shield_max *= k;
+    s->shield_max = h->shield_base * 0.55f * k;
     s->shield = s->shield_max;
     /* Loadout by tier. */
     s->n_weapons = 0;

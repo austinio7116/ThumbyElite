@@ -101,9 +101,10 @@ void elite_game_debug_spawn(int n) {
         float a = frand(0, 6.2831f);
         float r = frand(500, 800);
         Vec3 pos = v3(cosf(a) * r, frand(-150, 150), sinf(a) * r);
-        int idx = ship_spawn((i & 1) ? &mesh_viper : &mesh_fighter, pos,
-                             TEAM_HOSTILE);
-        if (idx > 0) ship_set_tier(idx, i % 5);
+        uint32_t mseed = 0xDEB06u ^ (uint32_t)((i & 1) * 77u);
+        int cls = 2 + (i % 3);
+        int idx = ship_spawn(hull_mesh(mseed, cls), pos, TEAM_HOSTILE);
+        if (idx > 0) ship_set_tier(idx, i % 5, cls);
     }
 }
 
@@ -148,12 +149,15 @@ static void spawn_poi_content(void) {
         float a = frand(0, 6.2831f);
         float r = frand(600, 1000);
         Vec3 pos = v3(cosf(a) * r, frand(-200, 200), sinf(a) * r);
-        const Mesh *m = (i & 1) ? &mesh_viper : &mesh_fighter;
-        int idx = ship_spawn(m, pos, TEAM_HOSTILE);
-        if (idx > 0) {
-            int tier = (int)si->threat - 1 + (int)(xorshift32() % 3u) - 1;
-            ship_set_tier(idx, tier);
-        }
+        int tier = (int)si->threat - 1 + (int)(xorshift32() % 3u) - 1;
+        if (tier < 0) tier = 0;
+        /* Local pirate styling: this system's wings share two looks. */
+        static const uint8_t k_tier_class[5] = { 1, 2, 3, 4, 5 };
+        int cls = k_tier_class[tier > 4 ? 4 : tier];
+        uint32_t mseed = (uint32_t)(si->seed >> 24) ^
+                         (uint32_t)(cls * 0x9E3779B9u) ^ (i & 1);
+        int idx = ship_spawn(hull_mesh(mseed, cls), pos, TEAM_HOSTILE);
+        if (idx > 0) ship_set_tier(idx, tier, cls);
     }
 
     /* Bounty mark: a flagged ace waits at the beacon. */
@@ -161,9 +165,10 @@ static void spawn_poi_content(void) {
         mission_bounty_here(s_addr)) {
         float a = frand(0, 6.2831f);
         Vec3 pos = v3(cosf(a) * 800.0f, frand(-150, 150), sinf(a) * 800.0f);
-        int idx = ship_spawn(&mesh_cutter, pos, TEAM_HOSTILE);
+        uint32_t mseed = (uint32_t)(si->seed >> 20) ^ 0xB011B011u;
+        int idx = ship_spawn(hull_mesh(mseed, 5), pos, TEAM_HOSTILE);
         if (idx > 0) {
-            ship_set_tier(idx, 4);
+            ship_set_tier(idx, 4, 5);
             g_ships[idx].is_mark = 1;
         }
     }
@@ -181,6 +186,7 @@ static void drop_anchor(Vec3 pos_mm, const Poi *poi) {
             (uint32_t)(system_info()->seed >> 8) ^
             (uint32_t)(poi->index * 0x9E3779B9u));
     ships_despawn_npcs();
+    hull_cache_reset(g_ships[PLAYER].mesh);
     fx_init();
     loot_init();
     s_target = -1;
@@ -274,6 +280,8 @@ static void start_new_game(uint32_t seed) {
         uint32_t h = seed * 2654435761u;
         h ^= h >> 13; h *= 1274126177u; h ^= h >> 16;
         g_player.hull_id = (uint8_t)(h % N_HULLS);
+        h ^= h << 13; h ^= h >> 17; h ^= h << 5;
+        g_player.hull_seed = h;
         const HullDef *hd = &k_hulls[g_player.hull_id];
         for (int i = 0; i < hd->n_slots; i++) {
             h ^= h << 13; h ^= h >> 17; h ^= h << 5;
@@ -702,7 +710,7 @@ void elite_game_render_begin(void) {
         r3d_scene_begin(&cam, 60.0f);
         r3d_pipe_set_sun(v3(0.35f, 0.45f, -0.82f));
         R3DObject obj;
-        obj.mesh = &mesh_fighter;
+        obj.mesh = hull_mesh(s_boot_seed ^ 0x44E5Au, 2);   /* hero of the day */
         obj.basis = m3_identity();
         m3_rotate_local(&obj.basis, 1, s_time * 0.3f);
         m3_rotate_local(&obj.basis, 0, 0.25f);
@@ -731,11 +739,13 @@ void elite_game_render_begin(void) {
         Mat3 cam = m3_identity();
         r3d_scene_begin(&cam, 60.0f);
         r3d_pipe_set_sun(v3(0.35f, 0.45f, -0.82f));   /* showroom light */
-        int pv = station_preview();
-        if (pv != -2) {
-            const Mesh *m = (pv == -1)
+        uint32_t pv_seed;
+        int pv_cls;
+        int pv = station_preview2(&pv_seed, &pv_cls);
+        if (pv != 0) {
+            const Mesh *m = (pv == 1)
                 ? (s_station_mesh ? s_station_mesh : &mesh_station)
-                : k_hulls[pv].mesh;
+                : hull_mesh(pv_seed, pv_cls);
             R3DObject obj;
             obj.mesh = m;
             obj.basis = m3_identity();
@@ -755,7 +765,7 @@ void elite_game_render_begin(void) {
         r3d_pipe_set_sun(v3(0.35f, 0.45f, -0.82f));   /* showroom light */
         /* Centred backdrop, pulled back so the whole hull fits. */
         R3DObject obj;
-        obj.mesh = k_hulls[g_player.hull_id].mesh;
+        obj.mesh = hull_mesh(g_player.hull_seed, g_player.hull_id);
         obj.basis = m3_identity();
         m3_rotate_local(&obj.basis, 1, s_time * 0.5f);
         m3_rotate_local(&obj.basis, 0, 0.30f);

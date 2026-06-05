@@ -173,6 +173,38 @@ void proj_emit(Vec3 cam_pos) {
                 r3d_scene_add_line(sx, sy, d, tx, ty, td, w->color);
             else
                 r3d_scene_add_point(sx, sy, d, w->color, 1);
+
+            /* Gauss: twin particle helix corkscrewing down the slug's
+             * wake — magnetic rail signature. */
+            if (p->type == WPN_GAUSS) {
+                Vec3 u = v3_norm(p->vel);
+                Vec3 ref = (u.y < 0.9f && u.y > -0.9f) ? v3(0, 1, 0)
+                                                       : v3(1, 0, 0);
+                Vec3 e1 = v3_norm(v3_cross(u, ref));
+                Vec3 e2 = v3_cross(u, e1);
+                float traveled = (w->range / w->speed - p->life) * w->speed;
+                for (int k = 0; k < 7; k++) {
+                    float back = 2.0f + (float)k * 2.4f;
+                    float fade = 1.0f - (float)k / 7.0f;
+                    float ang = (traveled - back) * 0.55f;
+                    uint16_t hc = (k < 2) ? RGB565C(220, 245, 255)
+                               : (k < 4) ? RGB565C(120, 180, 255)
+                                         : RGB565C(60, 90, 170);
+                    for (int arm = 0; arm < 2; arm++) {
+                        float a2 = ang + (float)arm * 3.14159265f;
+                        float rr = 1.1f * (0.6f + 0.4f * fade);
+                        Vec3 off = v3_add(v3_scale(e1, cosf(a2) * rr),
+                                          v3_scale(e2, sinf(a2) * rr));
+                        Vec3 wp = v3_add(v3_sub(p->pos, v3_scale(u, back)),
+                                         off);
+                        float hx, hy;
+                        uint16_t hd;
+                        if (r3d_scene_project(v3_sub(wp, cam_pos),
+                                              &hx, &hy, &hd))
+                            r3d_scene_add_point(hx, hy, hd, hc, 1);
+                    }
+                }
+            }
         } else {
             /* Bolt: chunky glowing point (nearer = bigger). */
             uint8_t size = (d > 1500) ? 3 : (d > 400) ? 2 : 1;
