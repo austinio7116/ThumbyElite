@@ -100,6 +100,19 @@ float elite_game_time(void) { return s_time; }
 
 int elite_game_state(void) { return (int)s_state; }
 
+/* Debug (host harness): face the player directly away from the star
+ * so staged screenshots aren't photobombed by the sun. */
+void elite_game_debug_face_away_from_sun(void) {
+    Ship *p = &g_ships[PLAYER];
+    Vec3 cm = v3_add(s_anchor_mm, v3_scale(p->pos, 1.0e-6f));
+    Vec3 fwd = v3_norm(cm);                  /* away from origin/star */
+    Vec3 up = (fwd.y > -0.9f && fwd.y < 0.9f) ? v3(0, 1, 0) : v3(1, 0, 0);
+    Vec3 right = v3_norm(v3_cross(up, fwd));
+    p->basis.r[0] = right;
+    p->basis.r[1] = v3_cross(fwd, right);
+    p->basis.r[2] = fwd;
+}
+
 /* Debug/demo: force-spawn hostiles around the player (host harness). */
 void elite_game_debug_spawn(int n) {
     extern const Mesh mesh_viper, mesh_fighter;

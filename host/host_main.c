@@ -99,6 +99,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_MISTEST") || getenv("ELITE_STATUSTEST") ||
         getenv("ELITE_BTEST") ||
         getenv("ELITE_STARTCHECK") ||
+        getenv("ELITE_ACTION") ||
         getenv("ELITE_SHOT")) {
         /* Harnesses start in-game: skip the title via NEW GAME. */
         remove("thumbyelite.sav");
@@ -137,6 +138,81 @@ int main(int argc, char **argv) {
             }
         printf("[startcheck] %s nearest=%.1f in6=%d in8=%d stations=%d\n",
                si->name, best, in6, in8, si->n_stations);
+        return 0;
+    }
+
+    /* Staged combat captures for the guide: hostiles close ahead,
+     * lock, pulse volleys, a gauss helix, the kill. */
+    if (getenv("ELITE_ACTION")) {
+        CraftRawButtons none = {0}, b;
+        Ship *pl = &g_ships[0];
+        pl->vel = v3(0, 0, 0);
+        pl->throttle = 0.2f;
+        /* Face away from the sun so it doesn't photobomb the shots. */
+        elite_game_debug_face_away_from_sun();
+        /* One BIG close target + a mid-range ship for the gauss run. */
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Vec3 fwd = pl->basis.r[2];
+        Vec3 rgt = pl->basis.r[0];
+        Vec3 up2 = pl->basis.r[1];
+        int e1 = ship_spawn(hull_mesh(0xACE1u, 5),
+                            v3_add(pl->pos, v3_add(v3_scale(fwd, 50.0f),
+                                                   v3_scale(rgt, 6.0f))),
+                            TEAM_HOSTILE);
+        if (e1 > 0) ship_set_tier(e1, 0, 5);   /* HARMLESS: we survive */
+        int e2 = ship_spawn(hull_mesh(0xBEE5u, 3),
+                            v3_add(pl->pos,
+                                   v3_add(v3_scale(fwd, 130.0f),
+                                          v3_add(v3_scale(rgt, -28.0f),
+                                                 v3_scale(up2, 12.0f)))),
+                            TEAM_HOSTILE);
+        if (e2 > 0) ship_set_tier(e2, 0, 3);
+        /* Plot armour for the cameraman. */
+        pl->hull_max = pl->hull = 100000.0f;
+        pl->shield_max = pl->shield = 100000.0f;
+        /* Lock the close one. */
+        b = none; b.lb = true; elite_game_tick(&b, 1.0f / 30.0f);
+        b = none; elite_game_tick(&b, 1.0f / 30.0f);
+        elite_game_tick(&none, 1.0f / 30.0f);
+        /* Pulse volley: dump ON a fire frame so the beam is lit. */
+        for (int f = 0; f < 3; f++) {
+            b = none; b.a = true; elite_game_tick(&b, 1.0f / 30.0f);
+            if (f == 0) { render_frame(); dump_ppm("/tmp/act_pulse.ppm"); }
+            b = none; elite_game_tick(&b, 1.0f / 30.0f);
+            elite_game_tick(&none, 1.0f / 30.0f);
+        }
+        render_frame(); dump_ppm("/tmp/act_shield.ppm");
+        /* Finish the close target with pulses; dump the boom. */
+        for (int f = 0; f < 240; f++) {
+            pl->fire_cool = 0;
+            b = none; b.a = true; elite_game_tick(&b, 1.0f / 30.0f);
+            b = none; elite_game_tick(&b, 1.0f / 30.0f);
+            if (e1 > 0 && !g_ships[e1].alive) break;
+        }
+        elite_game_tick(&none, 1.0f / 30.0f);
+        render_frame(); dump_ppm("/tmp/act_boom.ppm");
+        for (int f = 0; f < 6; f++) elite_game_tick(&none, 1.0f / 30.0f);
+        render_frame(); dump_ppm("/tmp/act_debris.ppm");
+        /* Let the fireball burn out, then the gauss run. */
+        for (int f = 0; f < 90; f++) elite_game_tick(&none, 1.0f / 30.0f);
+        {
+            extern int fx_alive_count(void);
+            Vec3 f3 = pl->basis.r[2];
+            printf("[act] fwd=(%.2f %.2f %.2f) fx=%d alive:", f3.x, f3.y,
+                   f3.z, fx_alive_count());
+            for (int k = 0; k < MAX_SHIPS; k++)
+                if (g_ships[k].alive) printf(" %d", k);
+            printf("\n");
+        }
+        b = none; b.lb = true; elite_game_tick(&b, 1.0f / 30.0f);
+        b = none; elite_game_tick(&b, 1.0f / 30.0f);
+        ship_fit_weapon(0, 0, WPN_GAUSS);
+        pl->active_w = 0;
+        pl->fire_cool = 0;
+        b = none; b.a = true; elite_game_tick(&b, 1.0f / 30.0f);
+        render_frame(); dump_ppm("/tmp/act_gauss.ppm");
+        b = none; elite_game_tick(&b, 1.0f / 30.0f);
+        render_frame(); dump_ppm("/tmp/act_gauss2.ppm");
         return 0;
     }
 
