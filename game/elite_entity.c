@@ -92,15 +92,20 @@ void ship_set_tier(int idx, int tier, int hull_class) {
     case 0:
     case 1: ship_fit_weapon(idx, 0, WPN_PULSE_S); break;
     case 2:
-        ship_fit_weapon(idx, 0, (idx & 1) ? WPN_AUTOCANNON : WPN_PULSE_M);
+        /* CAPABLE: one in three carries an ion blaster — shield strips
+         * start mattering mid-game. */
+        ship_fit_weapon(idx, 0, (idx % 3 == 0) ? WPN_ION
+                              : (idx & 1) ? WPN_AUTOCANNON : WPN_PULSE_M);
         break;
     case 3:
-        ship_fit_weapon(idx, 0, WPN_PULSE_M);
+        ship_fit_weapon(idx, 0, (idx % 3 == 0) ? WPN_FLAK : WPN_PULSE_M);
         ship_fit_weapon(idx, 1, WPN_GAUSS);
         break;
     default:
-        ship_fit_weapon(idx, 0, WPN_PULSE_L);
-        ship_fit_weapon(idx, 1, (idx & 1) ? WPN_PHOTON : WPN_HOMING);
+        /* ELITE aces: heavy mains; some pack railguns or ion. */
+        ship_fit_weapon(idx, 0, (idx % 3 == 0) ? WPN_RAILGUN
+                                               : WPN_PULSE_L);
+        ship_fit_weapon(idx, 1, (idx & 1) ? WPN_PHOTON : WPN_ION);
         break;
     }
 }

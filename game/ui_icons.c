@@ -75,6 +75,44 @@ void icon_weapon(uint16_t *fb, int x, int y, int wpn_type) {
         px(fb, x + 3, y + 2, BODY2); px(fb, x + 3, y + 4, BODY2);
         px(fb, x + 9, y + 3, hot); px(fb, x + 10, y + 3, hot);
         break;
+    case WPN_FLAK:
+        /* stub barrel + pellet spray */
+        hbar(fb, x + 1, x + 5, y + 3, BODY);
+        px(fb, x + 7, y + 1, hot); px(fb, x + 8, y + 3, hot);
+        px(fb, x + 7, y + 5, hot); px(fb, x + 10, y + 2, hot);
+        px(fb, x + 10, y + 4, hot);
+        break;
+    case WPN_RAILGUN:
+        /* long twin rails + charge tip */
+        hbar(fb, x, x + 9, y + 2, BODY);
+        hbar(fb, x, x + 9, y + 4, BODY);
+        px(fb, x + 1, y + 3, BODY2); px(fb, x + 4, y + 3, BODY2);
+        px(fb, x + 7, y + 3, BODY2);
+        px(fb, x + 10, y + 3, hot); px(fb, x + 11, y + 3, hot);
+        break;
+    case WPN_ION:
+        /* emitter + arc rings */
+        hbar(fb, x + 1, x + 4, y + 3, BODY);
+        px(fb, x + 6, y + 2, hot); px(fb, x + 6, y + 4, hot);
+        px(fb, x + 8, y + 1, hot); px(fb, x + 8, y + 5, hot);
+        px(fb, x + 10, y + 3, hot);
+        break;
+    case WPN_MINE:
+        /* spiky ball */
+        px(fb, x + 4, y + 2, BODY); px(fb, x + 5, y + 2, BODY);
+        px(fb, x + 3, y + 3, BODY); px(fb, x + 6, y + 3, BODY);
+        px(fb, x + 4, y + 4, BODY); px(fb, x + 5, y + 4, BODY);
+        px(fb, x + 4, y + 0, hot); px(fb, x + 1, y + 3, hot);
+        px(fb, x + 8, y + 3, hot); px(fb, x + 4, y + 6, hot);
+        break;
+    case WPN_TRACTOR:
+        /* dish + pull waves */
+        px(fb, x + 1, y + 2, BODY); px(fb, x + 1, y + 4, BODY);
+        px(fb, x + 2, y + 3, BODY);
+        px(fb, x + 5, y + 3, hot); px(fb, x + 7, y + 2, hot);
+        px(fb, x + 7, y + 4, hot); px(fb, x + 9, y + 1, hot);
+        px(fb, x + 9, y + 5, hot);
+        break;
     case EQ_SHIELD:
         /* arc shell + core */
         px(fb, x + 4, y + 1, hot); px(fb, x + 5, y + 1, hot);

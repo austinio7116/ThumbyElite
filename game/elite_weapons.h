@@ -23,12 +23,31 @@ typedef enum {
     WPN_AUTOCANNON,    /* rapid ballistic stream */
     WPN_MISSILE,       /* dumbfire rocket, AoE */
     WPN_HOMING,        /* seeker missile, needs a target lock */
+    WPN_FLAK,          /* 5-pellet cone, brutal point-blank */
+    WPN_RAILGUN,       /* hold-to-charge hypervelocity lance */
+    WPN_ION,           /* shield-stripper; full strip scrambles systems */
+    WPN_MINE,          /* proximity mine dropped astern */
+    WPN_TRACTOR,       /* salvage beam: reels locked canisters in */
     WPN_COUNT,
     /* Equipment shares the instance/rack/icon machinery: */
     EQ_SHIELD = WPN_COUNT,
     EQ_ARMOR,
     ITEM_COUNT
 } WeaponType;
+
+/* Weapon affixes: factory modifications on an instance. Multipliers
+ * fold into effective stats everywhere (fire, detail sheets, compare,
+ * prices). AFX_TUNED is the no-downside jackpot, PRO drops only. */
+typedef enum {
+    AFX_NONE = 0, AFX_OVERCLOCKED, AFX_VENTED, AFX_CALIBRATED,
+    AFX_RAPID, AFX_SURPLUS, AFX_TUNED, AFX_COUNT
+} Affix;
+typedef struct {
+    const char *name;       /* full, for detail sheets */
+    const char *tag;        /* 2-3 chars, for rows */
+    float dmg, heat, cooldown, range, price;
+} AffixDef;
+extern const AffixDef k_affixes[AFX_COUNT];
 
 /* Equipment catalogue (indexed EQ_x - WPN_COUNT). */
 typedef struct {

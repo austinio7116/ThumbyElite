@@ -88,6 +88,19 @@ void loot_on_kill(Vec3 pos, Vec3 vel, int tier) {
                             : (q < 99) ? Q_MILITARY : Q_PROTOTYPE;
             if (tier >= 3 && c->comp.quality < Q_STANDARD)
                 c->comp.quality = Q_STANDARD;
+            /* Affix roll (weapons only): ~25%, tier-sweetened; TUNED
+             * only ever appears on PROTOTYPE drops. */
+            c->comp.affix = AFX_NONE;
+            if (c->comp.type < WPN_COUNT &&
+                (int)(rnd() % 100u) < 18 + tier * 4) {
+                int a = (int)(rnd() % 100u);
+                c->comp.affix = (a < 35) ? AFX_OVERCLOCKED
+                              : (a < 60) ? AFX_RAPID
+                              : (a < 80) ? AFX_CALIBRATED : AFX_VENTED;
+                if (c->comp.quality == Q_PROTOTYPE &&
+                    (rnd() % 3u) == 0)
+                    c->comp.affix = AFX_TUNED;
+            }
             c->comp.integrity = (uint8_t)(20 + rnd() % 55);
             c->comp.in_use = 1;
         } else {
@@ -190,6 +203,17 @@ int loot_nearest(Vec3 from, Vec3 *out_pos) {
     }
     if (best >= 0 && out_pos) *out_pos = s_cans[best].pos;
     return best;
+}
+
+void loot_tractor_pull(Vec3 to, float range, float speed) {
+    for (int i = 0; i < MAX_CANS; i++) {
+        Canister *c = &s_cans[i];
+        if (!c->alive) continue;
+        Vec3 d = v3_sub(to, c->pos);
+        float dist = v3_len(d);
+        if (dist > range || dist < 4.0f) continue;
+        c->vel = v3_scale(d, speed / dist);
+    }
 }
 
 int loot_positions(Vec3 *out, int *is_component, int max) {

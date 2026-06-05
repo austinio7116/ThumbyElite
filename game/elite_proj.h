@@ -11,6 +11,8 @@
 void proj_init(void);
 void proj_spawn(WeaponType type, int owner, int8_t target,
                 Vec3 pos, Vec3 dir, Vec3 inherit_vel);
+/* Proximity mine: stationary, 18m trigger, 25s life. */
+void proj_spawn_mine(int owner, Vec3 pos, Vec3 vel, float dmg_mult);
 void proj_spawn_ex(WeaponType type, int owner, int8_t target,
                    Vec3 pos, Vec3 dir, Vec3 inherit_vel, float dmg_mult);
 void proj_tick(float dt);

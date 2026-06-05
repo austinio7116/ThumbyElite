@@ -106,7 +106,15 @@ void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
     }
 
     icon_weapon_2x(fb, 4, 3, wi->type);
-    craft_font_draw(fb, w->name, 32, 4, COL_HDR);
+    /* Affixed weapons show "VENTED GAUSS" as the headline. */
+    if (wi->affix && wi->affix < AFX_COUNT) {
+        char nbuf[26];
+        snprintf(nbuf, sizeof nbuf, "%.11s %s", k_affixes[wi->affix].name,
+                 w->name);
+        craft_font_draw(fb, nbuf, 32, 4, RGB565C(150, 220, 255));
+    } else {
+        craft_font_draw(fb, w->name, 32, 4, COL_HDR);
+    }
     craft_font_draw(fb, k_qual_long[wi->quality > 4 ? 4 : wi->quality],
                     32, 11, (wi->quality >= Q_MILITARY) ? COL_CRED : COL_DIM);
     if (cw) {

@@ -61,6 +61,7 @@ void flight_apply_input(const FlightInput *in, float dt) {
 
 static void ship_physics(Ship *s, float dt) {
     float max_v = s->max_speed, acc = s->accel;
+    if (s->engine_drag_t > 0.0f) { max_v *= 0.5f; acc *= 0.5f; }
     if (s->boost_t > 0.0f) {
         s->boost_t -= dt;
         max_v *= BOOST_MULT;

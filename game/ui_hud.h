@@ -14,6 +14,7 @@ typedef struct {
     Vec3  loot_pos;      /* locked canister, local metres */
     int   station_valid; /* station nav lock (station at local origin) */
     int   kills;
+    float rail_charge01;   /* railgun charge arc (0 = hidden) */
     float fuel01;        /* fuel fraction for the gauge */
     float render_ms;     /* pure render time (perf readout) */
     int   show_perf;

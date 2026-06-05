@@ -15,6 +15,8 @@ static const int16_t k_wpn_base[WPN_COUNT] = {
     [WPN_PULSE_S] = 600,  [WPN_PULSE_M] = 1800, [WPN_PULSE_L] = 4800,
     [WPN_BEAM] = 2600,    [WPN_PHOTON] = 3400,  [WPN_GAUSS] = 5200,
     [WPN_AUTOCANNON] = 900, [WPN_MISSILE] = 1200, [WPN_HOMING] = 2800,
+    [WPN_FLAK] = 1600, [WPN_RAILGUN] = 7800, [WPN_ION] = 3000,
+    [WPN_MINE] = 1400, [WPN_TRACTOR] = 800,
 };
 
 void player_init(void) {
@@ -25,10 +27,13 @@ void player_init(void) {
     g_player.fuel_max = 30.0f;
     g_player.fuel = g_player.fuel_max;
     /* One battered salvaged pulse laser + bottom-shelf protection. */
-    g_player.mounts[0] = (WeaponInst){ WPN_PULSE_S, Q_SALVAGED, 70, 1, 0, {0} };
+    g_player.mounts[0] = (WeaponInst){ .type = WPN_PULSE_S,
+        .quality = Q_SALVAGED, .integrity = 70, .in_use = 1 };
     for (int i = 0; i < HULL_SLOTS; i++) g_player.ammo[i] = -1;
-    g_player.shield_eq = (WeaponInst){ EQ_SHIELD, Q_SALVAGED, 80, 1, 1, {0} };
-    g_player.armor_eq = (WeaponInst){ EQ_ARMOR, Q_SALVAGED, 75, 1, 1, {0} };
+    g_player.shield_eq = (WeaponInst){ .type = EQ_SHIELD,
+        .quality = Q_SALVAGED, .integrity = 80, .in_use = 1, .tier = 1 };
+    g_player.armor_eq = (WeaponInst){ .type = EQ_ARMOR,
+        .quality = Q_SALVAGED, .integrity = 75, .in_use = 1, .tier = 1 };
 }
 
 int player_cargo_total(void) {
@@ -72,9 +77,20 @@ float equip_mult(const WeaponInst *e) {
 }
 
 float mount_dmg_mult(const WeaponInst *w) {
-    /* Integrity below 100 bleeds output: 60% output at 0 integrity. */
+    /* Integrity below 100 bleeds output: 60% output at 0 integrity.
+     * Affix damage modifier folds in here so every consumer (fire,
+     * detail sheets, compare deltas) sees effective numbers. */
     return quality_dmg_mult(w->quality) *
-           (0.6f + 0.4f * (float)w->integrity * 0.01f);
+           (0.6f + 0.4f * (float)w->integrity * 0.01f) *
+           k_affixes[w->affix < AFX_COUNT ? w->affix : 0].dmg;
+}
+
+/* Instance market value: base x quality x affix premium. */
+int instance_price(const WeaponInst *w) {
+    int base = (w->type >= WPN_COUNT)
+                   ? equip_price(w->type, w->tier, w->quality)
+                   : weapon_price(w->type, w->quality);
+    return (int)(base * k_affixes[w->affix < AFX_COUNT ? w->affix : 0].price);
 }
 
 int skill_level(uint16_t xp) {
@@ -147,6 +163,9 @@ static int round_cost(int type) {
     case WPN_GAUSS: return 8;
     case WPN_MISSILE: return 35;
     case WPN_HOMING: return 55;
+    case WPN_FLAK: return 3;
+    case WPN_RAILGUN: return 22;
+    case WPN_MINE: return 30;
     default: return 0;
     }
 }

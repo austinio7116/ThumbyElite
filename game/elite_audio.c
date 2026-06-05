@@ -90,6 +90,27 @@ void sfx_weapon(int t, float amp) {
         play(W_SINE, 520, 300, 0.22f * amp, 0.015f, 0.16f);
         break;
     case WPN_AUTOCANNON: play(W_NOISE, 3000, 1500, 0.22f * amp, 0.001f, 0.045f); break;
+    case WPN_FLAK:
+        play(W_NOISE, 1400, 380, 0.36f * amp, 0.002f, 0.16f);
+        play(W_SQUARE, 420, 300, 0.20f * amp, 0.002f, 0.10f);
+        break;
+    case WPN_RAILGUN:
+        /* The big one: crack + long singing tail. */
+        play(W_NOISE, 4200, 700, 0.40f * amp, 0.001f, 0.16f);
+        play(W_SAW, 2600, 320, 0.26f * amp, 0.003f, 0.50f);
+        play(W_SINE, 560, 300, 0.28f * amp, 0.004f, 0.22f);
+        break;
+    case WPN_ION:
+        play(W_SQUARE, 1900, 700, 0.18f * amp, 0.002f, 0.10f);
+        play(W_SINE, 950, 1400, 0.16f * amp, 0.004f, 0.12f);
+        break;
+    case WPN_MINE:
+        play(W_NOISE, 600, 320, 0.18f * amp, 0.002f, 0.08f);
+        break;
+    case WPN_TRACTOR:
+        /* quiet pulsing hum (fires fast — keep it subtle) */
+        play(W_SINE, 460, 430, 0.05f * amp, 0.010f, 0.09f);
+        break;
     default:          /* missiles: launch whoosh */
         play(W_NOISE, 900, 2400, 0.30f * amp, 0.030f, 0.25f);
         break;
@@ -112,6 +133,12 @@ void sfx_ui_move(void)   { play(W_SQUARE, 880, 880, 0.10f, 0.001f, 0.025f); }
 void sfx_ui_select(void) { play(W_SQUARE, 1320, 1760, 0.14f, 0.001f, 0.05f); }
 void sfx_ui_deny(void)   { play(W_SQUARE, 320, 250, 0.16f, 0.001f, 0.09f); }
 void sfx_scoop(void)     { play(W_SINE, 620, 1240, 0.22f, 0.004f, 0.14f); }
+void sfx_charge_step(int step) {
+    /* Rising arm tones while the railgun charges (0..3). */
+    play(W_SINE, 500.0f + 180.0f * (float)step,
+         520.0f + 180.0f * (float)step, 0.10f, 0.004f, 0.06f);
+}
+
 void sfx_sc_engage(void) {
     /* Supercruise spool: the hyperspace whoosh's little sibling —
      * lower, quieter, shorter. */

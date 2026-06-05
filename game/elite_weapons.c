@@ -20,6 +20,22 @@ const WeaponDef k_weapons[WPN_COUNT] = {
     [WPN_AUTOCANNON]= { "AUTOCAN",  5, 0.07f, 1.2f,  750,  900,  0,   0, 1,160, RGB565C(255, 210, 140) },
     [WPN_MISSILE]   = { "MISSILE", 45, 0.80f, 2.0f,  220, 2000,  0,  22, 1,  8, RGB565C(255, 170,  90) },
     [WPN_HOMING]    = { "HOMING",  32, 1.10f, 2.0f,  190, 2600, 1.7f, 18, 2,  6, RGB565C(255, 120, 200) },
+    [WPN_FLAK]      = { "FLAK",     6, 0.65f, 5.0f,  420,  400,  0,   0, 2, 40, RGB565C(255, 190, 110) },
+    [WPN_RAILGUN]   = { "RAILGUN", 90, 1.60f, 16.0f, 2200, 2200, 0,   0, 3, 12, RGB565C(170, 240, 255) },
+    [WPN_ION]       = { "ION",     30, 0.45f, 8.0f,  340,  700,  0,   0, 2,  0, RGB565C(110, 160, 255) },
+    [WPN_MINE]      = { "MINE",    45, 1.20f, 1.0f,    0,    0,  0,  18, 1,  6, RGB565C(255, 140,  70) },
+    [WPN_TRACTOR]   = { "TRACTOR",  0, 0.10f, 0.6f,    0,  300,  0,   0, 1,  0, RGB565C(255, 215, 120) },
+};
+
+const AffixDef k_affixes[AFX_COUNT] = {
+    /*                 name           tag    dmg    heat   cd     range  price */
+    [AFX_NONE]        = { "",           "",   1.00f, 1.00f, 1.00f, 1.00f, 1.00f },
+    [AFX_OVERCLOCKED] = { "OVERCLOCKED","OC", 1.18f, 1.30f, 1.00f, 1.00f, 1.35f },
+    [AFX_VENTED]      = { "VENTED",     "VN", 0.92f, 0.65f, 1.00f, 1.00f, 1.30f },
+    [AFX_CALIBRATED]  = { "CALIBRATED", "CL", 1.00f, 1.00f, 1.00f, 1.30f, 1.30f },
+    [AFX_RAPID]       = { "RAPID",      "RP", 0.88f, 1.00f, 0.80f, 1.00f, 1.35f },
+    [AFX_SURPLUS]     = { "SURPLUS",    "SP", 1.00f, 1.00f, 1.00f, 1.00f, 0.70f },
+    [AFX_TUNED]       = { "TUNED",      "TN", 1.10f, 1.00f, 1.00f, 1.00f, 1.80f },
 };
 
 const EquipDef k_equip[2] = {

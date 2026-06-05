@@ -45,6 +45,22 @@ void proj_spawn(WeaponType type, int owner, int8_t target,
     proj_spawn_ex(type, owner, target, pos, dir, inherit_vel, 1.0f);
 }
 
+void proj_spawn_mine(int owner, Vec3 pos, Vec3 vel, float dmg_mult) {
+    for (int i = 0; i < MAX_PROJ; i++) {
+        Proj *p = &s_proj[i];
+        if (p->alive) continue;
+        p->alive = true;
+        p->type = WPN_MINE;
+        p->owner = (int8_t)owner;
+        p->target = -1;
+        p->pos = pos;
+        p->vel = vel;             /* slight drift, damps below */
+        p->life = 25.0f;
+        p->dmg_mult = dmg_mult;
+        return;
+    }
+}
+
 void proj_spawn_ex(WeaponType type, int owner, int8_t target,
                    Vec3 pos, Vec3 dir, Vec3 inherit_vel, float dmg_mult) {
     const WeaponDef *w = &k_weapons[type];
@@ -79,6 +95,7 @@ static float seg_sphere(Vec3 a, Vec3 seg, Vec3 c, float r) {
 }
 
 static void detonate(Proj *p) {
+    combat_set_shot_type(p->type);
     const WeaponDef *w = &k_weapons[p->type];
     if (w->aoe > 0) {
         fx_spawn_explosion(p->pos, v3(0, 0, 0));
@@ -99,7 +116,28 @@ void proj_tick(float dt) {
         const WeaponDef *w = &k_weapons[p->type];
 
         p->life -= dt;
-        if (p->life <= 0.0f) { p->alive = false; continue; }
+        if (p->life <= 0.0f) {
+            if (p->type == WPN_MINE) detonate(p);   /* timed self-destruct */
+            p->alive = false;
+            continue;
+        }
+
+        if (p->type == WPN_MINE) {
+            /* Drift damps to a stop; blinking armed light; proximity. */
+            p->vel = v3_scale(p->vel, 1.0f - 1.5f * dt);
+            p->pos = v3_add(p->pos, v3_scale(p->vel, dt));
+            for (int s2 = 0; s2 < MAX_SHIPS; s2++) {
+                if (s2 == p->owner || !g_ships[s2].alive) continue;
+                float trig = 18.0f + g_ships[s2].mesh->bound_r * 0.5f;
+                if (v3_len2(v3_sub(g_ships[s2].pos, p->pos)) <
+                    trig * trig) {
+                    detonate(p);
+                    p->alive = false;
+                    break;
+                }
+            }
+            continue;
+        }
 
         /* Homing guidance: steer velocity toward the target. */
         if (w->turn > 0 && p->target >= 0 && g_ships[p->target].alive) {
@@ -130,6 +168,7 @@ void proj_tick(float dt) {
         }
         if (hit >= 0) {
             p->pos = v3_add(p->pos, v3_scale(seg, best_t));
+            combat_set_shot_type(p->type);
             if (w->aoe > 0) {
                 detonate(p);
             } else {
@@ -171,7 +210,14 @@ void proj_emit(Vec3 cam_pos) {
             continue;
         if (sx < -6 || sx > 134 || sy < -6 || sy > 134) continue;
 
-        if (p->type == WPN_GAUSS || p->type == WPN_AUTOCANNON) {
+        if (p->type == WPN_MINE) {
+            /* Armed mine: dark body + blinking red light. */
+            static uint8_t blink;
+            blink++;
+            r3d_scene_add_point(sx, sy, d, RGB565C(70, 70, 80), 2);
+            if (blink & 8)
+                r3d_scene_add_point(sx, sy, d, RGB565C(255, 60, 40), 1);
+        } else if (p->type == WPN_GAUSS || p->type == WPN_AUTOCANNON) {
             /* Tracer: short line back along the velocity. */
             Vec3 tail = v3_sub(p->pos, v3_scale(p->vel, 0.02f));
             float tx, ty;

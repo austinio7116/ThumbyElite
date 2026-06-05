@@ -120,6 +120,30 @@ void fx_spawn_spark(Vec3 pos, Vec3 base_vel) {
     }
 }
 
+uint32_t frnd_pub(void) { return frnd(); }
+
+void fx_spawn_shield_flash(Vec3 pos, Vec3 base_vel, int ion) {
+    /* Shield impact: a blue shimmer burst — reads instantly as 'their
+     * shields are still up' (vs orange hull sparks). */
+    int n = ion ? 12 : 7;
+    for (int i = 0; i < n; i++) {
+        Vec3 v = v3_add(base_vel, v3_scale(rnd_dir(), frand(4, 16)));
+        spawn(pos, v, frand(0.12f, 0.30f),
+              ion ? RGB565C(200, 230, 255) : RGB565C(110, 170, 255),
+              RGB565C(40, 70, 180));
+    }
+}
+
+void fx_spawn_crackle(Vec3 pos, Vec3 base_vel, float r) {
+    /* Ion scramble: brief blue-white arcs dancing on the hull. */
+    for (int i = 0; i < 3; i++) {
+        Vec3 off = v3_scale(rnd_dir(), r * frand(0.5f, 1.0f));
+        spawn(v3_add(pos, off), v3_add(base_vel, v3_scale(rnd_dir(), 6.0f)),
+              frand(0.10f, 0.22f),
+              RGB565C(180, 220, 255), RGB565C(60, 90, 200));
+    }
+}
+
 void fx_gauss_helix(Vec3 prev, Vec3 cur, Vec3 dir, float traveled) {
     /* Spawn a helix point-pair every SPACING metres of flight; the pool
      * holds ~100 live pairs at gauss speed, fading white -> deep blue.

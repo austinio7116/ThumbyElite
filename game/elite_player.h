@@ -25,7 +25,8 @@ typedef struct {
     uint8_t integrity;   /* 0..100; reduces output below 100 */
     uint8_t in_use;      /* slot occupied */
     uint8_t tier;        /* equipment size 1..3 (weapons: unused) */
-    uint8_t pad[3];
+    uint8_t affix;       /* Affix: factory modification (0 = none) */
+    uint8_t pad[2];
 } WeaponInst;
 
 #define MAX_SALVAGE 10  /* array size; per-hull limit = HullDef.rack */
@@ -70,6 +71,7 @@ int   weapon_price(int type, int q); /* shop price (weapons) */
 int   equip_price(int type, int tier, int q);
 /* Effective output of an equipment instance (quality x integrity). */
 float equip_mult(const WeaponInst *e);
+int   instance_price(const WeaponInst *w);  /* base x quality x affix */
 
 /* Effective damage/heat for a mounted instance (quality + integrity). */
 float mount_dmg_mult(const WeaponInst *w);

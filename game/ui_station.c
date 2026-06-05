@@ -241,7 +241,7 @@ static int s_n_rows;
  * legendary-gun reward for exploring far terminals. */
 #define ARMORY_MAX 9
 typedef struct {
-    uint8_t type, quality, featured;
+    uint8_t type, quality, featured, affix;
     int32_t price;
 } ArmoryItem;
 static ArmoryItem s_armory[ARMORY_MAX];
@@ -272,15 +272,24 @@ static void armory_build(void) {
     pool[pn++] = WPN_AUTOCANNON;
     pool[pn++] = WPN_PULSE_M;
     pool[pn++] = WPN_MISSILE;
+    pool[pn++] = WPN_TRACTOR;
+    if (st->tech >= 4) {
+        pool[pn++] = WPN_FLAK;
+        pool[pn++] = WPN_MINE;
+    }
     if (st->tech >= 6) {
         pool[pn++] = WPN_BEAM;
         pool[pn++] = WPN_PULSE_L;
         pool[pn++] = WPN_HOMING;
     }
+    if (st->tech >= 8)
+        pool[pn++] = WPN_ION;
     if (st->tech >= 11) {
         pool[pn++] = WPN_PHOTON;
         pool[pn++] = WPN_GAUSS;
     }
+    if (st->tech >= 12)
+        pool[pn++] = WPN_RAILGUN;
     int want = 4 + (int)((h >> 8) % 3u);          /* 4-6 lines */
     if (want > pn) want = pn;
     int startp = (int)((h >> 16) % (uint32_t)pn);
@@ -295,8 +304,12 @@ static void armory_build(void) {
     for (int i = 0; i < s_n_armory; i++) {
         s_armory[i].quality = Q_STANDARD;
         s_armory[i].featured = 0;
+        s_armory[i].affix = AFX_NONE;
+        h ^= h << 13; h ^= h >> 17; h ^= h << 5;
+        if ((h % 10u) == 0) s_armory[i].affix = AFX_SURPLUS;  /* bargain bin */
         s_armory[i].price =
-            (int32_t)(weapon_price(s_armory[i].type, Q_STANDARD) * mult);
+            (int32_t)(weapon_price(s_armory[i].type, Q_STANDARD) * mult *
+                      k_affixes[s_armory[i].affix].price);
     }
 
     /* Featured offers: 0-2, likelier at high tech. ANY weapon can
@@ -314,7 +327,12 @@ static void armory_build(void) {
         it->quality = (qr < 60) ? Q_REINFORCED
                     : (qr < 90) ? Q_MILITARY : Q_PROTOTYPE;
         it->featured = 1;
-        it->price = (int32_t)(weapon_price(it->type, it->quality) * mult);
+        f ^= f << 13; f ^= f >> 17; f ^= f << 5;
+        it->affix = (f & 1) ? (uint8_t)(AFX_OVERCLOCKED + f % 4u)
+                            : AFX_NONE;
+        if (it->affix >= AFX_COUNT) it->affix = AFX_VENTED;
+        it->price = (int32_t)(weapon_price(it->type, it->quality) * mult *
+                              k_affixes[it->affix].price);
     }
 }
 
@@ -407,8 +425,9 @@ static void outfit_action_a(int row) {
                                                   e->quality) * 0.4f *
                                       (0.5f + 0.5f * e->integrity * 0.01f));
         g_player.credits -= price;
-        *e = (WeaponInst){ (uint8_t)type, Q_STANDARD, 100, 1,
-                           (uint8_t)r->tier, {0} };
+        *e = (WeaponInst){ .type = (uint8_t)type, .quality = Q_STANDARD,
+                           .integrity = 100, .in_use = 1,
+                           .tier = (uint8_t)r->tier };
         player_apply_to_ship();
         toast("FITTED");
         break;
@@ -448,8 +467,10 @@ static void outfit_action_a(int row) {
         if (slot < 0) { toast("NO FREE SLOT"); return; }
         if (g_player.credits < price) { toast("NO CREDITS"); return; }
         g_player.credits -= price;
-        g_player.mounts[slot] = (WeaponInst){ it->type, it->quality,
-                                              100, 1, 0, {0} };
+        g_player.mounts[slot] = (WeaponInst){ .type = it->type,
+                                              .quality = it->quality,
+                                              .integrity = 100, .in_use = 1,
+                                              .affix = it->affix };
         player_load_mount_ammo(slot, 1.0f);   /* sold fully loaded */
         player_apply_to_ship();
         toast("FITTED");
@@ -494,10 +515,8 @@ static void outfit_action_b(int row) {
     case ROW_SALV: {
         /* Sell from the rack: value scales with quality + integrity. */
         WeaponInst *sv = &g_player.salvage[r->index];
-        int base = (sv->type >= WPN_COUNT)
-                       ? equip_price(sv->type, sv->tier, sv->quality)
-                       : weapon_price(sv->type, sv->quality);
-        int v = (int)(base * (0.35f + 0.30f * sv->integrity * 0.01f));
+        int v = (int)(instance_price(sv) *
+                      (0.35f + 0.30f * sv->integrity * 0.01f));
         g_player.credits += v;
         sv->in_use = 0;
         toast("SOLD");
@@ -862,8 +881,10 @@ static void draw_outfit(uint16_t *fb) {
             const WeaponInst *m = &g_player.mounts[r->index];
             if (m->in_use) {
                 icon_weapon(fb, 7, y - 1, m->type);
-                snprintf(buf, sizeof buf, "Z%d %s %s %d%%",
+                snprintf(buf, sizeof buf, "Z%d %s%s%s %s %d%%",
                          h->slot_size[r->index], k_weapons[m->type].name,
+                         m->affix ? "-" : "",
+                         m->affix ? k_affixes[m->affix].tag : "",
                          k_qtag[m->quality], m->integrity);
             } else
                 snprintf(buf, sizeof buf, "Z%d EMPTY",
@@ -926,16 +947,16 @@ static void draw_outfit(uint16_t *fb) {
         case ROW_SALV: {
             const WeaponInst *m = &g_player.salvage[r->index];
             icon_weapon(fb, 7, y - 1, m->type);
-            snprintf(buf, sizeof buf, "%s %s %d%%",
-                     item_name(m->type), k_qtag[m->quality],
-                     m->integrity);
+            snprintf(buf, sizeof buf, "%s%s%s %s %d%%",
+                     item_name(m->type),
+                     m->affix ? "-" : "",
+                     m->affix ? k_affixes[m->affix].tag : "",
+                     k_qtag[m->quality], m->integrity);
             craft_font_draw(fb, buf, 21, y, c);
             /* What the shop pays (B sells). */
-            int base = (m->type >= WPN_COUNT)
-                           ? equip_price(m->type, m->tier, m->quality)
-                           : weapon_price(m->type, m->quality);
             snprintf(buf, sizeof buf, "+%d",
-                     (int)(base * (0.35f + 0.30f * m->integrity * 0.01f)));
+                     (int)(instance_price(m) *
+                           (0.35f + 0.30f * m->integrity * 0.01f)));
             craft_font_draw(fb, buf, 100, y, RGB565C(120, 200, 120));
             break;
         }
@@ -944,8 +965,10 @@ static void draw_outfit(uint16_t *fb) {
             icon_weapon(fb, 7, y - 1, it->type);
             if (it->featured) {
                 /* Featured rare: starred, quality-tagged, gold name. */
-                snprintf(buf, sizeof buf, "*%s %s",
-                         k_qtag[it->quality], k_weapons[it->type].name);
+                snprintf(buf, sizeof buf, "*%s %s%s%s",
+                         k_qtag[it->quality], k_weapons[it->type].name,
+                         it->affix ? "-" : "",
+                         it->affix ? k_affixes[it->affix].tag : "");
                 craft_font_draw(fb, buf, 21, y,
                                 (i == s_cursor) ? COL_CUR
                                                 : RGB565C(255, 200, 90));
@@ -1106,8 +1129,9 @@ void station_draw(uint16_t *fb) {
             }
         } else if (r->kind == ROW_EQSHOP) {
             const SystemInfo *sie = system_info();
-            tmp = (WeaponInst){ (uint8_t)(WPN_COUNT + r->index), Q_STANDARD,
-                                100, 1, r->tier, {0} };
+            tmp = (WeaponInst){ .type = (uint8_t)(WPN_COUNT + r->index),
+                                .quality = Q_STANDARD, .integrity = 100,
+                                .in_use = 1, .tier = r->tier };
             wi = &tmp;
             price = (int)(equip_price(WPN_COUNT + r->index, r->tier,
                                       Q_STANDARD) *
@@ -1129,7 +1153,9 @@ void station_draw(uint16_t *fb) {
             foot = "LB/RB:NEXT A:FIT B:BACK";
         } else if (r->kind == ROW_SHOP) {
             const ArmoryItem *it = &s_armory[r->index];
-            tmp = (WeaponInst){ it->type, it->quality, 100, 1, 0, {0} };
+            tmp = (WeaponInst){ .type = it->type, .quality = it->quality,
+                                .integrity = 100, .in_use = 1,
+                                .affix = it->affix };
             wi = &tmp;
             price = (int)(it->price * skill_price_mult());
             foot = "LB/RB:NEXT A:BUY B:BACK";

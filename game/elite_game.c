@@ -74,6 +74,7 @@ static Vec3    s_hyper_from_mm;   /* departure point: system recedes */
 static int   s_target = -1;      /* combat lock */
 static int   s_loot_target = -1; /* canister lock (no hostiles about) */
 static bool  s_station_lock;     /* station nav lock (nothing else) */
+static float s_rail_charge01;    /* railgun charge for the HUD arc */
 static uint32_t s_boot_seed;
 static int   s_title_cursor;
 static char  s_scoop_toast[28];
@@ -350,8 +351,8 @@ static void start_new_game(uint32_t seed) {
             h ^= h << 13; h ^= h >> 17; h ^= h << 5;
             int q = ((h >> 4) % 100u < 70) ? Q_SALVAGED : Q_STANDARD;
             g_player.mounts[i] = (WeaponInst){
-                (uint8_t)w, (uint8_t)q,
-                (uint8_t)(55 + (h % 36u)), 1, 0, {0}
+                .type = (uint8_t)w, .quality = (uint8_t)q,
+                .integrity = (uint8_t)(55 + (h % 36u)), .in_use = 1,
             };
         }
         g_player.credits = 1000;
@@ -445,7 +446,31 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
         }
 
         flight_apply_input(&in, dt);
-        if (in.fire) combat_fire(PLAYER, 0.0f, s_target);
+        /* RAILGUN charges while A is held, fires on release at full
+         * charge (rising arm tones + HUD arc). Everything else fires
+         * on hold as usual. */
+        if (p->weapons[p->active_w] == WPN_RAILGUN) {
+            static float charge;
+            static int charge_step;
+            if (in.fire && combat_can_fire(p)) {
+                charge += dt;
+                int st2 = (int)(charge / 0.2f);
+                if (st2 > charge_step && st2 <= 4) {
+                    charge_step = st2;
+                    sfx_charge_step(st2 - 1);
+                }
+                s_rail_charge01 = charge / 0.8f;
+                if (s_rail_charge01 > 1.0f) s_rail_charge01 = 1.0f;
+            } else {
+                if (charge >= 0.8f)
+                    combat_fire(PLAYER, 0.0f, s_target);
+                charge = 0;
+                charge_step = 0;
+                s_rail_charge01 = 0;
+            }
+        } else if (in.fire) {
+            combat_fire(PLAYER, 0.0f, s_target);
+        }
         if (in.secondary && p->n_weapons > 1)       /* B = next weapon */
             p->active_w = (uint8_t)((p->active_w + 1) % p->n_weapons);
         if (in.cycle_target) cycle_target();
@@ -1090,6 +1115,7 @@ void elite_game_draw_overlay(uint16_t *fb) {
             .loot_pos = lpos,
             .station_valid = (s_target < 0 && s_loot_target < 0 &&
                               s_station_lock),
+            .rail_charge01 = s_rail_charge01,
             .kills = combat_kills(),
             .fuel01 = g_player.fuel / g_player.fuel_max,
             .render_ms = s_frame_ms,

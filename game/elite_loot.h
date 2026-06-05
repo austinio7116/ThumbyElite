@@ -21,5 +21,7 @@ void loot_render(Vec3 cam_pos);
 int loot_positions(Vec3 *out, int *is_component, int max);
 /* Nearest live canister (LB lock fallback). -1 if none. */
 int loot_nearest(Vec3 from, Vec3 *out_pos);
+/* Tractor beam: pull canisters within range toward a point. */
+void loot_tractor_pull(Vec3 to, float range, float speed);
 
 #endif

@@ -297,7 +297,24 @@ void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
 
     if (info->target >= 0 && g_ships[info->target].alive)
         target_box(fb, info->target);
-    else if (info->station_valid) {
+    if (info->rail_charge01 > 0.0f) {
+        /* Charge brackets close on the reticle; full = bright flash. */
+        int g = (int)(8.0f - 5.0f * info->rail_charge01);
+        uint16_t cc = (info->rail_charge01 >= 1.0f)
+                          ? RGB565C(220, 250, 255)
+                          : RGB565C(120, 180, 220);
+        px(fb, 64 - g, 60, cc); px(fb, 64 + g, 60, cc);
+        px(fb, 64, 60 - g, cc); px(fb, 64, 60 + g, cc);
+        px(fb, 64 - g, 60 - 1, cc); px(fb, 64 + g, 60 - 1, cc);
+        px(fb, 64 - g, 60 + 1, cc); px(fb, 64 + g, 60 + 1, cc);
+    }
+    if (g_ships[PLAYER].sys_offline_t > 0.0f) {
+        /* Scrambled: weapons dead — make sure the pilot knows why. */
+        const char *sb = "SYSTEMS SCRAMBLED";
+        craft_font_draw(fb, sb, 64 - craft_font_width(sb) / 2, 28,
+                        RGB565C(120, 190, 255));
+    }
+    if (info->station_valid) {
         /* Station nav lock: cyan diamond + distance, edge arrow when
          * off screen. The station anchors the local frame at origin. */
         Ship *p = &g_ships[PLAYER];

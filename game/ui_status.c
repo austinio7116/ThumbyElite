@@ -84,9 +84,11 @@ static void build_rows(void) {
         if (m->in_use)
             row(RK_MOUNT, i,
                 m->integrity < 50 ? COL_WARN : COL_DIM, m->type,
-                "   Z%d %s %s %d%%", h->slot_size[i],
-                k_weapons[m->type].name, k_qual_tag[m->quality],
-                m->integrity);
+                "   Z%d %s%s%s %s %d%%", h->slot_size[i],
+                k_weapons[m->type].name,
+                m->affix ? "-" : "",
+                m->affix ? k_affixes[m->affix].tag : "",
+                k_qual_tag[m->quality], m->integrity);
         else
             row(RK_TEXT, 0, COL_DIM, -1, "Z%d EMPTY", h->slot_size[i]);
     }
