@@ -112,7 +112,7 @@ void audio_engine_set(float throttle01, float speed01) {
     /* Pure-sine turbine whine, well inside the speaker passband. The
      * saw version ticked: a sawtooth IS a per-cycle discontinuity. */
     s_eng_freq_t = 380.0f + 300.0f * throttle01;
-    s_eng_amp_t = 0.018f + 0.055f * speed01;
+    s_eng_amp_t = 0.06f + 0.14f * speed01;
 }
 
 /* --- mixing ------------------------------------------------------------*/
