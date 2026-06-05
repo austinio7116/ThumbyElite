@@ -68,6 +68,7 @@ add_executable(thumbyelite_host
     ${GAME}/elite_weapons.c
     ${GAME}/elite_proj.c
     ${GAME}/elite_loot.c
+    ${GAME}/elite_rocks.c
     ${GAME}/mission.c
     ${GAME}/elite_audio.c
     ${GAME}/elite_save.c

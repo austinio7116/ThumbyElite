@@ -49,10 +49,10 @@ static char s_toast[24];
 static float s_toast_t;
 static int s_detail;       /* 0 = list, 1 = detail sheet open */
 
-#define HOME_ITEMS 9
+#define HOME_ITEMS 10
 static const char *k_home[HOME_ITEMS] = {
     "MARKET", "SHIPYARD", "OUTFITTING", "MISSIONS", "BAR", "STATUS",
-    "REFUEL", "REARM", "LAUNCH",
+    "REFUEL", "REARM", "PAY FINE", "LAUNCH",
 };
 static Mission s_offers[MISSION_OFFERS];
 
@@ -287,6 +287,7 @@ static void armory_build(void) {
     pool[pn++] = WPN_PULSE_M;
     pool[pn++] = WPN_MISSILE;
     pool[pn++] = WPN_TRACTOR;
+    pool[pn++] = WPN_MINING;
     if (st->tech >= 4) {
         pool[pn++] = WPN_FLAK;
         pool[pn++] = WPN_MINE;
@@ -768,7 +769,18 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
             else if (s_cursor == 5) { s_screen = SCR_STATUS; status_open(); }
             else if (s_cursor == 6) try_refuel();
             else if (s_cursor == 7) try_rearm();
-            else if (s_cursor == 8) act = DOCK_LAUNCH;
+            else if (s_cursor == 8) {
+                if (g_player.fine <= 0) toast("RECORD CLEAN");
+                else if (g_player.credits < g_player.fine)
+                    toast("NO CREDITS");
+                else {
+                    g_player.credits -= g_player.fine;
+                    g_player.fine = 0;
+                    g_player.legal = 0;
+                    toast("RECORD CLEARED");
+                }
+            }
+            else if (s_cursor == 9) act = DOCK_LAUNCH;
         }
         if (back) act = DOCK_LAUNCH;           /* MENU = leave */
         break;
@@ -925,6 +937,10 @@ static void draw_home(uint16_t *fb) {
                 snprintf(buf, sizeof buf, "%d", rc);
                 craft_font_draw(fb, buf, hx, 23 + i * 9, COL_CRED);
             }
+        } else if (i == 8 && g_player.fine > 0) {
+            snprintf(buf, sizeof buf, "%d", g_player.fine);
+            craft_font_draw(fb, buf, hx, 23 + i * 9,
+                            RGB565C(255, 120, 70));
         }
     }
 

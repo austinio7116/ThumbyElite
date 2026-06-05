@@ -22,6 +22,7 @@
 #include "elite_combat.h"
 #include "elite_proj.h"
 #include "elite_loot.h"
+#include "elite_rocks.h"
 #include "mission.h"
 #include "elite_ai.h"
 #include "ui_hud.h"
@@ -95,6 +96,19 @@ static uint32_t xorshift32(void) {
 }
 static float frand(float lo, float hi) {
     return lo + (hi - lo) * (float)(xorshift32() & 0xFFFF) * (1.0f / 65535.0f);
+}
+
+/* The classic ladder: nine ranks earned with kills. */
+const char *elite_rank_name(int kills) {
+    static const struct { int k; const char *n; } R[9] = {
+        { 0, "HARMLESS" }, { 5, "MOSTLY HARMLESS" }, { 12, "POOR" },
+        { 25, "AVERAGE" }, { 50, "ABOVE AVERAGE" }, { 90, "COMPETENT" },
+        { 150, "DANGEROUS" }, { 250, "DEADLY" }, { 400, "ELITE" },
+    };
+    const char *n = R[0].n;
+    for (int i = 0; i < 9; i++)
+        if (kills >= R[i].k) n = R[i].n;
+    return n;
 }
 
 /* Wall-clock-ish for ambient animation (sum of frame steps). */
@@ -196,6 +210,42 @@ static void spawn_poi_content(void) {
         if (idx > 0) ship_set_tier(idx, tier, cls);
     }
 
+    /* Police patrol lawful station space: a Viper pair that minds its
+     * own business — unless you're flagged, or you shoot first. */
+    if (s_anchor_has_poi && s_anchor_poi.kind == POI_STATION &&
+        si->gov >= GOV_CONFED) {
+        int n_pol = 1 + (si->gov >= GOV_DEMOCRACY ? 1 : 0);
+        for (int k = 0; k < n_pol; k++) {
+            float a = frand(0, 6.2831f);
+            Vec3 pos = v3(cosf(a) * 420.0f, frand(-80, 80),
+                          sinf(a) * 420.0f);
+            uint32_t pseed = galaxy_get_seed() ^ 0x70110CEu;  /* one livery */
+            int idx = ship_spawn(hull_mesh(pseed, 3), pos, TEAM_NEUTRAL);
+            if (idx > 0) {
+                ship_set_tier(idx, 3, 3);
+                g_ships[idx].is_police = 1;
+                g_ships[idx].team = TEAM_NEUTRAL;
+            }
+        }
+    }
+
+    /* Asteroid fields: mining country. Extraction and refinery systems
+     * seed them thick; any beacon/planet anchor can roll a sparse one. */
+    {
+        int mining_sys = 0;
+        for (int st2 = 0; st2 < si->n_stations; st2++)
+            if (si->stations[st2].econ == ECON_EXTRACT ||
+                si->stations[st2].econ == ECON_REFINE)
+                mining_sys = 1;
+        int rock_chance = (s_anchor_poi.kind == POI_STATION) ? 10 : 25;
+        if (mining_sys) rock_chance += 35;
+        if (s_anchor_has_poi &&
+            (int)(xorshift32() % 100u) < rock_chance)
+            rocks_spawn_field(xorshift32(),
+                              mining_sys ? 5 + (int)(xorshift32() % 4u)
+                                         : 3 + (int)(xorshift32() % 3u));
+    }
+
     /* Derelict debris (user req): some sites have loot just floating —
      * old wrecks, jettisoned cargo. More in lawless space; beacons and
      * planets are picked-over less often than patrolled stations. */
@@ -256,6 +306,7 @@ static void drop_anchor(Vec3 pos_mm, const Poi *poi) {
     hull_cache_reset(g_ships[PLAYER].mesh);
     fx_init();
     loot_init();
+    rocks_init();
     s_target = -1;
 }
 
@@ -540,6 +591,102 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
         }
         combat_set_player_target(
             (s_target >= 0 && g_ships[s_target].alive) ? s_target : -1);
+        /* Police scans: a neutral patrol inside 300m sweeps your hold —
+         * carrying contraband gets you FLAGGED, and flagged pilots get
+         * engaged. Shooting first does too (see combat). */
+        {
+            static float scan_t;
+            int illegal2 = 0;
+            for (int g2 = 0; g2 < N_GOODS; g2++)
+                if (k_goods[g2].flags & GOOD_ILLEGAL)
+                    illegal2 += g_player.cargo[g2];
+            int near_police = -1;
+            for (int i = 1; i < MAX_SHIPS; i++)
+                if (g_ships[i].alive && g_ships[i].is_police &&
+                    g_ships[i].team == TEAM_NEUTRAL &&
+                    v3_len(v3_sub(g_ships[i].pos, p->pos)) < 300.0f) {
+                    near_police = i;
+                    break;
+                }
+            if (near_police >= 0 && illegal2 > 0 &&
+                g_player.legal == 0) {
+                scan_t += dt;
+                if (scan_t > 0.8f && scan_t < 0.9f) {
+                    snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                             "POLICE SCAN...");
+                    s_scoop_toast_t = 1.6f;
+                }
+                if (scan_t > 2.6f) {
+                    g_player.legal = 1;
+                    g_player.fine += 120 + illegal2 * 30;
+                    snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                             "FLAGGED: SMUGGLER");
+                    s_scoop_toast_t = 3.0f;
+                    sfx_lock_warn();
+                }
+            } else {
+                scan_t = 0;
+            }
+            /* Flagged pilots get engaged on sight. */
+            if (g_player.legal >= 1)
+                for (int i = 1; i < MAX_SHIPS; i++)
+                    if (g_ships[i].alive && g_ships[i].is_police &&
+                        g_ships[i].team == TEAM_NEUTRAL)
+                        g_ships[i].team = TEAM_HOSTILE;
+        }
+        /* Miners attract vultures: while a rock field is live, an
+         * ambush clock runs — one threat-scaled pirate jump per visit,
+         * announced a beat before they arrive. */
+        {
+            static float ambush_t;
+            static bool ambushed;
+            Vec3 rk[8];
+            if (!ambushed && rocks_positions(rk, 8) > 0) {
+                const SystemInfo *si2 = system_info();
+                ambush_t += dt;
+                float due = 50.0f - (float)si2->threat * 8.0f;
+                if (si2->threat > 0 && ambush_t > due) {
+                    ambushed = true;
+                    snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                             "PIRATES INBOUND");
+                    s_scoop_toast_t = 2.5f;
+                    sfx_lock_warn();
+                    int n2 = 1 + (int)(xorshift32() % 2u);
+                    for (int k = 0; k < n2; k++) {
+                        float a2 = frand(0, 6.2831f);
+                        Vec3 pp2 = v3_add(g_ships[PLAYER].pos,
+                                          v3(cosf(a2) * 900.0f,
+                                             frand(-200, 200),
+                                             sinf(a2) * 900.0f));
+                        int tier2 = (int)si2->threat - 1 +
+                                    (int)(xorshift32() % 2u);
+                        if (tier2 < 0) tier2 = 0;
+                        int cls2 = 1 + tier2;
+                        if (cls2 > 5) cls2 = 5;
+                        uint32_t ms2 = (uint32_t)(si2->seed >> 24) ^
+                                       (uint32_t)(cls2 * 0x9E3779B9u) ^ k;
+                        int idx2 = ship_spawn(hull_mesh(ms2, cls2), pp2,
+                                              TEAM_HOSTILE);
+                        if (idx2 > 0) ship_set_tier(idx2, tier2, cls2);
+                    }
+                }
+            } else if (rocks_positions(rk, 8) == 0) {
+                ambush_t = 0;     /* reset between fields */
+                ambushed = false;
+            }
+        }
+        /* Rank-up fanfare. */
+        {
+            static const char *last_rank;
+            const char *r = elite_rank_name(combat_kills());
+            if (last_rank && r != last_rank) {
+                snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                         "RANK: %s", r);
+                s_scoop_toast_t = 3.0f;
+                sfx_lock_acquire();
+            }
+            last_rank = r;
+        }
     } else {
         if (!dead_latch) { dead_latch = true; respawn_t = 3.0f; }
         respawn_t -= dt;
@@ -565,6 +712,7 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
     ai_tick(dt);
     combat_tick(dt);
     fx_tick(dt);
+    rocks_tick(dt);
 
     /* Overheat klaxon (repeats while hot) + throttle-following hum. */
     {
@@ -605,18 +753,39 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
 }
 
 static void tick_supercruise(const CraftRawButtons *btn, float dt) {
-    /* FUELSCOOP: skim close to the star to refuel — heat builds while
-     * you do (free fuel, sweaty palms). */
-    if (player_has_util(EQ_FUELSCOOP)) {
+    /* Star proximity HEAT — for everyone, scoop or not. Builds faster
+     * than dissipation inside ~6 star radii (the old 9/s build lost to
+     * the 12/s passive cooling and never registered — user-caught);
+     * past redline the hull itself starts to burn. Sun-skimming is a
+     * real risk now, exactly like the old game. */
+    {
         const SystemInfo *si = system_info();
-        float scoop_r = si->star_radius_mm * 4.5f;
         float d = v3_len(s_sc_pos_mm);
-        if (d < scoop_r && g_player.fuel < g_player.fuel_max) {
+        float hot_r = si->star_radius_mm * 6.0f;
+        if (d < hot_r) {
+            float k = 1.0f - d / hot_r;               /* 0 edge..1 core */
+            g_ships[PLAYER].heat += (14.0f + 38.0f * k) * dt;
+            if (g_ships[PLAYER].heat > 100.0f) {
+                g_ships[PLAYER].heat = 100.0f + 0.0f;
+                g_ships[PLAYER].hull -= 5.0f * dt;     /* burning */
+                snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                         "HULL BURNING!");
+                s_scoop_toast_t = 0.5f;
+                if (g_ships[PLAYER].hull <= 0.0f) {
+                    g_ships[PLAYER].alive = false;     /* flew too close */
+                    g_ships[PLAYER].hull = 0.0f;
+                }
+            }
+        }
+        /* FUELSCOOP: free fuel while inside the heat zone. */
+        if (player_has_util(EQ_FUELSCOOP) &&
+            d < si->star_radius_mm * 4.5f &&
+            g_player.fuel < g_player.fuel_max) {
             g_player.fuel += 1.6f * dt;
             if (g_player.fuel > g_player.fuel_max)
                 g_player.fuel = g_player.fuel_max;
-            g_ships[PLAYER].heat += 9.0f * dt;
-            if (((int)(s_time * 2.0f) & 1) == 0) {
+            if (((int)(s_time * 2.0f) & 1) == 0 &&
+                g_ships[PLAYER].heat < 95.0f) {
                 snprintf(s_scoop_toast, sizeof s_scoop_toast,
                          "SCOOPING %d.%d LY", (int)g_player.fuel,
                          ((int)(g_player.fuel * 10)) % 10);
@@ -772,6 +941,12 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
     case ST_SUPERCRUISE:
         if (menu_edge) { s_state = ST_PAUSE; s_pause_cursor = 0; break; }
         tick_supercruise(btn, dt);
+        if (!g_ships[PLAYER].alive) {
+            /* Burned up at the star: drop to flight, whose death path
+             * runs the insurance respawn. */
+            fx_spawn_explosion(g_ships[PLAYER].pos, v3(0, 0, 0));
+            s_state = ST_FLIGHT;
+        }
         break;
 
     case ST_HYPERJUMP:
@@ -1084,6 +1259,7 @@ void elite_game_render_begin(void) {
             r3d_scene_add_object(&obj);
         }
         loot_render(p->pos);
+        rocks_render(p->pos, s_time);
         fx_emit_all(p->pos, p->vel);
         proj_emit(p->pos);
         break;

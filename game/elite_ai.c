@@ -99,7 +99,18 @@ static void ai_ship(int idx, float dt) {
 
 void ai_tick(float dt) {
     for (int i = 1; i < MAX_SHIPS; i++) {
-        if (!g_ships[i].alive || g_ships[i].team != TEAM_HOSTILE) continue;
+        if (!g_ships[i].alive) continue;
+        if (g_ships[i].team == TEAM_NEUTRAL && g_ships[i].is_police) {
+            /* Patrol drift: a slow circuit of the station approaches. */
+            Ship *s2 = &g_ships[i];
+            Vec3 tangent = v3_cross(v3(0, 1, 0), v3_norm(s2->pos));
+            s2->vel = v3_lerp(s2->vel, v3_scale(tangent, 18.0f),
+                              0.5f * dt);
+            s2->pos = v3_add(s2->pos, v3_scale(s2->vel, dt));
+            m3_rotate_local(&s2->basis, 1, 0.15f * dt);
+            continue;
+        }
+        if (g_ships[i].team != TEAM_HOSTILE) continue;
         ai_ship(i, dt);
     }
 }

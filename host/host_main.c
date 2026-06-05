@@ -354,8 +354,8 @@ int main(int argc, char **argv) {
         MV_TAP(down, 3); MV_TAP(a, 12);         /* MISSIONS */
         MV_TAP(a, 14);                          /* accept the first */
         MV_TAP(menu, 8);
-        for (int k = 0; k < 5; k++) MV_TAP(down, 2);
-        MV_TAP(a, 20);                          /* LAUNCH */
+        for (int k = 0; k < 6; k++) MV_TAP(down, 2);
+        MV_TAP(a, 20);                          /* LAUNCH (idx 9 now) */
         MV_IDLE(40);
 
         printf("[movie] station phase done, state=%d frame=%d\n",

@@ -115,6 +115,13 @@ void icon_weapon(uint16_t *fb, int x, int y, int wpn_type) {
         px(fb, x + 7, y + 4, hot); px(fb, x + 9, y + 1, hot);
         px(fb, x + 9, y + 5, hot);
         break;
+    case WPN_MINING:
+        /* stub emitter + ore chips */
+        hbar(fb, x + 1, x + 5, y + 3, BODY);
+        px(fb, x + 7, y + 3, hot);
+        px(fb, x + 9, y + 1, BODY2); px(fb, x + 10, y + 4, BODY2);
+        px(fb, x + 8, y + 5, BODY2); px(fb, x + 11, y + 2, BODY2);
+        break;
     case EQ_SHIELD:
         /* arc shell + core */
         px(fb, x + 4, y + 1, hot); px(fb, x + 5, y + 1, hot);

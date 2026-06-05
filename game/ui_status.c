@@ -146,6 +146,20 @@ static void build_rows(void) {
             k_goods[i].name);
     }
     if (!any) row(RK_TEXT, 0, COL_DIM, -1, "(EMPTY)");
+    {
+        extern int combat_kills(void);
+        extern const char *elite_rank_name(int);
+        int k2 = combat_kills();
+        row(RK_TEXT, 0, COL_CRED, -1, "RANK: %s (%d)",
+            elite_rank_name(k2), k2);
+        static const char *k_legal[3] = { "CLEAN", "OFFENDER",
+                                          "FUGITIVE" };
+        row(RK_TEXT, 0,
+            g_player.legal ? COL_WARN : COL_DIM, -1,
+            "LEGAL: %s%s", k_legal[g_player.legal > 2 ? 2
+                                                      : g_player.legal],
+            g_player.fine > 0 ? " (FINE DUE)" : "");
+    }
     row(RK_TEXT, 0, COL_HDR, -1, "SKILLS:");
     uint16_t xs[4] = { g_player.xp_gunnery, g_player.xp_trading,
                        g_player.xp_tech, g_player.xp_piloting };

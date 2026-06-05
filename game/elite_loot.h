@@ -23,5 +23,7 @@ int loot_positions(Vec3 *out, int *is_component, int max);
 int loot_nearest(Vec3 from, Vec3 *out_pos);
 /* Tractor beam: pull canisters within range toward a point. */
 void loot_tractor_pull(Vec3 to, float range, float speed);
+/* Mining: spill an ore canister (minerals/metals, rare gems). */
+void loot_spawn_ore(Vec3 pos, Vec3 vel);
 
 #endif

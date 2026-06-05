@@ -9,6 +9,7 @@
 #include "elite_proj.h"
 #include "elite_player.h"
 #include "elite_loot.h"
+#include "elite_rocks.h"
 #include "mission.h"
 #include "r3d_fx.h"
 #include "elite_audio.h"
@@ -133,6 +134,13 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
     if (shooter == PLAYER) {
         s_hitmark = 0.12f;
         if (had_shield && v->shield > 0.0f) sfx_enemy_shield_hit();
+        /* Firing on the law: instant FUGITIVE, and they engage. */
+        if (v->is_police && g_player.legal < 2) {
+            g_player.legal = 2;
+            g_player.fine += 800;
+            v->team = TEAM_HOSTILE;
+        }
+        if (v->is_police) v->team = TEAM_HOSTILE;
     }
     if (v->hull <= 0.0f) {
         v->alive = false;
@@ -152,7 +160,11 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
         }
         if (shooter == PLAYER) {
             s_killmark = 0.7f;
-            if (victim != PLAYER) {
+            if (victim != PLAYER && v->is_police) {
+                /* Cop killer: no bounty, a heavy fine on your head. */
+                g_player.legal = 2;
+                g_player.fine += 1500;
+            } else if (victim != PLAYER) {
                 g_player.xp_gunnery++;
                 /* Lawful kill bounty: dangerous pilots pay big. */
                 static const int k_pay[5] = { 25, 80, 220, 600, 1600 };
@@ -312,6 +324,21 @@ int combat_fire(int shooter, float spread, int target) {
         float t = ray_sphere(s->pos, dir, g_ships[i].pos,
                              g_ships[i].mesh->bound_r * 0.85f);
         if (t >= 0.0f && t < best_t) { best_t = t; best = i; }
+    }
+    /* Asteroids block (and feed) hitscan fire — the MINING laser chips
+     * them at 4x; everything else at 1x. */
+    {
+        float rt;
+        int ri = rocks_ray(s->pos, dir, best_t, &rt);
+        if (ri >= 0) {
+            Vec3 rhit = v3_add(s->pos, v3_scale(dir, rt));
+            fx_beam(muzzle, rhit, w->color);
+            float rd = w->dmg * dmg_mult *
+                       (wtype == WPN_MINING ? 4.0f : 1.0f);
+            if (rocks_damage(ri, rd, rhit) && shooter == PLAYER)
+                g_player.xp_tech += 1;
+            return -1;
+        }
     }
     Vec3 end = v3_add(s->pos, v3_scale(dir,
                       best >= 0 ? best_t : w->range * range_mult));

@@ -49,6 +49,8 @@ typedef struct {
     int8_t chaff_charges;               /* CHAFF ammo (4 max) */
     uint8_t invert_y;                   /* 1 = flight-stick (UP = dive) */
     uint8_t show_fps;                   /* green FPS readout, top middle */
+    uint8_t legal;                      /* 0 CLEAN / 1 OFFENDER / 2 FUGITIVE */
+    int32_t fine;                       /* outstanding, payable at any dock */
     int16_t ammo[HULL_SLOTS];           /* rounds per mount (-1 energy) */
 
     /* Pilot skills: XP accumulators (levels derived). */

@@ -12,6 +12,7 @@
 #include "elite_entity.h"
 #include "elite_combat.h"
 #include "elite_loot.h"
+#include "elite_rocks.h"
 #include "r3d_scene.h"
 #include "craft_font.h"
 #include "ui_icons.h"
@@ -136,13 +137,30 @@ static void scanner(uint16_t *fb) {
         int stalk = (int)(-local.y * (40.0f / SC_RANGE));
         if (stalk > 9) stalk = 9;
         if (stalk < -9) stalk = -9;
-        uint16_t c = (s->team == TEAM_HOSTILE) ? COL_BLIP_H : COL_BLIP_N;
+        uint16_t c = s->is_police ? RGB565C(90, 180, 255)
+                   : (s->team == TEAM_HOSTILE) ? COL_BLIP_H : COL_BLIP_N;
         px(fb, fx, fy, COL_FRAME);
         if (stalk != 0)
             vline(fb, fx, fy < fy + stalk ? fy : fy + stalk,
                   fy < fy + stalk ? fy + stalk : fy, c);
         px(fb, fx, fy + stalk, c);
         px(fb, fx + 1, fy + stalk, c);
+    }
+
+    /* Asteroids: steady dim brown blips. */
+    {
+        Vec3 rocks[8];
+        int nr = rocks_positions(rocks, 8);
+        for (int i = 0; i < nr; i++) {
+            Vec3 local = m3_mul_v3_t(&p->basis, v3_sub(rocks[i], p->pos));
+            float dx = local.x * (SC_RX / SC_RANGE);
+            float dz = -local.z * (SC_RY / SC_RANGE);
+            float e = (dx * dx) / (SC_RX * SC_RX) +
+                      (dz * dz) / (SC_RY * SC_RY);
+            if (e > 1.0f) continue;            /* off-disc: skip rocks */
+            px(fb, SC_CX + (int)dx, SC_CY + (int)dz,
+               RGB565C(150, 125, 95));
+        }
     }
 
     /* Loot canisters: gold blips, blinking so they catch the eye.
@@ -247,9 +265,12 @@ static void target_box(uint16_t *fb, int target) {
         COL_SHIELD);
     bar(fb, 100, 24, 22, t->hull / (t->hull_max > 0 ? t->hull_max : 1),
         COL_HULL);
-    craft_font_draw(fb, t->is_mark ? "** MARK **"
-                                   : k_tier_names[t->tier > 4 ? 4 : t->tier],
-                    98, 28, COL_TARGET);
+    craft_font_draw(fb,
+                    t->is_police ? "POLICE"
+                  : t->is_mark   ? "** MARK **"
+                                 : k_tier_names[t->tier > 4 ? 4 : t->tier],
+                    98, 28,
+                    t->is_police ? RGB565C(90, 180, 255) : COL_TARGET);
 }
 
 void ui_hud_draw(uint16_t *fb, const HudInfo *info) {

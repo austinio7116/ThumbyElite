@@ -109,7 +109,7 @@
 </header>
 
 <nav>
-  <a href="#start">Start</a><a href="#controls">Controls</a><a href="#hud">HUD</a><a href="#flight">Flight</a><a href="#combat">Combat</a><a href="#weapons">Weapons</a><a href="#equipment">Equipment</a><a href="#salvage">Salvage</a><a href="#travel">Travel</a><a href="#galaxy">Galaxy</a><a href="#trading">Trading</a><a href="#stations">Stations</a><a href="#ships">Ships</a><a href="#missions">Missions</a><a href="#skills">Skills</a><a href="#death">Death &amp; Saves</a><a href="#field">Flying Your Ship</a>
+  <a href="#start">Start</a><a href="#controls">Controls</a><a href="#hud">HUD</a><a href="#flight">Flight</a><a href="#combat">Combat</a><a href="#weapons">Weapons</a><a href="#equipment">Equipment</a><a href="#salvage">Salvage</a><a href="#travel">Travel</a><a href="#galaxy">Galaxy</a><a href="#trading">Trading</a><a href="#stations">Stations</a><a href="#ships">Ships</a><a href="#missions">Missions</a><a href="#skills">Skills</a><a href="#law">The Law</a><a href="#mining">Mining</a><a href="#rank">Rank</a><a href="#death">Death &amp; Saves</a><a href="#field">Flying Your Ship</a>
 </nav>
 
 <main>
@@ -442,7 +442,7 @@ fit there, never competing with guns or protection:</p>
 <tr><td class="tag">HEATSINK</td><td>−25% weapon heat</td><td class="y">2,200</td></tr>
 <tr><td class="tag">SCANNER+</td><td>radar range 400 → 700&nbsp;m</td><td class="y">1,500</td></tr>
 <tr><td class="tag">AB TANK</td><td>boost burn 2.2 → 4.0&nbsp;s</td><td class="y">1,800</td></tr>
-<tr><td class="tag">FUELSCOOP</td><td>skim close to a star in supercruise for free fuel — heat builds while you do (T7+ shops)</td><td class="y">2,600</td></tr>
+<tr><td class="tag">FUELSCOOP</td><td>skim close to a star in supercruise for free fuel — every ship heats near a star; past redline the hull burns (T7+ shops)</td><td class="y">2,600</td></tr>
 <tr><td class="tag">TARGETCOMP</td><td>+40% seeker agility + a <b class="g">lead pip</b> for ballistic guns: put the cross on the pip and the rounds connect (T9+)</td><td class="y">3,400</td></tr>
 <tr><td class="tag">CHAFF</td><td><span class="key">LB</span>+<span class="key">B</span> dumps chaff: every seeker tracking you goes blind. 4 charges, 20&nbsp;cr each at REARM (T5+)</td><td class="y">1,200</td></tr>
 </table>
@@ -630,7 +630,7 @@ computer takes over and glides you in. On arrival, the station:</p>
 <ul>
 <li><b>repairs and rearms nothing automatically</b> — REPAIR (outfitting), REARM and REFUEL are paid services you choose,</li>
 <li>pays out any completed missions,</li>
-<li><b>saves your game</b> (this is the checkpoint system — see <a href="#death">Death &amp; Saves</a><a href="#field">Flying Your Ship</a>).</li>
+<li><b>saves your game</b> (this is the checkpoint system — see <a href="#law">The Law</a><a href="#mining">Mining</a><a href="#rank">Rank</a><a href="#death">Death &amp; Saves</a><a href="#field">Flying Your Ship</a>).</li>
 </ul>
 <p>Services: <b>MARKET</b> (trade), <b>SHIPYARD</b> (hulls), <b>OUTFITTING</b>
 (the armoury — stock varies per terminal — plus equipment, repairs, salvage), <b>MISSIONS</b> (the board),
@@ -722,6 +722,52 @@ that faction's space — a +50 standing pays +20% on everything.</p>
 salvage business. Check your levels any time in SHIP STATUS.</p>
 
 <!-- ============================================================ -->
+<h2 id="law">The Law</h2>
+<p>Lawful systems (Confederacy and up) post <b class="c">police
+Vipers</b> — pale blue on the scanner, <span class="tag c">POLICE</span>
+on the lock — patrolling station space. They ignore clean pilots.</p>
+<ul>
+<li><b>Carrying contraband near a patrol</b> gets you scanned
+(<span class="tag">POLICE SCAN...</span>, ~2.5&nbsp;s inside 300&nbsp;m)
+— then <b class="r">FLAGGED: SMUGGLER</b>: OFFENDER status, a fine on
+your head, and every patrol engages on sight.</li>
+<li><b>Shooting a police ship</b> makes you a <b class="r">FUGITIVE</b>
+instantly (+800 fine); killing one pays no bounty and adds 1,500.</li>
+<li><b>PAY FINE</b> at any station's services menu clears your record
+and the heat. Until then, lawful space hunts you — smuggle through
+Anarchy and Feudal systems, where there are no police at all (and the
+black markets live).</li>
+<li>Your status shows in SHIP STATUS: CLEAN / OFFENDER / FUGITIVE.</li>
+</ul>
+
+<h2 id="mining">Mining</h2>
+<p><b>Asteroid fields</b> drift near beacons and planets — thick and
+frequent in <span class="tag">EXTRACTION</span> and
+<span class="tag">REFINERY</span> systems (the rocks are dim brown on
+the scanner). Fit a <b>MINING laser</b> (Z1, 700&nbsp;cr, every
+armoury) and chip them: every 20 damage of chipping spills an <b>ore
+canister</b> — minerals, metals, and an 8% chance of
+<span class="y">RARE GEMS</span> (400&nbsp;cr a unit) — and cracking a
+rock open spills a final bonus. Any hitscan laser works at a quarter
+the rate; the mining laser is the tool.</p>
+<p>Scoop the ore like any salvage (it counts toward Tech XP) and sell
+at market — Industrial and High-Tech stations pay best for raw
+materials. One warning: <b>ore in space attracts vultures</b>. Work a
+field long enough — sooner in dangerous systems — and you'll hear
+<span class="tag r">PIRATES INBOUND</span>. Mine fast, scoop faster, or
+bring guns.</p>
+
+<h2 id="rank">Combat Rank</h2>
+<p>Every kill counts toward the classic ladder (shown in SHIP STATUS,
+with a fanfare on promotion):</p>
+<table>
+<tr><th>Kills</th><th>Rank</th><th>Kills</th><th>Rank</th><th>Kills</th><th>Rank</th></tr>
+<tr><td>0</td><td class="tag">HARMLESS</td><td>25</td><td class="tag">AVERAGE</td><td>150</td><td class="tag">DANGEROUS</td></tr>
+<tr><td>5</td><td class="tag">MOSTLY HARMLESS</td><td>50</td><td class="tag">ABOVE AVERAGE</td><td>250</td><td class="tag">DEADLY</td></tr>
+<tr><td>12</td><td class="tag">POOR</td><td>90</td><td class="tag">COMPETENT</td><td>400</td><td class="tag y">ELITE</td></tr>
+</table>
+
+<!-- ============================================================ -->
 <h2 id="death">Death &amp; Saves</h2>
 <ul>
 <li><b>Docking saves</b> — automatically, every time. The save keeps your galaxy seed, ship, gear (with exact quality/wear/ammo), cargo, credits, reputation and mission log.</li>
@@ -739,12 +785,14 @@ fortunes vanish.</div>
 point the nose at the sun and close in until it dominates the screen.
 Inside roughly 4.5× the star's radius the scoop runs by itself — there's
 no button. You'll see a pulsing <span class="tag y">SCOOPING 14.2
-LY</span> toast counting your fuel up, the <b>F bar</b> refilling at
-1.6&nbsp;LY/s (empty to full in ~19&nbsp;s), and the <b class="y">T bar
-climbing</b> at 9/s — that heat is the price. Past the klaxon your
-weapons cut out until you cool, so skim in passes: dive, fill, pull
-away. It pays for itself in about seven tanks, but its real value is
-crossing station-less systems without stranding.</p>
+LY</span> toast counting your fuel up and the <b>F bar</b> refilling at
+1.6&nbsp;LY/s (empty to full in ~19&nbsp;s). The price is <b>star
+heat</b>: every ship (scoop or not) heats inside ~6 star radii, faster
+the deeper you go — past the klaxon your weapons cut out, and at the
+redline <span class="tag r">HULL BURNING!</span> means exactly that:
+5&nbsp;hull/s until you pull away or die in the corona. Skim in passes:
+dive, fill, run. It pays for itself in about seven tanks, but its real
+value is crossing station-less systems without stranding.</p>
 
 <h3><img class="fm" src="img/fm_railgun.png" alt="">Railgun charge</h3>
 <p>The railgun doesn't fire on press — select it with

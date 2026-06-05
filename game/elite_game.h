@@ -30,5 +30,6 @@ void elite_game_set_frame_ms(float ms);
 int  elite_game_state(void);    /* GState as int: 0=flight 1=sc 2=jump ... */
 void elite_game_debug_spawn(int n);
 void elite_game_debug_face_away_from_sun(void);
+const char *elite_rank_name(int kills);
 
 #endif

@@ -206,6 +206,27 @@ int loot_nearest(Vec3 from, Vec3 *out_pos) {
     return best;
 }
 
+void loot_spawn_ore(Vec3 pos, Vec3 vel) {
+    for (int i = 0; i < MAX_CANS; i++) {
+        Canister *c = &s_cans[i];
+        if (c->alive) continue;
+        c->alive = true;
+        c->is_component = 0;
+        int roll = (int)(rnd() % 100u);
+        c->good = (roll < 55) ? 12          /* MINERALS */
+                : (roll < 92) ? 11          /* METALS */
+                              : 15;         /* RARE GEMS — the jackpot */
+        c->count = (uint8_t)(1 + (rnd() & 1));
+        c->pos = pos;
+        c->vel = v3_add(vel, v3(((int)(rnd() % 7) - 3) * 1.0f,
+                                ((int)(rnd() % 5) - 2) * 1.0f,
+                                ((int)(rnd() % 7) - 3) * 1.0f));
+        c->spin = 0.8f;
+        c->life = 1.0f;
+        return;
+    }
+}
+
 void loot_tractor_pull(Vec3 to, float range, float speed) {
     for (int i = 0; i < MAX_CANS; i++) {
         Canister *c = &s_cans[i];
