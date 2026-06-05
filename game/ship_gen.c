@@ -594,8 +594,11 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
         if (ml > 0) {
             float gap = ax * rndf(0.14f, 0.3f);
             float pw = ax * rndf(0.16f, 0.26f);
-            float tw = rndf(0.45f, 0.7f);    /* tip width fraction */
-            float th2 = rndf(0.5f, 0.75f);   /* tip height fraction */
+            /* Wide taper space: from near-parallel rails (0.9) down to
+             * needle points (0.15); height taper rolls independently
+             * so prongs can be blade-flat, knife-thin, or chunky. */
+            float tw = rndf(0.15f, 0.9f);    /* tip width fraction */
+            float th2 = rndf(0.25f, 0.9f);   /* tip height fraction */
             float xo = gap + pw * 2.0f;      /* outer root edge */
             float xt = gap + pw * 2.0f * tw; /* outer tip edge */
             uint16_t MUZ2 = RGB565C(40, 40, 48);
