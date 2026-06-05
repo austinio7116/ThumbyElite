@@ -215,25 +215,76 @@ void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
         float inv_r = 1.0f / im->r_px;
 
         if (im->planet < 0) {
-            /* Sun: radial gradient, no terminator. */
-            uint16_t core = RGB565C(255, 255, 240);
-            uint16_t mid = s_info ? s_info->star_color : RGB565C(255, 230, 150);
-            for (int py = ylo; py <= yhi; py++) {
+            /* Sun: white-hot core -> dithered blend through the star's
+             * colour -> glow halo (saturating add over the background)
+             * + faint diffraction spikes. Disc writes depth; glow doesn't
+             * (ships drawn later overwrite it -> bloom hugs occluders). */
+            uint16_t star = s_info ? s_info->star_color : RGB565C(255, 230, 150);
+            int sr = (star >> 11) & 31, sg = (star >> 5) & 63, sb = star & 31;
+            float halo = 2.1f;                       /* halo extent, x disc */
+            int hr = (int)(im->r_px * halo) + 1;
+            int hylo = cy - hr, hyhi = cy + hr;
+            if (hylo < y0) hylo = y0;
+            if (hyhi >= y1) hyhi = y1 - 1;
+            static const uint8_t bayer[2][2] = { {0, 2}, {3, 1} };
+            for (int py = hylo; py <= hyhi; py++) {
                 float ny = (py - im->sy) * inv_r;
-                float w2 = 1.0f - ny * ny;
-                if (w2 <= 0) continue;
-                int half = (int)(sqrtf(w2) * im->r_px);
-                int x0 = cx - half, x1 = cx + half;
-                if (x0 < 0) x0 = 0;
-                if (x1 > 127) x1 = 127;
                 uint16_t *fr = fb + py * ELITE_FB_W;
                 uint16_t *dr = depth + py * ELITE_FB_W;
+                int xspan = (int)(sqrtf(halo * halo - (ny < 0 ? -ny : ny) *
+                                        (ny < 0 ? -ny : ny) > 0
+                                            ? halo * halo - ny * ny : 0) *
+                                  im->r_px);
+                int x0 = cx - xspan, x1 = cx + xspan;
+                if (x0 < 0) x0 = 0;
+                if (x1 > 127) x1 = 127;
                 for (int px = x0; px <= x1; px++) {
-                    if (im->d <= dr[px]) continue;
                     float nx = (px - im->sx) * inv_r;
-                    float rr = nx * nx + ny * ny;
-                    dr[px] = im->d;
-                    fr[px] = (rr < 0.45f) ? core : mid;
+                    float rr = sqrtf(nx * nx + ny * ny);
+                    if (rr <= 1.0f) {
+                        if (im->d <= dr[px]) continue;
+                        dr[px] = im->d;
+                        /* Dithered white->star colour from 0.45 out. */
+                        float f = (rr - 0.45f) * (1.0f / 0.55f);
+                        float th = (bayer[py & 1][px & 1] + 0.5f) * 0.25f;
+                        fr[px] = (f > th) ? star : RGB565C(255, 255, 240);
+                    } else if (rr <= halo) {
+                        /* Quadratic glow falloff, saturating add. */
+                        float g = 1.0f - (rr - 1.0f) / (halo - 1.0f);
+                        g = g * g * 0.7f;
+                        int r = ((fr[px] >> 11) & 31) + (int)(sr * g);
+                        int gg = ((fr[px] >> 5) & 63) + (int)(sg * g);
+                        int b = (fr[px] & 31) + (int)(sb * g);
+                        if (r > 31) r = 31;
+                        if (gg > 63) gg = 63;
+                        if (b > 31) b = 31;
+                        fr[px] = (uint16_t)((r << 11) | (gg << 5) | b);
+                    }
+                }
+            }
+            /* Diffraction spikes: thin horizontal/vertical rays. */
+            if (im->r_px >= 3.0f) {
+                int len = (int)(im->r_px * 3.2f);
+                for (int k = (int)im->r_px + 1; k <= len; k++) {
+                    float g = 1.0f - (float)(k - im->r_px) /
+                              (float)(len - im->r_px + 1);
+                    g = g * g * 0.5f;
+                    int ar = (int)(sr * g), ag = (int)(sg * g), ab = (int)(sb * g);
+                    static const int dxs[4] = { 1, -1, 0, 0 };
+                    static const int dys[4] = { 0, 0, 1, -1 };
+                    for (int s = 0; s < 4; s++) {
+                        int px = cx + dxs[s] * k, py = cy + dys[s] * k;
+                        if ((unsigned)px >= ELITE_FB_W) continue;
+                        if (py < y0 || py >= y1) continue;
+                        uint16_t *fp = &fb[py * ELITE_FB_W + px];
+                        int r = ((*fp >> 11) & 31) + ar;
+                        int gg = ((*fp >> 5) & 63) + ag;
+                        int b = (*fp & 31) + ab;
+                        if (r > 31) r = 31;
+                        if (gg > 63) gg = 63;
+                        if (b > 31) b = 31;
+                        *fp = (uint16_t)((r << 11) | (gg << 5) | b);
+                    }
                 }
             }
             continue;
