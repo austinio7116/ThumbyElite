@@ -17,22 +17,38 @@ static float ramp(float *t, float active, float dt) {
     return 0.01f + 0.99f * k;
 }
 
+/* Steering momentum (user request): the actual turn rate CHASES the
+ * commanded rate — fast attack, slower release — so alternating UP /
+ * RIGHT taps blend into a diagonal arc the 4-way d-pad can't command
+ * directly. Release tail ~0.25s: enough to blend, not floaty. */
+static float s_vel_pitch, s_vel_yaw, s_vel_roll;
+static float chase(float *vel, float target, float dt) {
+    float k = (target != 0.0f) ? 14.0f : 4.5f;
+    float a = k * dt;
+    if (a > 1.0f) a = 1.0f;
+    *vel += (target - *vel) * a;
+    if (target == 0.0f && *vel < 0.02f && *vel > -0.02f) *vel = 0.0f;
+    return *vel;
+}
+
 void flight_apply_input(const FlightInput *in, float dt) {
     Ship *p = &g_ships[PLAYER];
     if (!p->alive) return;
 
     float tr = p->turn_rate * dt;
-    float rp = ramp(&s_ramp_pitch, in->pitch, dt);
-    float ry = ramp(&s_ramp_yaw, in->yaw, dt);
-    float rr = ramp(&s_ramp_roll, in->roll, dt);
+    float rp = chase(&s_vel_pitch,
+                     in->pitch * ramp(&s_ramp_pitch, in->pitch, dt), dt);
+    float ry = chase(&s_vel_yaw,
+                     in->yaw * ramp(&s_ramp_yaw, in->yaw, dt), dt);
+    float rr = chase(&s_vel_roll,
+                     in->roll * ramp(&s_ramp_roll, in->roll, dt), dt);
     /* Pitch about the ship's right axis, yaw about up, roll about forward.
      * Flight-stick convention (user-confirmed): d-pad UP = nose DOWN
      * ("push the stick forward"). An un-inverted option can join the
      * pause-menu settings later. */
-    if (in->pitch != 0.0f) m3_rotate_local(&p->basis, 0, in->pitch * tr * rp);
-    if (in->yaw   != 0.0f) m3_rotate_local(&p->basis, 1, in->yaw * tr * ry);
-    if (in->roll  != 0.0f)
-        m3_rotate_local(&p->basis, 2, in->roll * tr * 1.5f * rr);
+    if (rp != 0.0f) m3_rotate_local(&p->basis, 0, tr * rp);
+    if (ry != 0.0f) m3_rotate_local(&p->basis, 1, tr * ry);
+    if (rr != 0.0f) m3_rotate_local(&p->basis, 2, tr * 1.5f * rr);
     m3_orthonormalize(&p->basis);
 
     p->throttle += in->throttle_delta * THROTTLE_RATE * dt;
