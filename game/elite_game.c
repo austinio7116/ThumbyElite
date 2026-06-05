@@ -258,6 +258,10 @@ void elite_game_init(uint32_t seed) {
     s_prev_menu = s_prev_a = false;
 }
 
+/* TEST MODE: random starting hull + weapons + a fat wallet so every
+ * combination can be flown. TODO: set to 0 before release. */
+#define ELITE_TEST_START 1
+
 static void start_new_game(uint32_t seed) {
     galaxy_set_seed(seed);
     ships_init();
@@ -266,6 +270,28 @@ static void start_new_game(uint32_t seed) {
     elite_input_reset();
     spawn_player();
     player_init();
+#if ELITE_TEST_START
+    {
+        uint32_t h = seed * 2654435761u;
+        h ^= h >> 13; h *= 1274126177u; h ^= h >> 16;
+        g_player.hull_id = (uint8_t)(h % N_HULLS);
+        const HullDef *hd = &k_hulls[g_player.hull_id];
+        for (int i = 0; i < hd->n_slots; i++) {
+            h ^= h << 13; h ^= h >> 17; h ^= h << 5;
+            /* Any weapon that fits this slot's size. */
+            WeaponType w;
+            do {
+                h ^= h << 13; h ^= h >> 17; h ^= h << 5;
+                w = (WeaponType)(h % WPN_COUNT);
+            } while (k_weapons[w].size > hd->slot_size[i]);
+            h ^= h << 13; h ^= h >> 17; h ^= h << 5;
+            g_player.mounts[i] = (WeaponInst){
+                (uint8_t)w, (uint8_t)(h % 5u), 100, 1
+            };
+        }
+        g_player.credits = 50000;
+    }
+#endif
     missions_init();
     s_state = ST_FLIGHT;
 
