@@ -35,6 +35,7 @@
 #include "system_sim.h"
 #include "station_gen.h"
 #include "elite_ships.h"
+#include "econ.h"
 #include "galaxy_gen.h"
 #include "craft_font.h"
 #include "meshes_gen.h"
@@ -142,12 +143,25 @@ static void spawn_player(void) {
  * system threat; high-security space is quiet. */
 static void spawn_poi_content(void) {
     const SystemInfo *si = system_info();
+    /* Contraband heat (user req): illegal cargo draws ambushes — every
+     * unit of narcotics/weapons/slaves/contraband raises the odds, and
+     * a serious load brings a bigger wing. */
+    int illegal = 0;
+    for (int g2 = 0; g2 < N_GOODS; g2++)
+        if (k_goods[g2].flags & GOOD_ILLEGAL) illegal += g_player.cargo[g2];
     int pirates = 0;
     if (si->threat >= 1 && s_anchor_has_poi) {
         /* Beacons and planets attract trouble; stations are patrolled. */
         int roll = (int)(xorshift32() % 100u);
         int chance = (s_anchor_poi.kind == POI_STATION) ? 25 : 55;
-        if (roll < chance) pirates = 1 + (int)(xorshift32() % si->threat);
+        if (illegal > 0) {
+            chance += 15 + (illegal > 10 ? 20 : illegal * 2);
+            if (chance > 92) chance = 92;
+        }
+        if (roll < chance) {
+            pirates = 1 + (int)(xorshift32() % si->threat);
+            if (illegal >= 5) pirates++;
+        }
         if (pirates > 4) pirates = 4;
     }
     for (int i = 0; i < pirates; i++) {
