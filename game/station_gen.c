@@ -170,6 +170,17 @@ static void ring_core(float R, float tube, uint16_t mtl, uint16_t mtl2,
         add_face(bi[j], bi[i], fi[i], mtl2);       /* inner wall */
         add_face(bi[j], fi[i], fi[j], mtl2);
     }
+    /* Register rim segments as accretion hosts — without these, every
+     * module grew off the hub and the wheel looked like a core with a
+     * hoop (user report). Eight anchor blocks around the rim. */
+    for (int i = 0; i < 8; i++) {
+        float a = (float)i * (6.2831853f / 8.0f) + 0.3927f;
+        if (s_nmods < MAX_MODULES)
+            s_mods[s_nmods++] = (Module){ cosf(a) * R, sinf(a) * R, 0,
+                                          tube * 1.2f, tube * 1.2f,
+                                          tube };
+    }
+
     /* Hub + spokes. */
     drum(R * 0.32f, tube * 1.4f, mtl, face_col);
     for (int k = 0; k < 4; k++) {
