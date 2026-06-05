@@ -722,14 +722,14 @@ void elite_game_render_begin(void) {
         Mat3 cam = m3_identity();
         r3d_scene_begin(&cam, 60.0f);
         r3d_pipe_set_sun(v3(0.35f, 0.45f, -0.82f));   /* showroom light */
-        /* Big and centred: the status UI dims this into a backdrop. */
+        /* Centred backdrop, pulled back so the whole hull fits. */
         R3DObject obj;
         obj.mesh = k_hulls[g_player.hull_id].mesh;
         obj.basis = m3_identity();
         m3_rotate_local(&obj.basis, 1, s_time * 0.5f);
         m3_rotate_local(&obj.basis, 0, 0.30f);
-        float dist = obj.mesh->bound_r * 1.7f;
-        obj.pos = v3(0, dist * 0.06f, dist);
+        float dist = obj.mesh->bound_r * 2.4f;
+        obj.pos = v3(0, 0, dist);
         r3d_scene_add_object(&obj);
         break;
     }
