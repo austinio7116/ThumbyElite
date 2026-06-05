@@ -79,7 +79,8 @@ void ship_set_tier(int idx, int tier, int hull_class) {
     float k = 1.0f + 0.13f * (float)tier;
     s->max_speed = h->max_speed * (0.82f + 0.10f * (float)tier);
     s->accel = h->accel;
-    s->turn_rate = h->turn_rate * (0.80f + 0.13f * (float)tier);
+    /* Low tiers fly wide, lazy loops — easy to out-turn. */
+    s->turn_rate = h->turn_rate * (0.42f + 0.17f * (float)tier);
     s->hull_max = h->hull_base * 0.55f * k;
     s->hull = s->hull_max;
     s->shield_max = h->shield_base * 0.55f * k;

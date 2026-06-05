@@ -207,11 +207,14 @@ static void target_box(uint16_t *fb, int target) {
         ax /= al; ay /= al;
         int ex = 64 + (int)(ax * 52.0f);
         int ey = 60 + (int)(ay * 44.0f);
+        /* Arrowhead: tip leads, barbs flare BACK from it. */
         px(fb, ex, ey, COL_TARGET);
-        px(fb, ex - (int)(ax * 2), ey - (int)(ay * 2), COL_TARGET);
-        px(fb, ex - (int)(ax * 4), ey - (int)(ay * 4), COL_TARGET);
-        px(fb, ex + (int)(-ay * 2), ey + (int)(ax * 2), COL_TARGET);
-        px(fb, ex + (int)(ay * 2), ey + (int)(-ax * 2), COL_TARGET);
+        px(fb, ex - (int)(ax * 2 + ay * 2), ey - (int)(ay * 2 - ax * 2),
+           COL_TARGET);
+        px(fb, ex - (int)(ax * 2 - ay * 2), ey - (int)(ay * 2 + ax * 2),
+           COL_TARGET);
+        px(fb, ex - (int)(ax * 3), ey - (int)(ay * 3), COL_TARGET);
+        px(fb, ex - (int)(ax * 5), ey - (int)(ay * 5), COL_TARGET);
     }
 
     /* Target readout under the canopy line, top-right. */
@@ -338,7 +341,12 @@ void ui_hud_draw_sc(uint16_t *fb, const HudScInfo *info) {
             if (al < 1e-4f) { ax = 1; ay = 0; al = 1; }
             ax /= al; ay /= al;
             int ex = 64 + (int)(ax * 52.0f), ey = 60 + (int)(ay * 44.0f);
-            for (int k = 0; k <= 4; k++)
+            px(fb, ex, ey, COL_CUR_DEST);
+            px(fb, ex - (int)(ax * 2 + ay * 2), ey - (int)(ay * 2 - ax * 2),
+               COL_CUR_DEST);
+            px(fb, ex - (int)(ax * 2 - ay * 2), ey - (int)(ay * 2 + ax * 2),
+               COL_CUR_DEST);
+            for (int k = 3; k <= 5; k++)
                 px(fb, ex - (int)(ax * k), ey - (int)(ay * k), COL_CUR_DEST);
         }
         float dist = v3_len(info->dest_rel_mm);

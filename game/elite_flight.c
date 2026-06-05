@@ -14,7 +14,7 @@ static float ramp(float *t, float active, float dt) {
     if (active != 0.0f) *t += dt; else *t = 0.0f;
     float k = *t / 0.45f;
     if (k > 1.0f) k = 1.0f;
-    return 0.05f + 0.95f * k;
+    return 0.01f + 0.99f * k;
 }
 
 void flight_apply_input(const FlightInput *in, float dt) {
