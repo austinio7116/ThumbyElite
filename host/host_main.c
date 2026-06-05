@@ -95,6 +95,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_LOOTTEST") || getenv("ELITE_SHOPTEST") ||
         getenv("ELITE_MISTEST") || getenv("ELITE_STATUSTEST") ||
         getenv("ELITE_TITLESHOT") ||
+        getenv("ELITE_BTEST") ||
         getenv("ELITE_SHOT")) {
         /* Harnesses start in-game: skip the title via NEW GAME. */
         remove("thumbyelite.sav");
@@ -459,6 +460,21 @@ int main(int argc, char **argv) {
         printf("[cont] state=%d (7=DOCKED) credits=%d hull=%d\n",
                elite_game_state(), g_player.credits, g_player.hull_id);
         render_frame(); dump_ppm("/tmp/continue.ppm");
+        return 0;
+    }
+
+    /* B-cycle check: roll test-mode ships until multi-slot, press B. */
+    if (getenv("ELITE_BTEST")) {
+        CraftRawButtons none = {0}, b;
+        for (int k = 0; k < 8; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        Ship *p = &g_ships[0];
+        printf("[b] hull=%d n_weapons=%d active=%d\n",
+               g_player.hull_id, p->n_weapons, p->active_w);
+        for (int i = 0; i < 3; i++) {
+            b = none; b.b = true; elite_game_tick(&b, 1.0f / 30.0f);
+            elite_game_tick(&none, 1.0f / 30.0f);
+            printf("[b] after B tap %d: active=%d\n", i, p->active_w);
+        }
         return 0;
     }
 

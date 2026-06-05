@@ -268,7 +268,6 @@ static void start_new_game(uint32_t seed) {
     fx_init();
     combat_init();
     elite_input_reset();
-    spawn_player();
     player_init();
 #if ELITE_TEST_START
     {
@@ -292,6 +291,7 @@ static void start_new_game(uint32_t seed) {
         g_player.credits = 50000;
     }
 #endif
+    spawn_player();    /* AFTER player state is final (test fill incl.) */
     missions_init();
     s_state = ST_FLIGHT;
 
