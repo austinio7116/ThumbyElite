@@ -14,6 +14,9 @@
 
 #include "craft_lcd_gc9107.h"
 #include "craft_buttons.h"
+#include "craft_audio_pwm.h"
+#include "craft_rumble.h"
+#include "elite_audio.h"
 #include "elite_types.h"
 #include "elite_game.h"
 
@@ -38,6 +41,8 @@ int main(void) {
     for (int i = 0; i < ELITE_FB_W * ELITE_FB_H; i++) g_fb[i] = 0;
     craft_lcd_present(g_fb);
     craft_buttons_init();
+    craft_rumble_init();
+    craft_audio_pwm_init();
 
     elite_game_init(get_rand_32());
 
@@ -53,6 +58,17 @@ int main(void) {
         last_ms = now_ms;
 
         elite_game_tick(&btn, dt);
+        craft_rumble_tick(dt);
+
+        /* Keep the PWM ring fed. */
+        int room = craft_audio_pwm_room();
+        while (room > 0) {
+            int16_t abuf[128];
+            int n = room < 128 ? room : 128;
+            audio_render(abuf, n);
+            craft_audio_pwm_push(abuf, n);
+            room -= n;
+        }
 
         /* Perf readout = pure work time (draw-list build + raster),
          * EXCLUDING the wait for the previous frame's DMA (~6.5ms fixed). */

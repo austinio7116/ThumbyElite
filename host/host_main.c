@@ -19,8 +19,11 @@
 #include "elite_combat.h"
 #include "mission.h"
 #include "system_sim.h"
+#include <math.h>
 #include "meshes_gen.h"
 #include "craft_buttons.h"
+#include "elite_platform.h"
+#include "elite_audio.h"
 
 #include <SDL2/SDL.h>
 #include <stdio.h>
@@ -32,6 +35,30 @@
 #define WIN_H (ELITE_FB_H * SCALE)
 
 static uint16_t g_fb[ELITE_FB_W * ELITE_FB_H];
+
+/* --- platform hooks ----------------------------------------------------*/
+void plat_rumble(float intensity, float seconds) {
+    (void)intensity; (void)seconds;     /* no motor on the desk */
+}
+int plat_save(const uint8_t *data, int len) {
+    FILE *f = fopen("thumbyelite.sav", "wb");
+    if (!f) return 0;
+    fwrite(data, 1, (size_t)len, f);
+    fclose(f);
+    return 1;
+}
+int plat_load(uint8_t *data, int max_len) {
+    FILE *f = fopen("thumbyelite.sav", "rb");
+    if (!f) return 0;
+    int n = (int)fread(data, 1, (size_t)max_len, f);
+    fclose(f);
+    return n;
+}
+
+static void audio_cb(void *ud, Uint8 *stream, int len) {
+    (void)ud;
+    audio_render((int16_t *)stream, len / (int)sizeof(int16_t));
+}
 
 static void render_frame(void) {
     elite_game_render_begin();
@@ -62,6 +89,22 @@ int main(int argc, char **argv) {
                                : (uint32_t)time(NULL);
     printf("[elite] seed = %u\n", seed);
     elite_game_init(seed);
+    if (getenv("ELITE_DEMO") || getenv("ELITE_FIRETEST") ||
+        getenv("ELITE_KILLTEST") || getenv("ELITE_TRAVELTEST") ||
+        getenv("ELITE_TRADETEST") || getenv("ELITE_JUMPTEST") ||
+        getenv("ELITE_LOOTTEST") || getenv("ELITE_SHOPTEST") ||
+        getenv("ELITE_MISTEST") || getenv("ELITE_STATUSTEST") ||
+        getenv("ELITE_TITLESHOT") ||
+        getenv("ELITE_SHOT")) {
+        /* Harnesses start in-game: skip the title via NEW GAME. */
+        remove("thumbyelite.sav");
+        CraftRawButtons tb = {0};
+        elite_game_tick(&tb, 1.0f / 30.0f);
+        tb.down = true; elite_game_tick(&tb, 1.0f / 30.0f);
+        tb.down = false; elite_game_tick(&tb, 1.0f / 30.0f);
+        tb.a = true; elite_game_tick(&tb, 1.0f / 30.0f);
+        tb.a = false; elite_game_tick(&tb, 1.0f / 30.0f);
+    }
 
     /* Headless autopilot: chase the scanner's nearest hostile and hold the
      * trigger for N seconds, logging the combat loop each second. */
@@ -395,7 +438,27 @@ int main(int argc, char **argv) {
         printf("[st] after release: state=%d (want 8)\n", elite_game_state());
         b = none; b.a = true; elite_game_tick(&b, 1.0f / 30.0f);
         elite_game_tick(&none, 1.0f / 30.0f);
-        printf("[st] after A tap: state=%d (want 0)\n", elite_game_state());
+        printf("[st] after A tap (detail open): state=%d (want 8)\n",
+               elite_game_state());
+        render_frame(); dump_ppm("/tmp/status_detail.ppm");
+        b = none; b.b = true; elite_game_tick(&b, 1.0f / 30.0f);
+        elite_game_tick(&none, 1.0f / 30.0f);
+        render_frame(); dump_ppm("/tmp/status_list.ppm");
+        b = none; b.b = true; elite_game_tick(&b, 1.0f / 30.0f);
+        elite_game_tick(&none, 1.0f / 30.0f);
+        printf("[st] after B B: state=%d (want 0)\n", elite_game_state());
+        return 0;
+    }
+
+    /* Continue test: boot with an existing save, pick CONTINUE. */
+    if (getenv("ELITE_CONTEST")) {
+        CraftRawButtons none = {0}, b;
+        for (int k = 0; k < 5; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        b = none; b.a = true; elite_game_tick(&b, 1.0f / 30.0f);
+        for (int k = 0; k < 5; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        printf("[cont] state=%d (7=DOCKED) credits=%d hull=%d\n",
+               elite_game_state(), g_player.credits, g_player.hull_id);
+        render_frame(); dump_ppm("/tmp/continue.ppm");
         return 0;
     }
 
@@ -411,22 +474,38 @@ int main(int argc, char **argv) {
         b = none; b.a = true; elite_game_tick(&b, 1.0f / 30.0f);   /* galaxy map */
         for (int k = 0; k < 4; k++) elite_game_tick(&none, 1.0f / 30.0f);
         render_frame(); dump_ppm("/tmp/jump_0_map.ppm");
-        /* Tap-snap each direction in rotation, trying A after each, until
-         * an in-range neighbour engages. */
-        int f = 0;
-        while (elite_game_state() == 3 && f < 64) {
+        /* Deterministic aim: find the nearest in-range neighbour and tap
+         * its dominant axis (the snap wedge is +-60deg, so one tap lands
+         * on it), then engage. */
+        {
+            const SystemInfo *si = system_info();
+            float px, py;
+            galaxy_star_pos(si->addr, &px, &py);
+            float bx = 0, by = 0, bd = 1e9f;
+            for (int sy = si->addr.sy - 2; sy <= si->addr.sy + 2; sy++)
+                for (int sx = si->addr.sx - 2; sx <= si->addr.sx + 2; sx++) {
+                    int n = galaxy_sector_stars(sx, sy);
+                    for (int i = 0; i < n; i++) {
+                        SysAddr a2 = { sx, sy, (uint8_t)i };
+                        if (sysaddr_eq(a2, si->addr)) continue;
+                        float x, y;
+                        galaxy_star_pos(a2, &x, &y);
+                        float d = sqrtf((x - px) * (x - px) +
+                                        (y - py) * (y - py));
+                        if (d < bd) { bd = d; bx = x - px; by = y - py; }
+                    }
+                }
+            printf("[jump] nearest %.1f ly (dx %.1f dy %.1f)\n", bd, bx, by);
             b = none;
-            switch (f & 3) {
-            case 0: b.right = true; break;
-            case 1: b.up = true; break;
-            case 2: b.left = true; break;
-            case 3: b.down = true; break;
+            if (bx * bx > by * by) {
+                if (bx > 0) b.right = true; else b.left = true;
+            } else {
+                if (by > 0) b.down = true; else b.up = true;
             }
             elite_game_tick(&b, 1.0f / 30.0f);
             b = none; elite_game_tick(&b, 1.0f / 30.0f);
             b = none; b.a = true; elite_game_tick(&b, 1.0f / 30.0f);
             b = none; elite_game_tick(&b, 1.0f / 30.0f);
-            f++;
         }
         printf("[jump] state=%d after pan (2=hyperjump)\n", elite_game_state());
         render_frame(); dump_ppm("/tmp/jump_1_engaged.ppm");
@@ -459,6 +538,16 @@ int main(int argc, char **argv) {
         SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     SDL_Texture *tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGB565,
         SDL_TEXTUREACCESS_STREAMING, ELITE_FB_W, ELITE_FB_H);
+
+    SDL_AudioSpec want, have;
+    SDL_zero(want);
+    want.freq = ELITE_AUDIO_RATE;
+    want.format = AUDIO_S16SYS;
+    want.channels = 1;
+    want.samples = 512;
+    want.callback = audio_cb;
+    SDL_AudioDeviceID adev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+    if (adev) SDL_PauseAudioDevice(adev, 0);
 
     bool running = true;
     Uint32 last_ms = SDL_GetTicks();

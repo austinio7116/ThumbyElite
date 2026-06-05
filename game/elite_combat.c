@@ -11,6 +11,8 @@
 #include "elite_loot.h"
 #include "mission.h"
 #include "r3d_fx.h"
+#include "elite_audio.h"
+#include "elite_platform.h"
 #include "elite_types.h"
 
 #define HEAT_MAX       100.0f
@@ -30,6 +32,7 @@ void combat_init(void) {
 }
 
 int combat_kills(void) { return s_kills; }
+void combat_set_kills(int n) { s_kills = n; }
 float combat_hitmarker(void) { return s_hitmark; }
 float combat_killmarker(void) { return s_killmark; }
 
@@ -57,6 +60,7 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
     Ship *v = &g_ships[victim];
     if (!v->alive) return;
     s_regen_hold[victim] = SHIELD_DELAY;
+    bool had_shield = v->shield > 0.0f;
     if (v->shield > 0.0f) {
         v->shield -= dmg;
         if (v->shield < 0.0f) { v->hull += v->shield; v->shield = 0.0f; }
@@ -64,10 +68,27 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
         v->hull -= dmg;
     }
     fx_spawn_spark(hit_pos, v->vel);
+    if (victim == PLAYER) {
+        /* Feel it: soft buzz for shields, hard thump for hull. */
+        if (had_shield) {
+            plat_rumble(0.28f, 0.08f);
+            sfx_hit_shield();
+        } else {
+            plat_rumble(0.60f, 0.16f);
+            sfx_hit_hull();
+        }
+    }
     if (shooter == PLAYER) s_hitmark = 0.12f;
     if (v->hull <= 0.0f) {
         v->alive = false;
         fx_spawn_explosion(v->pos, v->vel);
+        {
+            float d = v3_len(v3_sub(v->pos, g_ships[PLAYER].pos));
+            float amp = 1.0f - d / 700.0f;
+            if (victim == PLAYER) amp = 1.0f;
+            sfx_explosion(amp, v->mesh->bound_r / 15.0f);
+        }
+        if (victim == PLAYER) plat_rumble(1.0f, 0.7f);
         if (victim != PLAYER) {
             s_kills++;
             loot_on_kill(v->pos, v->vel, v->tier);
@@ -110,6 +131,15 @@ int combat_fire(int shooter, float spread, int target) {
     s->fire_cool = w->cooldown;
     s->heat += w->heat * heat_mult;
     if (w->ammo_max) s->ammo[s->active_w]--;
+
+    {
+        float amp = 1.0f;
+        if (shooter != PLAYER) {
+            float d = v3_len(v3_sub(s->pos, g_ships[PLAYER].pos));
+            amp = 0.6f - d / 600.0f;
+        }
+        sfx_weapon(s->weapons[s->active_w], amp);
+    }
 
     Vec3 dir = s->basis.r[2];
     if (spread > 0.0f) {

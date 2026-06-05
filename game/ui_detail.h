@@ -1,0 +1,30 @@
+/*
+ * ThumbyElite — detail sheets (drill-down stat views).
+ *
+ * Shared by the shipyard (hull specs), outfitting (weapon specs before
+ * buying/fitting) and the status screen (mounted/racked gear + cargo).
+ * Pure draw functions; callers own the open/close input flow.
+ */
+#ifndef UI_DETAIL_H
+#define UI_DETAIL_H
+
+#include "elite_player.h"
+#include <stdint.h>
+
+/* Weapon sheet: effective stats for THIS instance (quality+integrity).
+ * price >= 0 draws a price line with the given label ("COST"/"REPAIR"/
+ * "SELL"). footer = button hints. */
+void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
+                        int price, const char *price_label,
+                        const char *footer);
+
+/* Hull sheet: full specs; cost < 0 renders OWNED. The caller's 3D pane
+ * (right column, y 10..95) stays open — text fits the left column. */
+void detail_draw_hull(uint16_t *fb, int hull_id, int cost,
+                      const char *footer);
+
+/* Commodity sheet (status cargo drill-down). */
+void detail_draw_good(uint16_t *fb, int good, int held,
+                      const char *footer);
+
+#endif

@@ -29,6 +29,9 @@
 #include "ui_station.h"
 #include "ui_status.h"
 #include "elite_player.h"
+#include "elite_audio.h"
+#include "elite_save.h"
+#include "elite_platform.h"
 #include "system_sim.h"
 #include "station_gen.h"
 #include "elite_ships.h"
@@ -41,7 +44,7 @@
 typedef enum {
     ST_FLIGHT = 0, ST_SUPERCRUISE, ST_HYPERJUMP,
     ST_GALAXY_MAP, ST_SYSTEM_MAP, ST_PAUSE,
-    ST_DOCKING, ST_DOCKED, ST_STATUS,
+    ST_DOCKING, ST_DOCKED, ST_STATUS, ST_TITLE,
 } GState;
 
 #define DOCK_RANGE 600.0f
@@ -68,6 +71,8 @@ static float   s_hyper_t;
 static uint32_t s_hyper_seed;
 
 static int   s_target = -1;      /* combat lock */
+static uint32_t s_boot_seed;
+static int   s_title_cursor;
 static char  s_scoop_toast[28];
 static float s_scoop_toast_t;
 static float s_frame_ms;
@@ -212,9 +217,49 @@ static void cycle_target(void) {
     s_target = (best >= 0) ? best : first;
 }
 
+/* Resume docked at a saved station. */
+static void arrive_docked(const SaveMeta *meta) {
+    s_addr = meta->addr;
+    system_enter(meta->addr);
+    Poi pois[MAX_POIS];
+    int n = system_pois(pois, MAX_POIS);
+    const Poi *st = NULL;
+    for (int i = 0; i < n; i++)
+        if (pois[i].kind == POI_STATION && pois[i].index == meta->station)
+            st = &pois[i];
+    if (!st) {                       /* damaged save: fall back to beacon */
+        drop_anchor(pois[0].pos_mm, &pois[0]);
+        spawn_player();
+        return;
+    }
+    drop_anchor(st->pos_mm, st);
+    spawn_player();
+    station_open(st->index);
+    s_state = ST_DOCKED;
+}
+
+static void start_new_game(uint32_t seed);
+
 void elite_game_init(uint32_t seed) {
     s_rng = seed | 1u;
-    galaxy_set_seed(seed);     /* fresh universe per new game */
+    s_boot_seed = seed;
+    galaxy_set_seed(seed);
+    ships_init();
+    fx_init();
+    audio_init();
+    combat_init();
+    elite_input_reset();
+    spawn_player();
+    player_init();
+    missions_init();
+    r3d_starfield_init(seed ^ 0x7117u);
+    s_state = ST_TITLE;
+    s_title_cursor = save_exists() ? 0 : 1;
+    s_prev_menu = s_prev_a = false;
+}
+
+static void start_new_game(uint32_t seed) {
+    galaxy_set_seed(seed);
     ships_init();
     fx_init();
     combat_init();
@@ -223,7 +268,6 @@ void elite_game_init(uint32_t seed) {
     player_init();
     missions_init();
     s_state = ST_FLIGHT;
-    s_prev_menu = s_prev_a = false;
 
     /* Find a starting system: spiral out from the origin for the first
      * system WITH A STATION (a home dock for fuel/trade), falling back
@@ -284,16 +328,23 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
             p->active_w = (uint8_t)((p->active_w + 1) % p->n_weapons);
         if (in.cycle_target) cycle_target();
     } else {
-        if (!dead_latch) { dead_latch = true; respawn_t = 2.5f; }
+        if (!dead_latch) { dead_latch = true; respawn_t = 3.0f; }
         respawn_t -= dt;
         if (respawn_t <= 0.0f) {
-            /* Limp back to the beacon with a fresh hull. */
-            spawn_player();
-            Poi pois[MAX_POIS];
-            system_pois(pois, MAX_POIS);
-            drop_anchor(pois[0].pos_mm, &pois[0]);
-            p->pos = v3(0, 0, -700.0f);
-            spawn_poi_content();
+            /* Insurance: revert to the last dock save (journey since is
+             * lost). No save yet -> fresh hull at the local beacon. */
+            SaveMeta meta;
+            if (save_exists() && save_load(&meta)) {
+                combat_set_kills(meta.kills);
+                arrive_docked(&meta);
+            } else {
+                spawn_player();
+                Poi pois[MAX_POIS];
+                system_pois(pois, MAX_POIS);
+                drop_anchor(pois[0].pos_mm, &pois[0]);
+                p->pos = v3(0, 0, -700.0f);
+                spawn_poi_content();
+            }
         }
     }
 
@@ -301,6 +352,18 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
     ai_tick(dt);
     combat_tick(dt);
     fx_tick(dt);
+
+    /* Overheat klaxon (repeats while hot) + throttle-following hum. */
+    {
+        static float klaxon_t;
+        klaxon_t -= dt;
+        if (p->alive && p->heat > 88.0f && klaxon_t <= 0.0f) {
+            sfx_klaxon();
+            klaxon_t = 0.7f;
+        }
+        audio_engine_set(p->throttle,
+                         v3_len(p->vel) / (p->max_speed * 1.2f));
+    }
     {
         const char *scooped = loot_tick(dt);
         if (scooped) {
@@ -427,6 +490,27 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
     s_prev_a = btn->a;
 
     switch (s_state) {
+    case ST_TITLE: {
+        bool has_save = save_exists();
+        static bool tu, td;
+        if (btn->up && !tu && s_title_cursor > 0) { s_title_cursor--; sfx_ui_move(); }
+        if (btn->down && !td && s_title_cursor < 1) { s_title_cursor++; sfx_ui_move(); }
+        tu = btn->up; td = btn->down;
+        if (a_edge) {
+            sfx_ui_select();
+            if (s_title_cursor == 0 && has_save) {
+                SaveMeta meta;
+                if (save_load(&meta)) {
+                    combat_set_kills(meta.kills);
+                    arrive_docked(&meta);
+                    break;
+                }
+            }
+            start_new_game(s_boot_seed);
+        }
+        break;
+    }
+
     case ST_FLIGHT:
         if (menu_edge) { s_state = ST_PAUSE; s_pause_cursor = 0; break; }
         tick_flight(btn, dt);
@@ -458,6 +542,8 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         fx_tick(dt);
         if (s_dock_t >= 2.2f) {
             g_player.xp_piloting += 1;
+            sfx_dock();
+            plat_rumble(0.4f, 0.12f);
             station_open(s_anchor_poi.index);
             mission_on_docked(system_info(), s_anchor_poi.index);
             int paid = mission_collect(system_info(), s_anchor_poi.index);
@@ -466,12 +552,14 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
                 snprintf(buf, sizeof buf, "MISSION PAY %dCR", paid);
                 station_toast(buf);
             }
+            save_write(s_addr, s_anchor_poi.index, combat_kills());
             s_state = ST_DOCKED;
         }
         break;
     }
 
     case ST_DOCKED: {
+        audio_engine_set(0, 0);
         DockAction act = station_tick(btn, dt);
         if (act == DOCK_LAUNCH) {
             /* Emerge from the bay face (station +z, rotated by its spin),
@@ -531,6 +619,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         MapAction act = map_galaxy_tick(btn, dt, &target, &dist);
         if (act == MAP_CLOSE) { elite_input_reset(); s_state = ST_FLIGHT; }
         else if (act == MAP_ENGAGE_JUMP) {
+            sfx_jump();
             s_jump_target = target;
             s_jump_dist = dist;
             s_hyper_t = 0;
@@ -575,6 +664,22 @@ void elite_game_render_begin(void) {
     Ship *p = &g_ships[PLAYER];
 
     switch (s_state) {
+    case ST_TITLE: {
+        /* Slow drift through the stars + a hero ship. */
+        Mat3 cam = m3_identity();
+        m3_rotate_local(&cam, 1, s_time * 0.02f);
+        r3d_scene_begin(&cam, 60.0f);
+        r3d_pipe_set_sun(v3(0.35f, 0.45f, -0.82f));
+        R3DObject obj;
+        obj.mesh = &mesh_fighter;
+        obj.basis = m3_identity();
+        m3_rotate_local(&obj.basis, 1, s_time * 0.3f);
+        m3_rotate_local(&obj.basis, 0, 0.25f);
+        obj.pos = m3_mul_v3(&cam, v3(8.0f, -4.0f, 26.0f));
+        r3d_scene_add_object(&obj);
+        break;
+    }
+
     case ST_HYPERJUMP: {
         /* Witchspace: empty scene, tumbling slowly — streaks drawn in
          * the overlay. */
@@ -594,6 +699,7 @@ void elite_game_render_begin(void) {
          * hull) in the right-hand pane the UI leaves open. */
         Mat3 cam = m3_identity();
         r3d_scene_begin(&cam, 60.0f);
+        r3d_pipe_set_sun(v3(0.35f, 0.45f, -0.82f));   /* showroom light */
         int pv = station_preview();
         if (pv != -2) {
             const Mesh *m = (pv == -1)
@@ -615,6 +721,7 @@ void elite_game_render_begin(void) {
         /* Your ship turning gently in the sheet's top-right window. */
         Mat3 cam = m3_identity();
         r3d_scene_begin(&cam, 60.0f);
+        r3d_pipe_set_sun(v3(0.35f, 0.45f, -0.82f));   /* showroom light */
         R3DObject obj;
         obj.mesh = k_hulls[g_player.hull_id].mesh;
         obj.basis = m3_identity();
@@ -635,6 +742,11 @@ void elite_game_render_begin(void) {
 
     default: {   /* FLIGHT + PAUSE render the world */
         r3d_scene_begin(&p->basis, 60.0f);
+        /* Sunlight from the system star (camera-relative direction). */
+        {
+            Vec3 cm = cam_pos_mm();
+            r3d_pipe_set_sun(v3_norm(v3_scale(cm, -1.0f)));
+        }
         r3d_planet_emit(cam_pos_mm());
 
         /* Anchored POI structure (station / beacon). */
@@ -729,6 +841,24 @@ void elite_game_draw_overlay(uint16_t *fb) {
     s_time += 0.033f;
 
     switch (s_state) {
+    case ST_TITLE: {
+        craft_font_draw_2x(fb, "THUMBY", 40, 22, RGB565C(120, 230, 255));
+        craft_font_draw_2x(fb, "ELITE", 44, 36, RGB565C(255, 200, 60));
+        bool has_save = save_exists();
+        const char *items[2] = { "CONTINUE", "NEW GAME" };
+        for (int i = 0; i < 2; i++) {
+            uint16_t c = (i == 0 && !has_save) ? RGB565C(60, 66, 84)
+                       : (i == s_title_cursor) ? RGB565C(120, 255, 120)
+                                               : RGB565C(120, 126, 145);
+            if (i == s_title_cursor)
+                craft_font_draw(fb, ">", 44, 78 + i * 10, RGB565C(120, 255, 120));
+            craft_font_draw(fb, items[i], 52, 78 + i * 10, c);
+        }
+        craft_font_draw(fb, "AN INFINITE GALAXY AWAITS", 14, 116,
+                        RGB565C(70, 90, 115));
+        return;
+    }
+
     case ST_GALAXY_MAP: map_galaxy_draw(fb); return;
     case ST_SYSTEM_MAP: map_system_draw(fb); return;
     case ST_HYPERJUMP:  draw_hyperjump_overlay(fb); return;

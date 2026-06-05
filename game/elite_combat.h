@@ -25,6 +25,7 @@ void combat_explosion_damage(int shooter, Vec3 centre, float radius,
 
 /* Stats / HUD feedback. */
 int   combat_kills(void);
+void  combat_set_kills(int n);
 float combat_hitmarker(void);
 float combat_killmarker(void);
 

@@ -13,6 +13,8 @@
 #include "elite_ships.h"
 #include "ui_status.h"
 #include "ui_icons.h"
+#include "elite_audio.h"
+#include "ui_detail.h"
 #include "elite_entity.h"
 #include "mission.h"
 #include "elite_weapons.h"
@@ -44,6 +46,7 @@ static CraftRawButtons s_prev;
 static float s_hold_a, s_hold_b, s_repeat;
 static char s_toast[24];
 static float s_toast_t;
+static int s_detail;       /* 0 = list, 1 = detail sheet open */
 
 #define HOME_ITEMS 8
 static const char *k_home[HOME_ITEMS] = {
@@ -53,6 +56,7 @@ static const char *k_home[HOME_ITEMS] = {
 static Mission s_offers[MISSION_OFFERS];
 
 void station_open(int station_idx) {
+    s_detail = 0;
     s_screen = SCR_HOME;
     s_station = station_idx;
     s_cursor = 0;
@@ -304,11 +308,14 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
     DockAction act = DOCK_NONE;
     bool a_edge = btn->a && !s_prev.a;
     bool b_edge = btn->b && !s_prev.b;
+    bool lb_edge = btn->lb && !s_prev.lb;
     bool up = btn->up && !s_prev.up;
     bool down = btn->down && !s_prev.down;
     bool back = btn->menu && !s_prev.menu;     /* B stays free for SELL */
 
     if (s_toast_t > 0) s_toast_t -= dt;
+    if (up || down) sfx_ui_move();
+    if (a_edge) sfx_ui_select();
 
     /* Hold-to-repeat for market trading. */
     bool a_rep = false, b_rep = false;
@@ -344,20 +351,37 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
         break;
 
     case SCR_SHIPYARD:
+        if (s_detail) {
+            if (a_edge) { shipyard_buy(s_cursor); s_detail = 0; }
+            if (b_edge || back) s_detail = 0;
+            break;
+        }
         if (up && s_cursor > 0) s_cursor--;
         if (down && s_cursor < N_HULLS - 1) s_cursor++;
         if (s_cursor < s_scroll) s_scroll = s_cursor;
         if (s_cursor > s_scroll + 6) s_scroll = s_cursor - 6;
+        if (b_edge || lb_edge) s_detail = 1;
         if (a_edge) shipyard_buy(s_cursor);
         if (back) { s_screen = SCR_HOME; s_cursor = 1; }
         break;
 
     case SCR_OUTFIT:
         outfit_build_rows();
+        if (s_detail) {
+            if (a_edge) { outfit_action_a(s_cursor); s_detail = 0; }
+            if (b_edge || back) s_detail = 0;
+            break;
+        }
         if (up && s_cursor > 0) s_cursor--;
         if (down && s_cursor < s_n_rows - 1) s_cursor++;
         if (s_cursor < s_scroll) s_scroll = s_cursor;
         if (s_cursor > s_scroll + 8) s_scroll = s_cursor - 8;
+        if (lb_edge) {
+            const OutfitRow *r = &s_rows[s_cursor];
+            if (r->kind == ROW_MOUNT ? g_player.mounts[r->index].in_use
+                : (r->kind == ROW_SALV || r->kind == ROW_SHOP))
+                s_detail = 1;
+        }
         if (a_edge) outfit_action_a(s_cursor);
         if (b_edge) outfit_action_b(s_cursor);
         if (back) { s_screen = SCR_HOME; s_cursor = 2; }
@@ -541,7 +565,7 @@ static void draw_shipyard(uint16_t *fb) {
              (int)sel->shield_base, slots);
     craft_font_draw(fb, buf, 2, 105, COL_DIM);
     hl(fb, 113, COL_GRID);
-    craft_font_draw(fb, "A:BUY(TRADE-IN) MENU:BACK", 2, 117, COL_DIM);
+    craft_font_draw(fb, "A:BUY B:DETAILS MENU:BACK", 2, 117, COL_DIM);
 }
 
 static void draw_outfit(uint16_t *fb) {
@@ -617,7 +641,7 @@ static void draw_outfit(uint16_t *fb) {
         }
     }
     hl(fb, 113, COL_GRID);
-    craft_font_draw(fb, "A:FIT/RPR/BUY B:UNFIT/SELL", 2, 116, COL_DIM);
+    craft_font_draw(fb, "A:ACT B:UNFIT/SELL LB:INFO", 2, 116, COL_DIM);
     craft_font_draw(fb, "MENU:BACK", 2, 123, COL_DIM);
 }
 
@@ -722,6 +746,48 @@ static void draw_bar(uint16_t *fb) {
 }
 
 void station_draw(uint16_t *fb) {
+    /* Detail sheets replace the list view. */
+    if (s_detail && s_screen == SCR_SHIPYARD) {
+        int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
+        int cost = k_hulls[s_cursor].price - tradein;
+        if (cost < 0) cost = 0;
+        detail_draw_hull(fb, s_cursor,
+                         s_cursor == g_player.hull_id ? -1 : cost,
+                         "A:BUY B:BACK");
+        return;
+    }
+    if (s_detail && s_screen == SCR_OUTFIT) {
+        outfit_build_rows();
+        const OutfitRow *r = &s_rows[s_cursor];
+        WeaponInst tmp;
+        const WeaponInst *wi = NULL;
+        int price = -1;
+        const char *plabel = "COST";
+        const char *foot = "A:ACTION B:BACK";
+        if (r->kind == ROW_MOUNT && g_player.mounts[r->index].in_use) {
+            wi = &g_player.mounts[r->index];
+            if (wi->integrity < 100) {
+                price = repair_cost(wi);
+                plabel = "REPAIR";
+                foot = "A:REPAIR B:BACK";
+            } else foot = "B:BACK";
+        } else if (r->kind == ROW_SALV) {
+            wi = &g_player.salvage[r->index];
+            price = (int)(weapon_price(wi->type, wi->quality) *
+                          (0.35f + 0.30f * wi->integrity * 0.01f));
+            plabel = "SELLS FOR";
+            foot = "A:FIT B:BACK";
+        } else if (r->kind == ROW_SHOP) {
+            tmp = (WeaponInst){ (uint8_t)r->index, Q_STANDARD, 100, 1 };
+            wi = &tmp;
+            price = (int)(weapon_price(r->index, Q_STANDARD) *
+                          skill_price_mult());
+            foot = "A:BUY B:BACK";
+        }
+        if (wi) { detail_draw_weapon(fb, wi, price, plabel, foot); return; }
+        s_detail = 0;
+    }
+
     if (s_screen == SCR_HOME) fill_with_pane(fb, COL_BG, 10, 119);
     else if (s_screen == SCR_SHIPYARD) fill_with_pane(fb, COL_BG, 10, 95);
     else fill(fb, COL_BG);

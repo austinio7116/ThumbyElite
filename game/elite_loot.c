@@ -12,6 +12,7 @@
 #include "r3d_scene.h"
 #include "r3d_fx.h"
 #include "econ.h"
+#include "elite_audio.h"
 #include "meshes_gen.h"
 #include <stdio.h>
 
@@ -118,6 +119,7 @@ const char *loot_tick(float dt) {
         }
         toast = s_toast;
         c->alive = false;
+        sfx_scoop();
         fx_spawn_spark(c->pos, p->vel);
     }
     return toast;

@@ -85,3 +85,25 @@ void icon_weapon(uint16_t *fb, int x, int y, int wpn_type) {
         break;
     }
 }
+
+void icon_weapon_2x(uint16_t *fb, int x, int y, int wpn_type) {
+    /* Rasterise the 1x glyph into a scratch strip (fb-width stride so
+     * the px() maths inside icon_weapon stays valid), then 2x upscale. */
+    static uint16_t strip[ELITE_FB_W * 8];
+    const uint16_t SENTINEL = 0x0821;
+    for (int i = 0; i < ELITE_FB_W * 8; i++) strip[i] = SENTINEL;
+    icon_weapon(strip, 0, 0, wpn_type);
+    for (int sy = 0; sy < 7; sy++) {
+        for (int sx = 0; sx < 12; sx++) {
+            uint16_t c = strip[sy * ELITE_FB_W + sx];
+            if (c == SENTINEL) continue;
+            int dx = x + sx * 2, dy = y + sy * 2;
+            if ((unsigned)(dx + 1) >= ELITE_FB_W) continue;
+            if ((unsigned)(dy + 1) >= ELITE_FB_H) continue;
+            fb[dy * ELITE_FB_W + dx] = c;
+            fb[dy * ELITE_FB_W + dx + 1] = c;
+            fb[(dy + 1) * ELITE_FB_W + dx] = c;
+            fb[(dy + 1) * ELITE_FB_W + dx + 1] = c;
+        }
+    }
+}

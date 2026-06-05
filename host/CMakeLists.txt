@@ -69,12 +69,15 @@ add_executable(thumbyelite_host
     ${GAME}/elite_proj.c
     ${GAME}/elite_loot.c
     ${GAME}/mission.c
+    ${GAME}/elite_audio.c
+    ${GAME}/elite_save.c
     ${GAME}/elite_ai.c
     ${GAME}/ui_hud.c
     ${GAME}/ui_map.c
     ${GAME}/ui_station.c
     ${GAME}/ui_status.c
     ${GAME}/ui_icons.c
+    ${GAME}/ui_detail.c
     ${GAME}/econ.c
     ${GAME}/elite_player.c
     ${GAME}/galaxy_gen.c

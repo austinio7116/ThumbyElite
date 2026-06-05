@@ -1,15 +1,22 @@
 /*
  * ThumbyElite — ship status sheet.
+ *
+ * Cursor-driven: weapons (mounted + racked) and cargo lines are
+ * selectable; A drills into a full detail sheet (effective stats for
+ * gear, market notes for goods). The ship itself turns in the top-right
+ * window (the game renders it behind this UI).
  */
 #include "ui_status.h"
 #include "elite_types.h"
 #include "elite_player.h"
 #include "elite_ships.h"
 #include "elite_weapons.h"
+#include "ui_icons.h"
+#include "ui_detail.h"
 #include "econ.h"
 #include "craft_font.h"
-#include "ui_icons.h"
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 
 #define COL_BG    RGB565C(  6,  10,  20)
@@ -20,11 +27,23 @@
 #define COL_CRED  RGB565C(255, 200,  60)
 #define COL_WARN  RGB565C(255, 120,  70)
 
+/* Row model. */
+typedef enum { RK_TEXT = 0, RK_MOUNT, RK_RACK, RK_CARGO } RowKind;
+typedef struct {
+    uint8_t kind, index;
+    char text[30];
+    uint16_t color;
+    int8_t icon;          /* weapon type, -1 none */
+} Row;
+
+#define MAX_ROWS 44
+static Row s_rows[MAX_ROWS];
+static int s_n_rows;
+static int s_cursor;      /* row index (selectable rows only) */
 static int s_scroll;
+static int s_detail;      /* 0 list, 1 weapon, 2 good */
 static CraftRawButtons s_prev;
 
-/* All-held button state for debouncing. NOTE: never memset(0xFF) over
- * _Bool fields — !x compiles as x^1, and 0xFE is still truthy. */
 static CraftRawButtons buttons_all_held(void) {
     CraftRawButtons b;
     b.up = b.down = b.left = b.right = true;
@@ -32,21 +51,18 @@ static CraftRawButtons buttons_all_held(void) {
     return b;
 }
 
-void status_open(void) {
-    s_scroll = 0;
-    s_prev = buttons_all_held();   /* debounce */
-}
-
-bool status_tick(const CraftRawButtons *btn, float dt) {
-    (void)dt;
-    bool up = btn->up && !s_prev.up;
-    bool down = btn->down && !s_prev.down;
-    bool close = (btn->menu && !s_prev.menu) || (btn->b && !s_prev.b) ||
-                 (btn->a && !s_prev.a);
-    if (up && s_scroll > 0) s_scroll--;
-    if (down && s_scroll < 10) s_scroll++;
-    s_prev = *btn;
-    return close;
+static void row(RowKind k, int idx, uint16_t color, int icon,
+                const char *fmt, ...) {
+    if (s_n_rows >= MAX_ROWS) return;
+    Row *r = &s_rows[s_n_rows++];
+    r->kind = (uint8_t)k;
+    r->index = (uint8_t)idx;
+    r->color = color;
+    r->icon = (int8_t)icon;
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(r->text, sizeof r->text, fmt, ap);
+    va_end(ap);
 }
 
 static const char *k_qual_tag[5] = { "SLV", "STD", "RNF", "MIL", "PRO" };
@@ -54,92 +70,145 @@ static const char *k_skill_names[4] = {
     "GUNNERY", "TRADING", "TECH", "PILOTING",
 };
 
-void status_draw(uint16_t *fb) {
-    /* Fill everything except the ship-preview window (top right). */
-    for (int y = 0; y < ELITE_FB_H; y++) {
-        uint16_t *row = fb + y * ELITE_FB_W;
-        int skip0 = (y >= 10 && y < 54) ? 76 : ELITE_FB_W;
-        for (int x = 0; x < ELITE_FB_W; x++)
-            if (x < skip0) row[x] = COL_BG;
-    }
-    for (int y = 10; y < 54; y++) fb[y * ELITE_FB_W + 76] = COL_GRID;
+static void build_rows(void) {
     const HullDef *h = &k_hulls[g_player.hull_id];
-    char buf[36];
-
-    craft_font_draw(fb, "SHIP STATUS", 2, 2, COL_HDR);
-    snprintf(buf, sizeof buf, "%dCR", g_player.credits);
-    craft_font_draw(fb, buf, 128 - craft_font_width(buf) - 2, 2, COL_CRED);
-    for (int x = 0; x < 128; x++) fb[9 * ELITE_FB_W + x] = COL_GRID;
-
-    int y = 13 - s_scroll * 8;
-    #define ROW(...) do { \
-        if (y >= 11 && y < 120) { \
-            snprintf(buf, sizeof buf, __VA_ARGS__); \
-            craft_font_draw(fb, buf, 2, y, c); \
-        } \
-        y += 8; \
-    } while (0)
-
-    uint16_t c = COL_HDR;
-    ROW("%s  S%d H%d", h->name, g_player.shield_tier, g_player.hull_tier);
-    c = COL_DIM;
-    ROW("SPD %d CRG %d", (int)h->max_speed, h->cargo);
-
-    c = COL_HDR;
-    ROW("MOUNTS:");
+    s_n_rows = 0;
+    row(RK_TEXT, 0, COL_HDR, -1, "%s  S%d H%d", h->name,
+        g_player.shield_tier, g_player.hull_tier);
+    row(RK_TEXT, 0, COL_DIM, -1, "SPD %d CRG %d", (int)h->max_speed,
+        h->cargo);
+    row(RK_TEXT, 0, COL_HDR, -1, "MOUNTS:");
     for (int i = 0; i < h->n_slots; i++) {
         const WeaponInst *m = &g_player.mounts[i];
-        if (m->in_use) {
-            c = (m->integrity < 50) ? COL_WARN : COL_DIM;
-            int yy = y;
-            ROW("   S%d %s %d%%", h->slot_size[i],
-                k_weapons[m->type].name, m->integrity);
-            if (yy >= 11 && yy < 120) icon_weapon(fb, 2, yy - 1, m->type);
-        } else {
-            c = COL_DIM;
-            ROW("S%d ----", h->slot_size[i]);
-        }
+        if (m->in_use)
+            row(RK_MOUNT, i,
+                m->integrity < 50 ? COL_WARN : COL_DIM, m->type,
+                "   S%d %s %s %d%%", h->slot_size[i],
+                k_weapons[m->type].name, k_qual_tag[m->quality],
+                m->integrity);
+        else
+            row(RK_TEXT, 0, COL_DIM, -1, "S%d ----", h->slot_size[i]);
     }
-
-    c = COL_HDR;
-    ROW("RACK:");
+    row(RK_TEXT, 0, COL_HDR, -1, "RACK:");
     int any = 0;
     for (int i = 0; i < MAX_SALVAGE; i++) {
         const WeaponInst *m = &g_player.salvage[i];
         if (!m->in_use) continue;
         any = 1;
-        c = COL_DIM;
-        int yy = y;
-        ROW("   %s %s %d%%", k_weapons[m->type].name,
-            k_qual_tag[m->quality], m->integrity);
-        if (yy >= 11 && yy < 120) icon_weapon(fb, 2, yy - 1, m->type);
+        row(RK_RACK, i, COL_DIM, m->type, "   %s %s %d%%",
+            k_weapons[m->type].name, k_qual_tag[m->quality], m->integrity);
     }
-    if (!any) { c = COL_DIM; ROW("(EMPTY)"); }
-
-    c = COL_HDR;
-    ROW("CARGO %d/%d:", player_cargo_total(), player_cargo_cap());
+    if (!any) row(RK_TEXT, 0, COL_DIM, -1, "(EMPTY)");
+    row(RK_TEXT, 0, COL_HDR, -1, "CARGO %d/%d:", player_cargo_total(),
+        player_cargo_cap());
     any = 0;
     for (int i = 0; i < N_GOODS; i++) {
         if (!g_player.cargo[i]) continue;
         any = 1;
-        c = COL_DIM;
-        ROW("%dX %s", g_player.cargo[i], k_goods[i].name);
+        row(RK_CARGO, i, COL_DIM, -1, "%dX %s", g_player.cargo[i],
+            k_goods[i].name);
     }
-    if (!any) { c = COL_DIM; ROW("(EMPTY)"); }
-
-    c = COL_HDR;
-    ROW("SKILLS:");
+    if (!any) row(RK_TEXT, 0, COL_DIM, -1, "(EMPTY)");
+    row(RK_TEXT, 0, COL_HDR, -1, "SKILLS:");
     uint16_t xs[4] = { g_player.xp_gunnery, g_player.xp_trading,
                        g_player.xp_tech, g_player.xp_piloting };
-    for (int i = 0; i < 4; i++) {
-        c = COL_TXT;
-        ROW("%-8s LV%d (%d)", k_skill_names[i], skill_level(xs[i]), xs[i]);
-    }
-    c = COL_DIM;
-    ROW("FUEL %d.%d/%d LY", (int)g_player.fuel,
+    for (int i = 0; i < 4; i++)
+        row(RK_TEXT, 0, COL_TXT, -1, "%s LV%d", k_skill_names[i],
+            skill_level(xs[i]));
+    row(RK_TEXT, 0, COL_DIM, -1, "FUEL %d.%d/%d LY", (int)g_player.fuel,
         ((int)(g_player.fuel * 10)) % 10, (int)g_player.fuel_max);
-    #undef ROW
+    row(RK_TEXT, 0, COL_CRED, -1, "%dCR", g_player.credits);
+}
 
-    for (int x = 0; x < 128; x++) fb[120 * ELITE_FB_W + x] = COL_GRID;
-    craft_font_draw(fb, "U/D:SCROLL A:CLOSE", 2, 122, COL_DIM);
+static bool selectable(int r) {
+    return r >= 0 && r < s_n_rows && s_rows[r].kind != RK_TEXT;
+}
+static int next_sel(int from, int dir) {
+    for (int r = from + dir; r >= 0 && r < s_n_rows; r += dir)
+        if (selectable(r)) return r;
+    return from;
+}
+
+void status_open(void) {
+    s_scroll = 0;
+    s_detail = 0;
+    s_prev = buttons_all_held();   /* debounce */
+    build_rows();
+    s_cursor = next_sel(-1, 1);
+    if (!selectable(s_cursor)) s_cursor = -1;
+}
+
+bool status_tick(const CraftRawButtons *btn, float dt) {
+    (void)dt;
+    bool up = btn->up && !s_prev.up;
+    bool down = btn->down && !s_prev.down;
+    bool a = btn->a && !s_prev.a;
+    bool close_btn = (btn->menu && !s_prev.menu) || (btn->b && !s_prev.b);
+    s_prev = *btn;
+
+    if (s_detail) {
+        if (a || close_btn) s_detail = 0;
+        return false;
+    }
+
+    build_rows();
+    if (up && s_cursor >= 0) s_cursor = next_sel(s_cursor, -1);
+    if (down && s_cursor >= 0) s_cursor = next_sel(s_cursor, 1);
+    if (s_cursor >= 0) {
+        if (s_cursor < s_scroll) s_scroll = s_cursor;
+        if (s_cursor > s_scroll + 11) s_scroll = s_cursor - 11;
+    }
+    if (a && selectable(s_cursor))
+        s_detail = (s_rows[s_cursor].kind == RK_CARGO) ? 2 : 1;
+    return close_btn;
+}
+
+void status_draw(uint16_t *fb) {
+    if (s_detail && selectable(s_cursor)) {
+        const Row *r = &s_rows[s_cursor];
+        if (r->kind == RK_CARGO) {
+            detail_draw_good(fb, r->index, g_player.cargo[r->index],
+                             "A/B:BACK");
+        } else {
+            const WeaponInst *wi = (r->kind == RK_MOUNT)
+                                       ? &g_player.mounts[r->index]
+                                       : &g_player.salvage[r->index];
+            int v = (int)(weapon_price(wi->type, wi->quality) *
+                          (0.35f + 0.30f * wi->integrity * 0.01f));
+            detail_draw_weapon(fb, wi, v, "VALUE", "A/B:BACK");
+        }
+        return;
+    }
+
+    /* Fill everything except the ship-preview window (top right). */
+    for (int y = 0; y < ELITE_FB_H; y++) {
+        uint16_t *fbrow = fb + y * ELITE_FB_W;
+        int skip0 = (y >= 10 && y < 54) ? 76 : ELITE_FB_W;
+        for (int x = 0; x < ELITE_FB_W; x++)
+            if (x < skip0) fbrow[x] = COL_BG;
+    }
+    for (int y = 10; y < 54; y++) fb[y * ELITE_FB_W + 76] = COL_GRID;
+
+    char buf[24];
+    craft_font_draw(fb, "SHIP STATUS", 2, 2, COL_HDR);
+    snprintf(buf, sizeof buf, "%dCR", g_player.credits);
+    craft_font_draw(fb, buf, 128 - craft_font_width(buf) - 2, 2, COL_CRED);
+    for (int x = 0; x < 128; x++) fb[9 * ELITE_FB_W + x] = COL_GRID;
+
+    build_rows();
+    int y = 13;
+    for (int r = s_scroll; r < s_n_rows && y < 117; r++, y += 8) {
+        const Row *rw = &s_rows[r];
+        /* Don't draw under the preview window. */
+        int x0 = 2;
+        if (rw->icon >= 0 && y >= 11) icon_weapon(fb, x0, y - 1, rw->icon);
+        if (r == s_cursor && selectable(r))
+            craft_font_draw(fb, ">", 0, y, COL_TXT);
+        craft_font_draw(fb, rw->text, x0 + 2, y,
+                        (r == s_cursor && selectable(r)) ? COL_TXT
+                                                         : rw->color);
+    }
+
+    for (int x = 0; x < 128; x++) fb[118 * ELITE_FB_W + x] = COL_GRID;
+    craft_font_draw(fb, "A:DETAILS B:CLOSE", 2, 121, COL_DIM);
 }

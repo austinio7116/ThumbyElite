@@ -12,6 +12,7 @@
 #include "elite_combat.h"
 #include "r3d_scene.h"
 #include "r3d_fx.h"
+#include "elite_audio.h"
 #include "elite_types.h"
 
 #define MAX_PROJ 28
@@ -81,6 +82,8 @@ static void detonate(Proj *p) {
     const WeaponDef *w = &k_weapons[p->type];
     if (w->aoe > 0) {
         fx_spawn_explosion(p->pos, v3(0, 0, 0));
+        float d = v3_len(v3_sub(p->pos, g_ships[PLAYER].pos));
+        sfx_explosion(1.0f - d / 700.0f, 0.5f);
         combat_explosion_damage(p->owner, p->pos, w->aoe,
                                 w->dmg * p->dmg_mult);
     } else {
