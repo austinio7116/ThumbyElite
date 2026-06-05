@@ -180,14 +180,10 @@ void status_draw(uint16_t *fb) {
         return;
     }
 
-    /* Fill everything except the ship-preview window (top right). */
-    for (int y = 0; y < ELITE_FB_H; y++) {
-        uint16_t *fbrow = fb + y * ELITE_FB_W;
-        int skip0 = (y >= 10 && y < 54) ? 76 : ELITE_FB_W;
-        for (int x = 0; x < ELITE_FB_W; x++)
-            if (x < skip0) fbrow[x] = COL_BG;
-    }
-    for (int y = 10; y < 54; y++) fb[y * ELITE_FB_W + 76] = COL_GRID;
+    /* The rendered ship becomes a dimmed backdrop (50%) — the whole
+     * screen stays free for the sheet. */
+    for (int i = 0; i < ELITE_FB_W * ELITE_FB_H; i++)
+        fb[i] = (uint16_t)((fb[i] >> 1) & 0x7BEF);
 
     char buf[24];
     craft_font_draw(fb, "SHIP STATUS", 2, 2, COL_HDR);
