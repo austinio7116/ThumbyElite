@@ -8,6 +8,7 @@
  * fires boost instead of the second toggle.
  */
 #include "elite_input.h"
+#include "elite_player.h"
 #include <string.h>
 
 #define TAP_MS    0.30f
@@ -72,7 +73,8 @@ void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) 
     float lr = (btn->right ? 1.0f : 0.0f) - (btn->left ? 1.0f : 0.0f);
 
     if (s_lb.down) { out->roll = lr; } else { out->yaw = lr; }
-    if (s_rb.down) { out->throttle_delta = ud; } else { out->pitch = ud; }
+    if (s_rb.down) { out->throttle_delta = ud; }
+    else { out->pitch = g_player.invert_y ? ud : -ud; }
 
     int lb_ev = mod_update(&s_lb, btn->lb, dpad, false, dt);
     int rb_ev = mod_update(&s_rb, btn->rb, dpad, true, dt);

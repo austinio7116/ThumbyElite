@@ -30,6 +30,7 @@ void player_init(void) {
     g_player.mounts[0] = (WeaponInst){ .type = WPN_PULSE_S,
         .quality = Q_SALVAGED, .integrity = 70, .in_use = 1 };
     for (int i = 0; i < HULL_SLOTS; i++) g_player.ammo[i] = -1;
+    g_player.invert_y = 1;              /* default: push forward to dive */
     g_player.shield_eq = (WeaponInst){ .type = EQ_SHIELD,
         .quality = Q_SALVAGED, .integrity = 80, .in_use = 1, .tier = 1 };
     g_player.armor_eq = (WeaponInst){ .type = EQ_ARMOR,

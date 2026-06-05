@@ -709,8 +709,24 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
     bool b_edge = btn->b && !s_prev.b;
     bool lb_edge = btn->lb && !s_prev.lb;
     bool rb_edge = btn->rb && !s_prev.rb;
-    bool up = btn->up && !s_prev.up;
-    bool down = btn->down && !s_prev.down;
+    /* Hold-to-scroll (user req): edge fires immediately, then repeats
+     * after 0.35s at ~8/s. */
+    static float s_rep_up, s_rep_dn;
+    bool up = false, down = false;
+    if (btn->up) {
+        if (!s_prev.up) { up = true; s_rep_up = 0; }
+        else {
+            s_rep_up += dt;
+            if (s_rep_up > 0.35f) { s_rep_up -= 0.12f; up = true; }
+        }
+    } else s_rep_up = 0;
+    if (btn->down) {
+        if (!s_prev.down) { down = true; s_rep_dn = 0; }
+        else {
+            s_rep_dn += dt;
+            if (s_rep_dn > 0.35f) { s_rep_dn -= 0.12f; down = true; }
+        }
+    } else s_rep_dn = 0;
     bool back = btn->menu && !s_prev.menu;     /* B stays free for SELL */
 
     if (s_toast_t > 0) s_toast_t -= dt;

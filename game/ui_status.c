@@ -176,9 +176,23 @@ void status_open(void) {
 }
 
 bool status_tick(const CraftRawButtons *btn, float dt) {
-    (void)dt;
-    bool up = btn->up && !s_prev.up;
-    bool down = btn->down && !s_prev.down;
+    /* Hold-to-scroll, matching the station lists. */
+    static float s_rep_up, s_rep_dn;
+    bool up = false, down = false;
+    if (btn->up) {
+        if (!s_prev.up) { up = true; s_rep_up = 0; }
+        else {
+            s_rep_up += dt;
+            if (s_rep_up > 0.35f) { s_rep_up -= 0.12f; up = true; }
+        }
+    } else s_rep_up = 0;
+    if (btn->down) {
+        if (!s_prev.down) { down = true; s_rep_dn = 0; }
+        else {
+            s_rep_dn += dt;
+            if (s_rep_dn > 0.35f) { s_rep_dn -= 0.12f; down = true; }
+        }
+    } else s_rep_dn = 0;
     bool a = btn->a && !s_prev.a;
     bool close_btn = (btn->menu && !s_prev.menu) || (btn->b && !s_prev.b);
     s_prev = *btn;

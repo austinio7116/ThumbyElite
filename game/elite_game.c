@@ -809,7 +809,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         break;
 
     case ST_PAUSE: {
-        static const int N_ITEMS = 4;
+        static const int N_ITEMS = 5;
         bool up = btn->up, down = btn->down;
         static bool pu, pd;
         if (up && !pu && s_pause_cursor > 0) s_pause_cursor--;
@@ -829,6 +829,8 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         } else if (a_edge && s_pause_cursor == 3) {
             status_open();
             s_state = ST_STATUS;
+        } else if (a_edge && s_pause_cursor == 4) {
+            g_player.invert_y = !g_player.invert_y;   /* stays in menu */
         }
         break;
     }
@@ -1099,13 +1101,15 @@ static void draw_pause_overlay(uint16_t *fb) {
         fb[99 * ELITE_FB_W + x] = RGB565C(95, 110, 140);
     }
     craft_font_draw(fb, "PAUSED", 52, 43, RGB565C(200, 210, 225));
-    static const char *items[4] = { "RESUME", "GALAXY CHART", "SYSTEM MAP",
-                                    "SHIP STATUS" };
-    for (int i = 0; i < 4; i++) {
+    const char *items[5] = { "RESUME", "GALAXY CHART", "SYSTEM MAP",
+                             "SHIP STATUS",
+                             g_player.invert_y ? "INVERT Y: ON"
+                                               : "INVERT Y: OFF" };
+    for (int i = 0; i < 5; i++) {
         uint16_t c = (i == s_pause_cursor) ? RGB565C(120, 255, 120)
                                            : RGB565C(120, 126, 145);
-        if (i == s_pause_cursor) craft_font_draw(fb, ">", 34, 56 + i * 9, c);
-        craft_font_draw(fb, items[i], 41, 56 + i * 9, c);
+        if (i == s_pause_cursor) craft_font_draw(fb, ">", 34, 52 + i * 9, c);
+        craft_font_draw(fb, items[i], 41, 52 + i * 9, c);
     }
 }
 
