@@ -10,6 +10,7 @@
  * A engages supercruise.
  */
 #include "ui_map.h"
+#include "elite_game.h"
 #include "mission.h"
 #include "craft_font.h"
 #include "econ.h"
@@ -493,10 +494,10 @@ void map_system_draw(uint16_t *fb) {
         }
     }
 
-    /* POI list with cursor. */
+    /* POI list with cursor (shortened — scan strip below). */
     int list_y = 36;
     int first = s_cursor - 4 > 0 ? s_cursor - 4 : 0;
-    for (int i = first; i < s_npois && list_y < 110; i++, list_y += 9) {
+    for (int i = first; i < s_npois && list_y < 92; i++, list_y += 9) {
         const Poi *p = &s_pois[i];
         float dist = v3_len(v3_sub(p->pos_mm, s_player_mm));
         const char *icon = (p->kind == POI_BEACON) ? "@"
@@ -505,6 +506,43 @@ void map_system_draw(uint16_t *fb) {
         craft_font_draw(fb, buf, 8, list_y,
                         (i == s_cursor) ? COL_CUR : COL_DIM);
         if (i == s_cursor) craft_font_draw(fb, ">", 2, list_y, COL_CUR);
+    }
+
+    /* Scan strip: live intel for the cursor POI. Belts are certain
+     * (persistent geography); pirates/salvage are odds. */
+    if (s_npois > 0) {
+        for (int x = 0; x < 128; x++) px(fb, x, 96, COL_GRID);
+        PoiIntel in2;
+        elite_game_poi_intel(&s_pois[s_cursor], &in2);
+        const SystemInfo *si2 = system_info();
+        const Poi *cp = &s_pois[s_cursor];
+        /* line 1: what this place is */
+        if (cp->kind == POI_STATION) {
+            const StationInfo *st = &si2->stations[cp->index];
+            static const char *k_se[8] = { "AGRI", "INDUST", "HITECH",
+                                           "EXTRACT", "REFINE", "TOURISM",
+                                           "MILITARY", "SERVICE" };
+            snprintf(buf, sizeof buf, "%s T%d%s",
+                     k_se[st->econ], st->tech,
+                     in2.police ? "  POLICE" : "");
+        } else if (cp->kind == POI_PLANET) {
+            static const char *k_pt[5] = { "ROCK", "OCEAN", "ICE",
+                                           "LAVA", "GAS" };
+            snprintf(buf, sizeof buf, "%s WORLD",
+                     k_pt[si2->planets[cp->index].type]);
+        } else {
+            snprintf(buf, sizeof buf, "NAV BEACON");
+        }
+        craft_font_draw(fb, buf, 2, 99, COL_TXT);
+        /* line 2: rocks + danger odds */
+        const char *pir = in2.pirate_pct == 0 ? "NONE"
+                        : in2.pirate_pct < 30 ? "LOW"
+                        : in2.pirate_pct < 60 ? "MED" : "HIGH";
+        snprintf(buf, sizeof buf, "%s PIRATE:%s SALV:%d%%",
+                 in2.belt ? "BELT!" : "ROCKS:-", pir,
+                 (int)in2.debris_pct);
+        craft_font_draw(fb, buf, 2, 108,
+                        in2.belt ? RGB565C(255, 200, 90) : COL_DIM);
     }
 
     for (int x = 0; x < 128; x++) px(fb, x, 118, COL_GRID);

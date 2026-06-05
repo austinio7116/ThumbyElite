@@ -171,6 +171,48 @@ static void spawn_player(void) {
 /* --- POI content ---------------------------------------------------------
  * Spawned once per supercruise drop / jump arrival. Pirates scale with
  * system threat; high-security space is quiet. */
+/* Per-POI intel — the system map's scan strip reads this, and
+ * spawn_poi_content uses the SAME belt hash, so what the map promises
+ * is what arrival delivers. Belts are permanent geography (no visit
+ * salt); pirates/salvage are odds, not facts. */
+void elite_game_poi_intel(const Poi *poi, PoiIntel *out) {
+    const SystemInfo *si = system_info();
+    /* Persistent belt: deterministic per system+POI. */
+    int mining_sys = 0;
+    for (int st2 = 0; st2 < si->n_stations; st2++)
+        if (si->stations[st2].econ == ECON_EXTRACT ||
+            si->stations[st2].econ == ECON_REFINE)
+            mining_sys = 1;
+    uint32_t h = (uint32_t)(si->seed >> 16) ^
+                 (uint32_t)(poi->kind * 73u) ^
+                 (uint32_t)(poi->index * 0x9E37u);
+    h *= 2654435761u; h ^= h >> 13;
+    int belt_pct = (poi->kind == POI_STATION) ? 10 : 25;
+    if (mining_sys) belt_pct += 35;
+    out->belt = (h % 100u) < (uint32_t)belt_pct;
+    out->belt_seed = h;
+    out->belt_rocks = mining_sys ? 5 + (int)((h >> 8) % 4u)
+                                 : 3 + (int)((h >> 8) % 3u);
+    /* Police: deterministic from government. */
+    out->police = (poi->kind == POI_STATION && si->gov >= GOV_CONFED);
+    /* Pirate odds: the live arrival formula, contraband included. */
+    int illegal = 0;
+    for (int g2 = 0; g2 < N_GOODS; g2++)
+        if (k_goods[g2].flags & GOOD_ILLEGAL) illegal += g_player.cargo[g2];
+    int chance = 0;
+    if (si->threat >= 1) {
+        chance = (poi->kind == POI_STATION) ? 25 : 55;
+        if (illegal > 0) {
+            chance += 15 + (illegal > 10 ? 20 : illegal * 2);
+            if (chance > 92) chance = 92;
+        }
+    }
+    out->pirate_pct = (uint8_t)chance;
+    /* Salvage odds: the debris formula. */
+    int dch = ((poi->kind == POI_STATION) ? 12 : 30) + (int)si->threat * 8;
+    out->debris_pct = (uint8_t)(dch > 99 ? 99 : dch);
+}
+
 static void spawn_poi_content(void) {
     const SystemInfo *si = system_info();
     /* Contraband heat (user req): illegal cargo draws ambushes — every
@@ -229,21 +271,14 @@ static void spawn_poi_content(void) {
         }
     }
 
-    /* Asteroid fields: mining country. Extraction and refinery systems
-     * seed them thick; any beacon/planet anchor can roll a sparse one. */
-    {
-        int mining_sys = 0;
-        for (int st2 = 0; st2 < si->n_stations; st2++)
-            if (si->stations[st2].econ == ECON_EXTRACT ||
-                si->stations[st2].econ == ECON_REFINE)
-                mining_sys = 1;
-        int rock_chance = (s_anchor_poi.kind == POI_STATION) ? 10 : 25;
-        if (mining_sys) rock_chance += 35;
-        if (s_anchor_has_poi &&
-            (int)(xorshift32() % 100u) < rock_chance)
-            rocks_spawn_field(xorshift32(),
-                              mining_sys ? 5 + (int)(xorshift32() % 4u)
-                                         : 3 + (int)(xorshift32() % 3u));
+    /* Asteroid fields: PERSISTENT geography — the same belt hash the
+     * system map's scan strip reports (option-C design). A belt is
+     * always at its POI, with a familiar field shape per visit. */
+    if (s_anchor_has_poi) {
+        PoiIntel intel;
+        elite_game_poi_intel(&s_anchor_poi, &intel);
+        if (intel.belt)
+            rocks_spawn_field(intel.belt_seed, intel.belt_rocks);
     }
 
     /* Derelict debris (user req): some sites have loot just floating —

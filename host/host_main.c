@@ -100,6 +100,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_BTEST") ||
         getenv("ELITE_STARTCHECK") ||
         getenv("ELITE_ACTION") ||
+        getenv("ELITE_INTELTEST") ||
         getenv("ELITE_SHOT")) {
         /* Harnesses start in-game: skip the title via NEW GAME. */
         remove("thumbyelite.sav");
@@ -138,6 +139,26 @@ int main(int argc, char **argv) {
             }
         printf("[startcheck] %s nearest=%.1f in6=%d in8=%d stations=%d\n",
                si->name, best, in6, in8, si->n_stations);
+        return 0;
+    }
+
+    /* Intel-vs-arrival consistency check (option-C contract). */
+    if (getenv("ELITE_INTELTEST")) {
+        Poi pois[MAX_POIS];
+        int np = system_pois(pois, MAX_POIS);
+        PoiIntel in3;
+        elite_game_poi_intel(&pois[0], &in3);     /* beacon = anchor */
+        Vec3 rk[8];
+        int nr = rocks_positions(rk, 8);
+        printf("[intel] beacon belt=%d rocks_present=%d %s\n",
+               in3.belt, nr,
+               (in3.belt == (nr > 0)) ? "MATCH" : "MISMATCH");
+        for (int i = 0; i < np; i++) {
+            elite_game_poi_intel(&pois[i], &in3);
+            printf("[intel] %-14s belt=%d pol=%d pir=%d salv=%d\n",
+                   pois[i].name, in3.belt, in3.police, in3.pirate_pct,
+                   in3.debris_pct);
+        }
         return 0;
     }
 

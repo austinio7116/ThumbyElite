@@ -32,4 +32,15 @@ void elite_game_debug_spawn(int n);
 void elite_game_debug_face_away_from_sun(void);
 const char *elite_rank_name(int kills);
 
+#include "system_sim.h"
+typedef struct {
+    uint8_t  belt;            /* persistent asteroid belt here */
+    uint8_t  police;          /* patrols present */
+    uint8_t  pirate_pct;      /* arrival ambush odds (live, incl. cargo) */
+    uint8_t  debris_pct;      /* salvage odds */
+    uint8_t  belt_rocks;
+    uint32_t belt_seed;
+} PoiIntel;
+void elite_game_poi_intel(const Poi *poi, PoiIntel *out);
+
 #endif
