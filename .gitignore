@@ -5,4 +5,5 @@ build_device/
 *.sav
 *.ppm
 *.png
-!docs/img/*.png   # the Pilot's Handbook images must ship
+# the Pilot's Handbook images must ship:
+!docs/img/*.png
