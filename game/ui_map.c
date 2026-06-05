@@ -476,6 +476,25 @@ void map_system_draw(uint16_t *fb) {
         for (int dx = -4; dx <= 4; dx++)
             if (dx * dx + dy * dy <= 16)
                 px(fb, 8 + dx, strip_y + dy, si->star_color);
+    /* Cursor link: highlight the selected POI's body in the strip. */
+    int hi_x = -1;
+    if (s_npois > 0) {
+        const Poi *cp2 = &s_pois[s_cursor];
+        if (cp2->kind == POI_BEACON) hi_x = 8;             /* the star end */
+        else if (cp2->kind == POI_PLANET) hi_x = 24 + cp2->index * 14;
+        else
+            for (int i = 0; i < si->n_planets; i++)
+                if (si->planets[i].station == cp2->index)
+                    hi_x = 24 + i * 14;                    /* host planet */
+    }
+    if (hi_x >= 0) {
+        /* up-chevron under the body, cursor green */
+        px(fb, hi_x, strip_y + 8, COL_CUR);
+        px(fb, hi_x - 1, strip_y + 9, COL_CUR);
+        px(fb, hi_x + 1, strip_y + 9, COL_CUR);
+        px(fb, hi_x - 2, strip_y + 10, COL_CUR);
+        px(fb, hi_x + 2, strip_y + 10, COL_CUR);
+    }
     for (int i = 0; i < si->n_planets; i++) {
         int x = 24 + i * 14;
         int r = si->planets[i].type == PT_GAS ? 4 : 2;
@@ -488,9 +507,13 @@ void map_system_draw(uint16_t *fb) {
             for (int dx = -r; dx <= r; dx++)
                 if (dx * dx + dy * dy <= r * r) px(fb, x + dx, strip_y + dy, c);
         if (si->planets[i].station >= 0) {     /* station tick above */
-            px(fb, x, strip_y - 7, COL_DIM);
-            px(fb, x - 1, strip_y - 8, COL_DIM);
-            px(fb, x + 1, strip_y - 8, COL_DIM);
+            uint16_t tc = (s_npois > 0 &&
+                           s_pois[s_cursor].kind == POI_STATION &&
+                           si->planets[i].station ==
+                               s_pois[s_cursor].index) ? COL_CUR : COL_DIM;
+            px(fb, x, strip_y - 7, tc);
+            px(fb, x - 1, strip_y - 8, tc);
+            px(fb, x + 1, strip_y - 8, tc);
         }
     }
 
