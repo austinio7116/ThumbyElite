@@ -255,9 +255,25 @@ int combat_fire(int shooter, float spread, int target) {
         return -1;
     }
 
-    /* TRACTOR: no damage — reels the locked canister in (handled by
-     * loot_tick via the active pull). Beam visual only. */
+    /* TRACTOR: no damage. With a SHIP locked in range it GRAPPLES:
+     * velocity bleeds to a stop and their drives drag while you hold
+     * the beam (user req) — pin them in your sights. Smaller prey
+     * holds harder; bigger hulls fight the beam. Otherwise it reels
+     * the locked canister in. */
     if (wtype == WPN_TRACTOR) {
+        if (target >= 0 && g_ships[target].alive) {
+            Ship *tv = &g_ships[target];
+            float d2 = v3_len(v3_sub(tv->pos, s->pos));
+            if (d2 < w->range) {
+                float grip = (tv->mesh->bound_r > s->mesh->bound_r * 1.3f)
+                                 ? 0.95f : 0.86f;     /* per 0.1s shot */
+                tv->vel = v3_scale(tv->vel, grip);
+                tv->engine_drag_t = 0.4f;             /* drives strain */
+                fx_beam(muzzle, tv->pos, w->color);
+                fx_spawn_shield_flash(tv->pos, tv->vel, 0);
+                return -1;
+            }
+        }
         loot_tractor_pull(s->pos, w->range, 26.0f);
         Vec3 end2 = v3_add(s->pos, v3_scale(dir, w->range * 0.6f));
         fx_beam(muzzle, end2, w->color);
