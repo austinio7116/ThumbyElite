@@ -234,6 +234,89 @@ typedef struct { uint8_t kind, index; uint8_t tier; } OutfitRow;
 static OutfitRow s_rows[HULL_SLOTS + 2 + MAX_SALVAGE + WPN_COUNT + 9];
 static int s_n_rows;
 
+/* Per-terminal armoury (user req): each station stocks a seeded,
+ * tech-gated subset of the catalogue at economy-biased prices, plus
+ * the occasional FEATURED non-standard instance (RNF/MIL/PRO) — the
+ * legendary-gun reward for exploring far terminals. */
+#define ARMORY_MAX 9
+typedef struct {
+    uint8_t type, quality, featured;
+    int32_t price;
+} ArmoryItem;
+static ArmoryItem s_armory[ARMORY_MAX];
+static int s_n_armory;
+
+static float econ_weapon_mult(int econ) {
+    static const float k_m[8] = {
+        /* AGRI */ 1.15f, /* INDUST */ 0.95f, /* HITECH */ 0.93f,
+        /* EXTRACT */ 1.05f, /* REFINE */ 1.00f, /* TOURISM */ 1.10f,
+        /* MILITARY */ 0.85f, /* SERVICE */ 1.00f,
+    };
+    return k_m[econ & 7];
+}
+
+static void armory_build(void) {
+    const SystemInfo *si = system_info();
+    const StationInfo *st = &si->stations[s_station];
+    uint32_t h = (uint32_t)(si->seed >> 18) ^
+                 (uint32_t)((s_station + 3) * 2654435761u) ^ 0xA4A4u;
+    h ^= h >> 13; h *= 1274126177u; h ^= h >> 16;
+    float mult = econ_weapon_mult(st->econ) *
+                 (0.95f + 0.10f * (float)(h & 0xFF) * (1.0f / 255.0f));
+
+    /* Stock pool by tech: basics everywhere, exotics need a real yard. */
+    uint8_t pool[WPN_COUNT];
+    int pn = 0;
+    pool[pn++] = WPN_PULSE_S;
+    pool[pn++] = WPN_AUTOCANNON;
+    pool[pn++] = WPN_PULSE_M;
+    pool[pn++] = WPN_MISSILE;
+    if (st->tech >= 6) {
+        pool[pn++] = WPN_BEAM;
+        pool[pn++] = WPN_PULSE_L;
+        pool[pn++] = WPN_HOMING;
+    }
+    if (st->tech >= 11) {
+        pool[pn++] = WPN_PHOTON;
+        pool[pn++] = WPN_GAUSS;
+    }
+    int want = 4 + (int)((h >> 8) % 3u);          /* 4-6 lines */
+    if (want > pn) want = pn;
+    int startp = (int)((h >> 16) % (uint32_t)pn);
+    s_n_armory = 0;
+    for (int k = 0; k < want; k++) {
+        ArmoryItem *it = &s_armory[s_n_armory++];
+        it->type = pool[(startp + k * 2 + (k > 2)) % pn];
+        /* avoid dupes from the stride */
+        for (int j = 0; j < s_n_armory - 1; j++)
+            if (s_armory[j].type == it->type) { s_n_armory--; break; }
+    }
+    for (int i = 0; i < s_n_armory; i++) {
+        s_armory[i].quality = Q_STANDARD;
+        s_armory[i].featured = 0;
+        s_armory[i].price =
+            (int32_t)(weapon_price(s_armory[i].type, Q_STANDARD) * mult);
+    }
+
+    /* Featured offers: 0-2, likelier at high tech. ANY weapon can
+     * appear — a PRO gauss at a backwater is the exploration jackpot. */
+    int n_feat = 0;
+    uint32_t f = h * 0x9E3779B9u;
+    f ^= f >> 15;
+    if ((int)(f % 100u) < 25 + st->tech * 4) n_feat++;
+    if (st->tech >= 9 && (int)((f >> 8) % 100u) < 30) n_feat++;
+    for (int k = 0; k < n_feat && s_n_armory < ARMORY_MAX; k++) {
+        f ^= f << 13; f ^= f >> 17; f ^= f << 5;
+        ArmoryItem *it = &s_armory[s_n_armory++];
+        it->type = (uint8_t)(f % WPN_COUNT);
+        int qr = (int)((f >> 8) % 100u);
+        it->quality = (qr < 60) ? Q_REINFORCED
+                    : (qr < 90) ? Q_MILITARY : Q_PROTOTYPE;
+        it->featured = 1;
+        it->price = (int32_t)(weapon_price(it->type, it->quality) * mult);
+    }
+}
+
 static void outfit_build_rows(void) {
     const HullDef *h = &k_hulls[g_player.hull_id];
     s_n_rows = 0;
@@ -248,7 +331,7 @@ static void outfit_build_rows(void) {
         if (g_player.salvage[i].in_use)
             s_rows[s_n_rows++] = (OutfitRow){ ROW_SALV, (uint8_t)i, 0 };
     s_rows[s_n_rows++] = (OutfitRow){ ROW_HDR, 2, 0 };
-    for (int i = 0; i < WPN_COUNT; i++)
+    for (int i = 0; i < s_n_armory; i++)
         s_rows[s_n_rows++] = (OutfitRow){ ROW_SHOP, (uint8_t)i, 0 };
     /* Equipment shop: tiers the frame can take. */
     for (int t = 1; t <= h->max_shield_tier; t++)
@@ -311,7 +394,9 @@ static void outfit_action_a(int row) {
     }
     case ROW_EQSHOP: {
         int type = WPN_COUNT + r->index;
+        const SystemInfo *sie = system_info();
         int price = (int)(equip_price(type, r->tier, Q_STANDARD) *
+                          econ_weapon_mult(sie->stations[s_station].econ) *
                           skill_price_mult());
         if (g_player.credits < price) { toast("NO CREDITS"); return; }
         WeaponInst *e = equip_slot(r->index);
@@ -455,7 +540,10 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
                 yard_build();
                 s_screen = SCR_SHIPYARD; s_cursor = 0; s_scroll = 0;
             }
-            else if (s_cursor == 2) { s_screen = SCR_OUTFIT; s_cursor = 1; s_scroll = 0; }
+            else if (s_cursor == 2) {
+                armory_build();
+                s_screen = SCR_OUTFIT; s_cursor = 1; s_scroll = 0;
+            }
             else if (s_cursor == 3) {
                 mission_make_offers(system_info(), s_station, s_offers);
                 s_screen = SCR_MISSIONS; s_cursor = 0;
@@ -792,9 +880,15 @@ static void draw_outfit(uint16_t *fb) {
             snprintf(buf, sizeof buf, "BUY %s Z%d",
                      item_name(WPN_COUNT + r->index), r->tier);
             craft_font_draw(fb, buf, 21, y, c);
-            snprintf(buf, sizeof buf, "%d",
-                     (int)(equip_price(WPN_COUNT + r->index, r->tier,
-                                       Q_STANDARD) * skill_price_mult()));
+            {
+                const SystemInfo *sie = system_info();
+                snprintf(buf, sizeof buf, "%d",
+                         (int)(equip_price(WPN_COUNT + r->index, r->tier,
+                                           Q_STANDARD) *
+                               econ_weapon_mult(
+                                   sie->stations[s_station].econ) *
+                               skill_price_mult()));
+            }
             craft_font_draw(fb, buf, 104, y, COL_CRED);
             break;
         }
@@ -822,13 +916,22 @@ static void draw_outfit(uint16_t *fb) {
             break;
         }
         case ROW_SHOP: {
-            icon_weapon(fb, 7, y - 1, r->index);
-            snprintf(buf, sizeof buf, "BUY %s Z%d",
-                     k_weapons[r->index].name, k_weapons[r->index].size);
-            craft_font_draw(fb, buf, 21, y, c);
+            const ArmoryItem *it = &s_armory[r->index];
+            icon_weapon(fb, 7, y - 1, it->type);
+            if (it->featured) {
+                /* Featured rare: starred, quality-tagged, gold name. */
+                snprintf(buf, sizeof buf, "*%s %s",
+                         k_qtag[it->quality], k_weapons[it->type].name);
+                craft_font_draw(fb, buf, 21, y,
+                                (i == s_cursor) ? COL_CUR
+                                                : RGB565C(255, 200, 90));
+            } else {
+                snprintf(buf, sizeof buf, "BUY %s Z%d",
+                         k_weapons[it->type].name, k_weapons[it->type].size);
+                craft_font_draw(fb, buf, 21, y, c);
+            }
             snprintf(buf, sizeof buf, "%d",
-                     (int)(weapon_price(r->index, Q_STANDARD) *
-                           skill_price_mult()));
+                     (int)(it->price * skill_price_mult()));
             craft_font_draw(fb, buf, 104, y, COL_CRED);
             break;
         }
@@ -972,10 +1075,10 @@ void station_draw(uint16_t *fb) {
             plabel = "SELLS FOR";
             foot = "LB/RB:NEXT A:FIT B:BACK";
         } else if (r->kind == ROW_SHOP) {
-            tmp = (WeaponInst){ (uint8_t)r->index, Q_STANDARD, 100, 1 };
+            const ArmoryItem *it = &s_armory[r->index];
+            tmp = (WeaponInst){ it->type, it->quality, 100, 1, 0, {0} };
             wi = &tmp;
-            price = (int)(weapon_price(r->index, Q_STANDARD) *
-                          skill_price_mult());
+            price = (int)(it->price * skill_price_mult());
             foot = "LB/RB:NEXT A:BUY B:BACK";
         }
         if (wi) {
