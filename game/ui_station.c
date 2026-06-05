@@ -750,11 +750,11 @@ static void draw_outfit(uint16_t *fb) {
             const WeaponInst *m = &g_player.mounts[r->index];
             if (m->in_use) {
                 icon_weapon(fb, 7, y - 1, m->type);
-                snprintf(buf, sizeof buf, "S%d %s %s %d%%",
+                snprintf(buf, sizeof buf, "Z%d %s %s %d%%",
                          h->slot_size[r->index], k_weapons[m->type].name,
                          k_qtag[m->quality], m->integrity);
             } else
-                snprintf(buf, sizeof buf, "S%d ----",
+                snprintf(buf, sizeof buf, "Z%d EMPTY",
                          h->slot_size[r->index]);
             craft_font_draw(fb, buf, 21, y, c);
             if (m->in_use && m->integrity < 100) {

@@ -79,14 +79,16 @@ static void build_rows(void) {
     row(RK_TEXT, 0, COL_HDR, -1, "MOUNTS:");
     for (int i = 0; i < h->n_slots; i++) {
         const WeaponInst *m = &g_player.mounts[i];
+        /* Z# = the SLOT's capacity (what it can take), matching the
+         * Z-size language used in shops and detail sheets. */
         if (m->in_use)
             row(RK_MOUNT, i,
                 m->integrity < 50 ? COL_WARN : COL_DIM, m->type,
-                "   S%d %s %s %d%%", h->slot_size[i],
+                "   Z%d %s %s %d%%", h->slot_size[i],
                 k_weapons[m->type].name, k_qual_tag[m->quality],
                 m->integrity);
         else
-            row(RK_TEXT, 0, COL_DIM, -1, "S%d ----", h->slot_size[i]);
+            row(RK_TEXT, 0, COL_DIM, -1, "Z%d EMPTY", h->slot_size[i]);
     }
     for (int i = 0; i < 2; i++) {
         const WeaponInst *e = i ? &g_player.armor_eq : &g_player.shield_eq;
