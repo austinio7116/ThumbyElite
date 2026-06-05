@@ -117,8 +117,94 @@ static void drum(float r, float hz, uint16_t mtl, uint16_t face_col) {
         s_mods[s_nmods++] = (Module){ 0, 0, 0, r, r, hz };
 }
 
+/* Faceted ball: three octagonal rings + polar caps. */
+static void ball(float r, uint16_t mtl, uint16_t face_col) {
+    if (s_nv + 26 > MAX_SV || s_nf + 48 > MAX_SF) return;
+    int rings[3][8];
+    float zs[3] = { -r * 0.55f, 0, r * 0.55f };
+    float rs[3] = { r * 0.68f, r, r * 0.68f };
+    for (int k = 0; k < 3; k++)
+        for (int i = 0; i < 8; i++) {
+            float a = (float)i * (6.2831853f / 8.0f) + 0.3927f;
+            rings[k][i] = add_vert(cosf(a) * rs[k], sinf(a) * rs[k], zs[k]);
+        }
+    int south = add_vert(0, 0, -r * 0.95f);
+    int north = add_vert(0, 0, r * 0.95f);
+    for (int k = 0; k < 2; k++)
+        for (int i = 0; i < 8; i++) {
+            int j = (i + 1) & 7;
+            add_face(rings[k][i], rings[k][j], rings[k + 1][j], mtl);
+            add_face(rings[k][i], rings[k + 1][j], rings[k + 1][i],
+                     (i & 1) ? mtl : face_col);
+        }
+    for (int i = 0; i < 8; i++) {
+        int j = (i + 1) & 7;
+        add_face(rings[0][i], south, rings[0][j], mtl);
+        add_face(rings[2][i], rings[2][j], north, face_col);
+    }
+    if (s_nmods < MAX_MODULES)
+        s_mods[s_nmods++] = (Module){ 0, 0, 0, r, r, r };
+}
+
+/* Ring station: octagonal torus + hub drum + four spokes. */
+static void ring_core(float R, float tube, uint16_t mtl, uint16_t mtl2,
+                      uint16_t face_col) {
+    if (s_nv + 32 > MAX_SV || s_nf + 64 > MAX_SF) return;
+    int fo[8], fi[8], bo[8], bi[8];
+    for (int i = 0; i < 8; i++) {
+        float a = (float)i * (6.2831853f / 8.0f);
+        float co = cosf(a), si = sinf(a);
+        fo[i] = add_vert(co * (R + tube), si * (R + tube), tube);
+        fi[i] = add_vert(co * (R - tube), si * (R - tube), tube);
+        bo[i] = add_vert(co * (R + tube), si * (R + tube), -tube);
+        bi[i] = add_vert(co * (R - tube), si * (R - tube), -tube);
+    }
+    for (int i = 0; i < 8; i++) {
+        int j = (i + 1) & 7;
+        add_face(fo[i], fo[j], fi[j], face_col);   /* front +z */
+        add_face(fo[i], fi[j], fi[i], face_col);
+        add_face(bo[j], bo[i], bi[i], mtl2);       /* back -z */
+        add_face(bo[j], bi[i], bi[j], mtl2);
+        add_face(bo[i], bo[j], fo[j], mtl);        /* outer wall */
+        add_face(bo[i], fo[j], fo[i], mtl);
+        add_face(bi[j], bi[i], fi[i], mtl2);       /* inner wall */
+        add_face(bi[j], fi[i], fi[j], mtl2);
+    }
+    /* Hub + spokes. */
+    drum(R * 0.32f, tube * 1.4f, mtl, face_col);
+    for (int k = 0; k < 4; k++) {
+        float a = (float)k * 1.5707963f + 0.7854f;
+        float mx = cosf(a) * R * 0.62f, my = sinf(a) * R * 0.62f;
+        box(mx, my, 0, fabsf(cosf(a)) * R * 0.34f + tube * 0.4f,
+            fabsf(sinf(a)) * R * 0.34f + tube * 0.4f, tube * 0.35f,
+            mtl2, NULL);
+    }
+}
+
+/* Spindle: stretched octahedral bipyramid + equator band. */
+static void spindle(float r, float hz, uint16_t mtl, uint16_t mtl2,
+                    uint16_t face_col) {
+    if (s_nv + 18 > MAX_SV || s_nf + 32 > MAX_SF) return;
+    int eq[8];
+    for (int i = 0; i < 8; i++) {
+        float a = (float)i * (6.2831853f / 8.0f) + 0.3927f;
+        eq[i] = add_vert(cosf(a) * r, sinf(a) * r, 0);
+    }
+    int tip_f = add_vert(0, 0, hz);
+    int tip_b = add_vert(0, 0, -hz);
+    for (int i = 0; i < 8; i++) {
+        int j = (i + 1) & 7;
+        add_face(eq[i], eq[j], tip_f, (i & 1) ? mtl : face_col);
+        add_face(eq[j], eq[i], tip_b, (i & 1) ? mtl2 : mtl);
+    }
+    /* Equator band: thin drum overlapping the waist. */
+    drum(r * 1.04f, hz * 0.14f, mtl2, mtl2);
+}
+
 const Mesh *station_gen_mesh(uint32_t seed) {
-    s_rng = seed | 1u;
+    s_rng = seed * 2654435761u;
+    s_rng ^= s_rng >> 15;
+    if (!s_rng) s_rng = 1;
     s_nv = s_nf = s_nmods = 0;
 
     /* Palette: hull greys tinted per station. */
@@ -134,18 +220,37 @@ const Mesh *station_gen_mesh(uint32_t seed) {
     uint16_t ACCENT = (rnd() & 1) ? RGB565C(220, 90, 60)
                                   : RGB565C(230, 175, 60);
 
-    /* 1. Core. */
-    int drum_core = rndi(0, 1);
+    /* 1. Core: six silhouettes (user req: the box core read dull).
+     * drum 25 / ring 20 / ball 15 / spindle 15 / box 15 / cross 10. */
+    int core_roll = rndi(0, 99);
     float core_r;
-    if (drum_core) {
+    if (core_roll < 25) {
         core_r = rndf(11, 15);
         float core_hz = rndf(8, 16);
         drum(core_r, core_hz, HULL, GLASS);   /* +z cap = docking face */
-    } else {
+    } else if (core_roll < 45) {
+        /* Ring station: the wheel. */
+        core_r = rndf(16, 22);
+        ring_core(core_r, rndf(3.5f, 5.0f), HULL, HULL2, GLASS);
+    } else if (core_roll < 60) {
+        core_r = rndf(12, 16);
+        ball(core_r, HULL, WIN);
+    } else if (core_roll < 75) {
+        core_r = rndf(9, 12);
+        spindle(core_r, rndf(18, 26), HULL, HULL2, WIN);
+    } else if (core_roll < 90) {
         core_r = rndf(10, 14);
         float chy = rndf(7, 12), chz = rndf(9, 15);
         uint16_t fc[6] = { GLASS, DARK, HULL, HULL, HULL2, HULL2 };
         box(0, 0, 0, core_r, chy, chz, HULL, fc);
+    } else {
+        /* Cross truss: three interlocked slabs. */
+        core_r = rndf(11, 14);
+        uint16_t fc[6] = { GLASS, DARK, HULL, HULL, HULL2, HULL2 };
+        box(0, 0, 0, core_r, core_r * 0.32f, core_r * 0.32f, HULL, fc);
+        box(0, 0, 0, core_r * 0.32f, core_r, core_r * 0.32f, HULL2, NULL);
+        box(0, 0, 0, core_r * 0.3f, core_r * 0.3f, core_r * 1.1f, HULL,
+            fc);
     }
 
     /* 2. Accretion: attach modules to existing structure. */
