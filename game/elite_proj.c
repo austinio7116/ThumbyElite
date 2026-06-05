@@ -8,6 +8,7 @@
  * careless owners at point blank).
  */
 #include "elite_proj.h"
+#include "elite_rocks.h"
 #include "elite_player.h"
 #include "elite_entity.h"
 #include "elite_combat.h"
@@ -190,6 +191,26 @@ void proj_tick(float dt) {
             float t = seg_sphere(p->pos, seg, g_ships[s].pos,
                                  g_ships[s].mesh->bound_r * 0.9f);
             if (t >= 0.0f && t < best_t) { best_t = t; hit = s; }
+        }
+        /* Rocks block shells too (user report: point-blank autocannon
+         * sailed straight through a boulder). Nearest hit wins. */
+        float rock_t = 2.0f;
+        int rock_hit = -1;
+        {
+            float seg_len = v3_len(seg);
+            if (seg_len > 1e-4f) {
+                float rt2;
+                int ri = rocks_ray(p->pos, v3_scale(seg, 1.0f / seg_len),
+                                   seg_len, &rt2);
+                if (ri >= 0) { rock_hit = ri; rock_t = rt2 / seg_len; }
+            }
+        }
+        if (rock_hit >= 0 && rock_t < best_t) {
+            p->pos = v3_add(p->pos, v3_scale(seg, rock_t));
+            if (w->aoe > 0) detonate(p);
+            rocks_damage(rock_hit, w->dmg * p->dmg_mult, p->pos);
+            p->alive = false;
+            continue;
         }
         if (hit >= 0) {
             p->pos = v3_add(p->pos, v3_scale(seg, best_t));

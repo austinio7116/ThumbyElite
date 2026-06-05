@@ -178,6 +178,45 @@ int main(int argc, char **argv) {
             }
             render_frame();
             dump_ppm("/tmp/rock_lock.ppm");
+            /* autocannon the nearest boulder: shells must chip it */
+            ship_fit_weapon(0, 0, WPN_AUTOCANNON);
+            g_ships[0].active_w = 0;
+            {   /* face the NEAREST ROCK dead-on (not the centroid) */
+                Vec3 rk3[8];
+                int nr3 = rocks_positions(rk3, 8);
+                if (nr3 > 0) {
+                    Ship *pl3 = &g_ships[0];
+                    int bi3 = 0; float bd3 = 1e30f;
+                    for (int i = 0; i < nr3; i++) {
+                        float d4 = v3_len(v3_sub(rk3[i], pl3->pos));
+                        if (d4 < bd3) { bd3 = d4; bi3 = i; }
+                    }
+                    Vec3 f4 = v3_norm(v3_sub(rk3[bi3], pl3->pos));
+                    Vec3 u4 = (f4.y > -0.9f && f4.y < 0.9f)
+                                  ? v3(0, 1, 0) : v3(1, 0, 0);
+                    Vec3 r4 = v3_norm(v3_cross(u4, f4));
+                    pl3->basis.r[0] = r4;
+                    pl3->basis.r[1] = v3_cross(f4, r4);
+                    pl3->basis.r[2] = f4;
+                }
+            }
+            extern int loot_positions(Vec3 *, int *, int);
+            int ore_before;
+            { Vec3 c3[6]; int k3[6];
+              ore_before = loot_positions(c3, k3, 6); }
+            CraftRawButtons fb2 = {0};
+            fb2.a = true;
+            for (int f = 0; f < 90; f++) {
+                g_ships[0].fire_cool = 0;
+                elite_game_tick(&fb2, 1.0f / 30.0f);
+            }
+            int ore_after;
+            { Vec3 c3[6]; int k3[6];
+              ore_after = loot_positions(c3, k3, 6); }
+            printf("[minetest] ore canisters %d -> %d (%s)\n",
+                   ore_before, ore_after,
+                   ore_after > ore_before ? "AUTOCANNON CHIPS"
+                                          : "NO EFFECT");
         }
         printf("[intel] beacon belt=%d rocks_present=%d %s\n",
                in3.belt, nr,
