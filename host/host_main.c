@@ -102,6 +102,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_ACTION") ||
         getenv("ELITE_INTELTEST") ||
         getenv("ELITE_SIEGE") ||
+        getenv("ELITE_TAPTEST") ||
         getenv("ELITE_SHOT")) {
         /* Harnesses start in-game: skip the title via NEW GAME. */
         remove("thumbyelite.sav");
@@ -140,6 +141,40 @@ int main(int argc, char **argv) {
             }
         printf("[startcheck] %s nearest=%.1f in6=%d in8=%d stations=%d\n",
                si->name, best, in6, in8, si->n_stations);
+        return 0;
+    }
+
+    /* Double-tap LB test: tap-tap, expect TGT: SALVAGE toast. */
+    if (getenv("ELITE_TAPTEST")) {
+        CraftRawButtons none = {0}, lb = {0};
+        lb.lb = true;
+        const char *toast;
+        extern const char *elite_game_debug_toast(void);
+        /* tap 1: 2 frames down, 2 up; tap 2 same — releases ~130ms apart */
+        elite_game_tick(&lb, 1.0f / 30.0f);
+        elite_game_tick(&lb, 1.0f / 30.0f);
+        elite_game_tick(&none, 1.0f / 30.0f);
+        elite_game_tick(&none, 1.0f / 30.0f);
+        elite_game_tick(&lb, 1.0f / 30.0f);
+        elite_game_tick(&lb, 1.0f / 30.0f);
+        elite_game_tick(&none, 1.0f / 30.0f);
+        toast = elite_game_debug_toast();
+        printf("[tap] quick double: '%s'\n", toast);
+        /* lazy double: releases ~400ms apart (12 frames) */
+        for (int f = 0; f < 40; f++) elite_game_tick(&none, 1.0f / 30.0f);
+        elite_game_tick(&lb, 1.0f / 30.0f);
+        elite_game_tick(&lb, 1.0f / 30.0f);
+        for (int f = 0; f < 10; f++) elite_game_tick(&none, 1.0f / 30.0f);
+        elite_game_tick(&lb, 1.0f / 30.0f);
+        elite_game_tick(&lb, 1.0f / 30.0f);
+        elite_game_tick(&none, 1.0f / 30.0f);
+        printf("[tap] lazy double: '%s'\n", elite_game_debug_toast());
+        /* singles far apart must NOT switch class */
+        for (int f = 0; f < 40; f++) elite_game_tick(&none, 1.0f / 30.0f);
+        elite_game_tick(&lb, 1.0f / 30.0f);
+        elite_game_tick(&none, 1.0f / 30.0f);
+        printf("[tap] single after: '%s' (should be unchanged)\n",
+               elite_game_debug_toast());
         return 0;
     }
 

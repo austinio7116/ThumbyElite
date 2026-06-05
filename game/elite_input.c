@@ -49,7 +49,7 @@ void elite_input_reset(void) {
  * toggles confuse; LB taps must work mid-turn, so no consume there:
  * the brief roll blip is harmless). */
 static int mod_update(Mod *m, bool down, bool dpad_used, bool use_consume,
-                      float dt) {
+                      float dbl_s, float dt) {
     int ev = 0;
     m->since_tap_s += dt;
     if (down) {
@@ -59,7 +59,7 @@ static int mod_update(Mod *m, bool down, bool dpad_used, bool use_consume,
     } else if (m->down) {
         m->down = false;
         if (!m->consumed && m->held_s < TAP_MS) {
-            ev = (m->since_tap_s < DOUBLE_MS) ? 2 : 1;
+            ev = (m->since_tap_s < dbl_s) ? 2 : 1;
             m->since_tap_s = 0;
         }
     }
@@ -79,9 +79,14 @@ void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) 
     if (s_rb.down) { out->throttle_delta = ud; }
     else { out->pitch = g_player.invert_y ? ud : -ud; }
 
-    int lb_ev = mod_update(&s_lb, btn->lb, dpad, false, dt);
-    int rb_ev = mod_update(&s_rb, btn->rb, dpad, true, dt);
-    if (lb_ev >= 1) out->cycle_target = true;
+    /* LB doubles get a LAZY window (0.5s) — physical-button double-taps
+     * land 350-450ms apart and the tight window missed them (user
+     * report). RB keeps the snappy window: it gates the deferred
+     * assist-toggle latency. */
+    int lb_ev = mod_update(&s_lb, btn->lb, dpad, false, 0.50f, dt);
+    int rb_ev = mod_update(&s_rb, btn->rb, dpad, true, DOUBLE_MS, dt);
+    if (lb_ev == 2) out->tgt_class_cycle = true;
+    else if (lb_ev == 1) out->cycle_target = true;
 
     /* RB tap action is deferred one double-tap window so a double-tap is
      * pure boost (no spurious assist toggle on the first tap). */

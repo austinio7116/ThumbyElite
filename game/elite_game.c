@@ -104,6 +104,8 @@ static float frand(float lo, float hi) {
     return lo + (hi - lo) * (float)(xorshift32() & 0xFFFF) * (1.0f / 65535.0f);
 }
 
+const char *elite_game_debug_toast(void) { return s_scoop_toast; }
+
 /* The classic ladder: nine ranks earned with kills. */
 const char *elite_rank_name(int kills) {
     static const struct { int k; const char *n; } R[9] = {
@@ -641,19 +643,17 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
                      broke);
             s_scoop_toast_t = 1.5f;
         }
-        if (in.cycle_target) {
-            static float last_tap_t = -10.0f;
-            if (s_time - last_tap_t < 0.32f) {
-                /* Double-tap: demote the target class. */
-                s_tgt_class = (s_tgt_class + 1) % 3;
-                static const char *k_tc[3] = { "TGT: AUTO",
-                                               "TGT: SALVAGE",
-                                               "TGT: ROCKS" };
-                snprintf(s_scoop_toast, sizeof s_scoop_toast, "%s",
-                         k_tc[s_tgt_class]);
-                s_scoop_toast_t = 1.4f;
-            }
-            last_tap_t = s_time;
+        if (in.tgt_class_cycle) {
+            /* LB double-tap: demote the lock class (input layer
+             * classifies the double; 0.5s window). */
+            s_tgt_class = (s_tgt_class + 1) % 3;
+            static const char *k_tc[3] = { "TGT: AUTO", "TGT: SALVAGE",
+                                           "TGT: ROCKS" };
+            snprintf(s_scoop_toast, sizeof s_scoop_toast, "%s",
+                     k_tc[s_tgt_class]);
+            s_scoop_toast_t = 1.4f;
+            cycle_target();              /* re-lock within the class */
+        } else if (in.cycle_target) {
             int before = s_target;
             cycle_target();
             if (s_target >= 0 && s_target != before) sfx_lock_acquire();
