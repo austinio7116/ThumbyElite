@@ -97,7 +97,6 @@ int main(int argc, char **argv) {
         getenv("ELITE_TRADETEST") || getenv("ELITE_JUMPTEST") ||
         getenv("ELITE_LOOTTEST") || getenv("ELITE_SHOPTEST") ||
         getenv("ELITE_MISTEST") || getenv("ELITE_STATUSTEST") ||
-        getenv("ELITE_TITLESHOT") ||
         getenv("ELITE_BTEST") ||
         getenv("ELITE_SHOT")) {
         /* Harnesses start in-game: skip the title via NEW GAME. */
@@ -108,6 +107,15 @@ int main(int argc, char **argv) {
         tb.down = false; elite_game_tick(&tb, 1.0f / 30.0f);
         tb.a = true; elite_game_tick(&tb, 1.0f / 30.0f);
         tb.a = false; elite_game_tick(&tb, 1.0f / 30.0f);
+    }
+
+    /* Title screen capture. */
+    if (getenv("ELITE_TITLESHOT")) {
+        CraftRawButtons none = {0};
+        for (int k = 0; k < 45; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        render_frame();
+        dump_ppm("/tmp/title.ppm");
+        return 0;
     }
 
     /* Headless autopilot: chase the scanner's nearest hostile and hold the

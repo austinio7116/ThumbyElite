@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ThumbyElite — Pilot's Handbook</title>
+<style>
+  :root {
+    --bg: #060a14; --panel: #0c1322; --panel2: #101a2e;
+    --grid: #1c2840; --txt: #c8d2e4; --dim: #6e7687;
+    --green: #78ff78; --cyan: #5ad2ff; --gold: #ffc83c;
+    --warn: #ff7846; --violet: #c878ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--txt);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    margin: 0; line-height: 1.55;
+  }
+  header {
+    text-align: center; padding: 48px 16px 30px;
+    background:
+      radial-gradient(ellipse at 30% 20%, #14204022 0%, transparent 60%),
+      radial-gradient(ellipse at 70% 80%, #2a104022 0%, transparent 60%),
+      var(--bg);
+    border-bottom: 1px solid var(--grid);
+  }
+  header h1 {
+    font-size: 2.6em; margin: 0; letter-spacing: 0.12em;
+    color: var(--green); text-shadow: 0 0 24px #78ff7833;
+  }
+  header p.sub { color: var(--dim); margin: 8px 0 0; letter-spacing: 0.2em; }
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: #0a0f1cf0; border-bottom: 1px solid var(--grid);
+    padding: 8px 16px; text-align: center; backdrop-filter: blur(4px);
+  }
+  nav a {
+    color: var(--cyan); text-decoration: none; font-size: 0.85em;
+    margin: 0 9px; white-space: nowrap;
+  }
+  nav a:hover { color: var(--green); }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 20px 80px; }
+  h2 {
+    color: var(--green); letter-spacing: 0.08em; margin-top: 60px;
+    border-bottom: 1px solid var(--grid); padding-bottom: 8px;
+  }
+  h3 { color: var(--cyan); margin-top: 34px; }
+  a { color: var(--cyan); }
+  .figrow { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; margin: 22px 0; }
+  figure {
+    margin: 0; background: var(--panel); border: 1px solid var(--grid);
+    border-radius: 8px; padding: 10px; max-width: 408px;
+  }
+  figure img {
+    display: block; width: 100%; image-rendering: pixelated;
+    border-radius: 4px;
+  }
+  figure.wide { max-width: 100%; }
+  figcaption { color: var(--dim); font-size: 0.85em; padding: 8px 4px 2px; }
+  figcaption b { color: var(--txt); }
+  table {
+    border-collapse: collapse; width: 100%; margin: 18px 0;
+    font-size: 0.92em; background: var(--panel);
+  }
+  th {
+    background: var(--panel2); color: var(--cyan); text-align: left;
+    padding: 8px 10px; border: 1px solid var(--grid); font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  td { padding: 7px 10px; border: 1px solid var(--grid); }
+  tr:hover td { background: #131e33; }
+  .key {
+    display: inline-block; background: var(--panel2); border: 1px solid #2a3a58;
+    border-bottom-width: 3px; border-radius: 5px; padding: 1px 8px;
+    font-family: ui-monospace, monospace; font-size: 0.9em; color: var(--gold);
+  }
+  .tag { font-family: ui-monospace, monospace; font-weight: 600; }
+  .g { color: var(--green); } .c { color: var(--cyan); } .y { color: var(--gold); }
+  .r { color: var(--warn); } .v { color: var(--violet); } .d { color: var(--dim); }
+  .tip {
+    background: #0e1c14; border-left: 3px solid var(--green);
+    padding: 10px 16px; margin: 18px 0; border-radius: 0 6px 6px 0;
+  }
+  .warn {
+    background: #1f130c; border-left: 3px solid var(--warn);
+    padding: 10px 16px; margin: 18px 0; border-radius: 0 6px 6px 0;
+  }
+  .tip b, .warn b { letter-spacing: 0.05em; }
+  ul { padding-left: 22px; }
+  li { margin: 4px 0; }
+  .cols { display: flex; flex-wrap: wrap; gap: 28px; }
+  .cols > div { flex: 1 1 380px; }
+  footer {
+    text-align: center; color: var(--dim); font-size: 0.8em;
+    padding: 30px; border-top: 1px solid var(--grid);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>THUMBYELITE</h1>
+  <p class="sub">PILOT'S HANDBOOK &nbsp;·&nbsp; AN INFINITE GALAXY IN YOUR POCKET</p>
+</header>
+
+<nav>
+  <a href="#start">Start</a><a href="#controls">Controls</a><a href="#hud">HUD</a><a href="#flight">Flight</a><a href="#combat">Combat</a><a href="#weapons">Weapons</a><a href="#equipment">Equipment</a><a href="#salvage">Salvage</a><a href="#travel">Travel</a><a href="#galaxy">Galaxy</a><a href="#trading">Trading</a><a href="#stations">Stations</a><a href="#ships">Ships</a><a href="#missions">Missions</a><a href="#skills">Skills</a><a href="#death">Death &amp; Saves</a>
+</nav>
+
+<main>
+
+<!-- ============================================================ -->
+<h2 id="start">Welcome, Commander</h2>
+<div class="figrow">
+  <figure><img src="img/title.png" alt="Title screen">
+  <figcaption><b>The title screen.</b> CONTINUE restores your saved universe
+  exactly as you left it; NEW GAME rolls a fresh galaxy from a new seed —
+  every playthrough has different stars, worlds, prices and ships.</figcaption></figure>
+</div>
+<p>ThumbyElite drops you into an <b>infinite procedurally generated
+galaxy</b> with <span class="y">1,000 credits</span> and a random battered
+starter ship — every commander begins differently: maybe a SKIFF with a
+worn pulse laser, maybe a DART with a rattly autocannon. Earn the rest. From there, everything is yours to earn:
+trade between stations, run missions for the three great factions, hunt
+bounties, scoop salvage from wrecks, refit and upgrade your way up from a
+junk SKIFF to a BASILISK dreadnought.</p>
+<p>The loop at the heart of the game: <b>fly → fight or trade → dock →
+bank your progress → fit something better → fly further.</b> Docking saves
+the game; dying costs you everything since your last dock. Risk is always
+yours to choose.</p>
+
+<!-- ============================================================ -->
+<h2 id="controls">Controls</h2>
+<p>The Thumby Color has a d-pad, two face buttons (<span class="key">A</span>
+<span class="key">B</span>), two shoulder buttons (<span class="key">LB</span>
+<span class="key">RB</span>) and <span class="key">MENU</span>. Flight uses
+<b>chords</b>: hold a shoulder button to change what the d-pad does.</p>
+
+<h3>In flight</h3>
+<table>
+<tr><th>Input</th><th>Action</th></tr>
+<tr><td><span class="key">D-PAD</span></td><td>Pitch &amp; yaw. <b>UP = nose down</b> (flight-stick convention — push forward to dive)</td></tr>
+<tr><td><span class="key">A</span></td><td>Fire the active weapon</td></tr>
+<tr><td><span class="key">B</span></td><td>Switch to the next mounted weapon</td></tr>
+<tr><td><span class="key">LB</span> hold + <span class="key">LEFT/RIGHT</span></td><td>Roll</td></tr>
+<tr><td><span class="key">LB</span> tap</td><td>Cycle target lock (nearest hostile first, then outward). With no hostiles around, locks the nearest <span class="y">salvage canister</span>; with no salvage either, locks the <span class="c">local station</span> (your way home)</td></tr>
+<tr><td><span class="key">RB</span> hold + <span class="key">UP/DOWN</span></td><td>Throttle up / down</td></tr>
+<tr><td><span class="key">RB</span> tap</td><td>Toggle flight assist (drift mode)</td></tr>
+<tr><td><span class="key">RB</span> double-tap</td><td>Afterburner boost (2.2&nbsp;s burn)</td></tr>
+<tr><td><span class="key">LB</span>+<span class="key">RB</span> together</td><td>Request docking (within 600&nbsp;m of a station) · engage supercruise to your destination</td></tr>
+<tr><td><span class="key">MENU</span></td><td>Pause menu: resume, galaxy chart, system map, ship status</td></tr>
+</table>
+
+<h3>In menus</h3>
+<table>
+<tr><th>Input</th><th>Action</th></tr>
+<tr><td><span class="key">D-PAD</span></td><td>Move cursor / pan maps</td></tr>
+<tr><td><span class="key">A</span></td><td>Select / confirm / drill into details</td></tr>
+<tr><td><span class="key">B</span></td><td>Secondary action (sell, unfit, ship details) or back</td></tr>
+<tr><td><span class="key">LB</span></td><td>Open the detail sheet for the highlighted item (outfitting)</td></tr>
+<tr><td><span class="key">MENU</span></td><td>Back / close</td></tr>
+</table>
+<div class="tip"><b class="g">TIP</b> — Weapons will never fire while a
+menu button is still held: the game swallows the press until you release,
+so you can leave any screen without accidentally shooting.</div>
+
+<!-- ============================================================ -->
+<h2 id="hud">The HUD</h2>
+<div class="figrow">
+  <figure><img src="img/hud_beacon.png" alt="Flight HUD">
+  <figcaption><b>The flight dashboard.</b> Elite-style full-width console
+  with a raised central scanner housing.</figcaption></figure>
+  <figure><img src="img/supercruise.png" alt="Supercruise HUD">
+  <figcaption><b>Supercruise.</b> Destination, distance and an
+  ETA that accounts for the deceleration schedule. Space dust streams
+  past to sell the speed.</figcaption></figure>
+</div>
+
+<h3>Left panel</h3>
+<ul>
+<li><b class="g">SP</b> — your actual speed (boost pushes it past the bar's normal range). The number below is metres per second.</li>
+<li><b class="g">TH</b> — your throttle <i>setting</i>; with assist on, SP chases TH.</li>
+<li><b class="y">DR</b> appears when flight assist is off (drift); <b class="c">BS</b> while boost burns.</li>
+<li><b>K#</b> — kill tally.</li>
+</ul>
+<h3>Right panel — the four bars</h3>
+<ul>
+<li><b class="c">S — Shield.</b> Absorbs damage first; recharges slowly after ~4.5&nbsp;s without being hit.</li>
+<li><b class="r">H — Hull.</b> Your real health. Only docking repairs it.</li>
+<li><b class="y">T — Heat.</b> Every shot adds heat; at the top your weapons cut out until they cool. A klaxon warns near the limit.</li>
+<li><b class="d">F — Fuel.</b> Hyperspace range in light-years. Jumps spend their distance; refuel at stations.</li>
+</ul>
+<h3>The scanner</h3>
+<p>The centre disc is the classic Elite radar: you are the middle dot,
+contacts appear as blips with a vertical <b>stalk</b> showing height above
+or below your flight plane. <span class="r">Red</span> = hostile,
+<span class="d">grey</span> = neutral, <span class="y">gold (blinking)</span>
+= salvage canisters — <b>fast blink means component pod</b> (weapons or
+equipment inside), slow blink means commodity cargo.</p>
+<h3>Target readout</h3>
+<p>Locking a target (tap <span class="key">LB</span>) shows its name, tier,
+distance and its own <b>S</b>/<b>H</b> bars top-right, plus a red box around
+it on screen. Off screen, an <b>arrowhead points the shortest way to
+turn</b> — follow it and the target slides into view. Bounty-mission
+targets show <span class="r">** MARK **</span>.</p>
+
+<!-- ============================================================ -->
+<h2 id="flight">Flight Model</h2>
+<p>The ship flies <b>Newtonian-lite</b>: thrust accelerates you along your
+nose, and your velocity bleeds toward where you point (with flight assist
+on). Key systems:</p>
+<ul>
+<li><b>Throttle</b> (<span class="key">RB</span>+<span class="key">UP/DOWN</span>) sets a target speed; assist holds you there.</li>
+<li><b>Flight assist off</b> (<span class="key">RB</span> tap) — pure drift. Your nose turns but your velocity doesn't: aim sideways while sliding, the classic decoupled dogfight trick. <b class="y">DR</b> shows while drifting.</li>
+<li><b>Boost</b> (<span class="key">RB</span> double-tap) — 1.8× speed for 2.2&nbsp;s. Great for escapes and closing distance.</li>
+<li><b>Precision steering</b> — turning has a ramp: the first touch turns at 1% rate, building to full over half a second. Tap for single-pixel aim corrections, hold to whip the nose around. Released axes keep a short momentum tail (~0.25&nbsp;s), so alternating UP/RIGHT taps blend into smooth diagonal arcs.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="combat">Combat</h2>
+<div class="figrow">
+  <figure><img src="img/explosion.png" alt="A kill">
+  <figcaption><b>A gauss kill.</b> Explosions burst into fireballs, debris
+  and a shockwave; bigger ships die bigger.</figcaption></figure>
+</div>
+<p>Combat is real-time 3D dogfighting. The flow: <b>lock</b> (tap
+<span class="key">LB</span>) → <b>close</b> → put the nose on them
+(follow the turn arrow) → <b>manage heat</b> while you fire → break and
+re-approach when your shields drop.</p>
+<h3>Damage model</h3>
+<ul>
+<li>Hits drain <b class="c">shields</b> first (blue flicker), then <b class="r">hull</b> (sparks). Ship shields recharge out of combat; hull damage is permanent until you dock.</li>
+<li>Your own ship rumbles on hits — soft buzz for shield, hard thump for hull. If you feel thumps, break off <i>now</i>.</li>
+<li>Kills pay an instant <b class="y">lawful bounty</b> scaled by the victim's skill tier (see table), plus loot often spills from the wreck.</li>
+</ul>
+<table>
+<tr><th>Pilot tier</th><th>Behaviour</th><th>Kill bounty</th></tr>
+<tr><td class="tag">HARMLESS</td><td>Wide lazy turns, poor aim, light weapons</td><td class="y">25 cr</td></tr>
+<tr><td class="tag">NOVICE</td><td>Slow reactions, basic loadout</td><td class="y">80 cr</td></tr>
+<tr><td class="tag">CAPABLE</td><td>Decent aim, mixed weapons</td><td class="y">220 cr</td></tr>
+<tr><td class="tag">DEADLY</td><td>Tight turns, leads shots, heavy guns</td><td class="y">600 cr</td></tr>
+<tr><td class="tag">ELITE</td><td>Near player-grade agility, the best gear</td><td class="y">1,600 cr</td></tr>
+</table>
+<div class="warn"><b class="r">CAREFUL</b> — pirate skill scales with a
+system's <b>threat level</b>. Anarchy systems breed DEADLY wings; safe
+democracies rarely spawn more than a NOVICE. Check the system info before
+you linger.</div>
+<h3>Heat</h3>
+<p>Every weapon adds heat per shot (the <b class="y">T</b> bar). Past the
+red line a klaxon sounds; at the top, weapons refuse to fire until things
+cool. Big lasers and photons run hot; autocannons and missiles barely
+register. The <b>Gunnery</b> skill reduces all weapon heat.</p>
+<h3>Homing missiles</h3>
+<p>Lock a target, switch to HOMING (<span class="key">B</span>), fire.
+The seeker steers at 1.7&nbsp;rad/s toward <i>the target you had locked at
+launch</i> — fired nose-on it almost always connects; a hard-jinking ace
+can outturn one fired from the side. No lock = flies straight as a
+dumbfire.</p>
+
+<!-- ============================================================ -->
+<h2 id="weapons">Weapons</h2>
+<div class="figrow">
+  <figure><img src="img/weapon_detail.png" alt="Weapon detail sheet">
+  <figcaption><b>The detail sheet</b> (press <span class="key">LB</span> in
+  outfitting, <span class="key">A</span> in status) shows <i>effective</i>
+  numbers for the exact instance — quality and wear included.</figcaption></figure>
+</div>
+<p>Nine weapon families. Each mount on your hull has a size
+(<span class="tag">Z1–Z3</span>); a weapon fits any slot of its size or
+larger. Base stats:</p>
+<table>
+<tr><th>Weapon</th><th>Size</th><th>Damage</th><th>DPS</th><th>Heat/s</th><th>Velocity</th><th>Range</th><th>Ammo</th><th>List price</th></tr>
+<tr><td class="tag" style="color:#ff5040">PULSE-S</td><td>Z1</td><td>9</td><td>56</td><td>28</td><td>hitscan</td><td>600 m</td><td>energy</td><td class="y">600</td></tr>
+<tr><td class="tag" style="color:#ff7830">PULSE-M</td><td>Z2</td><td>16</td><td>73</td><td>34</td><td>hitscan</td><td>700 m</td><td>energy</td><td class="y">1,800</td></tr>
+<tr><td class="tag" style="color:#ffa028">PULSE-L</td><td>Z3</td><td>28</td><td>93</td><td>40</td><td>hitscan</td><td>800 m</td><td>energy</td><td class="y">4,800</td></tr>
+<tr><td class="tag" style="color:#ffdc78">BEAM</td><td>Z2</td><td>4/tick</td><td>80</td><td>64</td><td>hitscan</td><td>500 m</td><td>energy</td><td class="y">2,600</td></tr>
+<tr><td class="tag" style="color:#78dcff">PHOTON</td><td>Z2</td><td>34</td><td>62</td><td>25</td><td>260 m/s</td><td>1,100 m</td><td>energy</td><td class="y">3,400</td></tr>
+<tr><td class="tag" style="color:#c8e6ff">GAUSS</td><td>Z2</td><td>40</td><td>44</td><td>7</td><td>1,400 m/s</td><td>1,700 m</td><td>24 rds</td><td class="y">5,200</td></tr>
+<tr><td class="tag" style="color:#ffd28c">AUTOCAN</td><td>Z1</td><td>5</td><td>71</td><td>17</td><td>750 m/s</td><td>900 m</td><td>160 rds</td><td class="y">900</td></tr>
+<tr><td class="tag" style="color:#ffaa5a">MISSILE</td><td>Z1</td><td>45 + 22&nbsp;m blast</td><td>56</td><td>2.5</td><td>220 m/s</td><td>2,000 m</td><td>8 rds</td><td class="y">1,200</td></tr>
+<tr><td class="tag" style="color:#ff78c8">HOMING</td><td>Z2</td><td>32 + 18&nbsp;m blast</td><td>29</td><td>1.8</td><td>190 m/s, seeks</td><td>2,600 m</td><td>6 rds</td><td class="y">2,800</td></tr>
+</table>
+<h3>Quality &amp; integrity</h3>
+<p>Every weapon (and equipment item) is an <b>instance</b> with a quality
+grade and a wear state. Effective damage = base × quality × condition:</p>
+<table>
+<tr><th>Grade</th><th>Tag</th><th>Output</th><th>Price</th></tr>
+<tr><td>Salvaged</td><td class="tag d">SLV</td><td>×0.80</td><td>cheap, found in wrecks</td></tr>
+<tr><td>Standard</td><td class="tag">STD</td><td>×1.00</td><td>shop stock</td></tr>
+<tr><td>Reinforced</td><td class="tag c">RNF</td><td>×1.12</td><td>uncommon drops</td></tr>
+<tr><td>Military</td><td class="tag y">MIL</td><td>×1.22</td><td>rare drops from aces</td></tr>
+<tr><td>Prototype</td><td class="tag v">PRO</td><td>×1.35</td><td>the jackpot</td></tr>
+</table>
+<p>Condition (0–100%) scales output from ×0.6 to ×1.0 — a 70% PROTOTYPE
+still beats a fresh STANDARD. <b>Repair</b> at any outfitting bay; the
+Tech skill cuts repair prices.</p>
+<h3>Ammo</h3>
+<p>Ballistic weapons carry magazines. Rounds persist between fits — no
+free top-ups. <b>Docking automatically rearms you</b> and charges per
+round: autocannon 1&nbsp;cr, gauss 8&nbsp;cr, missile 35&nbsp;cr, homing
+55&nbsp;cr (you'll see <span class="tag y">REARMED&nbsp;-N&nbsp;CR</span>
+on arrival). Shop weapons come loaded; salvage fits at 40% load.</p>
+
+<!-- ============================================================ -->
+<h2 id="equipment">Equipment — Shields &amp; Armor</h2>
+<p>Defence works exactly like weapons: your ship has <b>one shield-generator
+slot and one armor slot</b>, separate from weapon mounts, each holding an
+instance with size, quality and integrity.</p>
+<ul>
+<li><b>Size Z1–Z3</b> multiplies your hull's base protection ×1.0 / ×1.3 / ×1.6 / ×2.0 (frame tier caps what each hull can take).</li>
+<li>Quality and integrity multiply on top, exactly like weapons.</li>
+<li><b>Flying bare</b> (slot empty) leaves you at a weak ×0.55 baseline — always keep something fitted.</li>
+<li>Shield gens and armor plates <b>drop as salvage</b> (~1 in 4 component pods), can sit in your rack, swap-fit from it, repair, and sell.</li>
+</ul>
+<p>List prices: shields 1,400&nbsp;cr (Z1) / 2,800 (Z2) / 5,040 (Z3);
+armor 1,100 / 2,200 / 3,960 — times quality. Trading in your old unit
+returns ~40% of its value.</p>
+
+<!-- ============================================================ -->
+<h2 id="salvage">Salvage &amp; Loot</h2>
+<p>Destroyed ships spill <b>canisters</b>; better pilots drop better gear.
+Some sites also hold <b>derelict debris fields</b> — loot floating free,
+most often at beacons and planets in dangerous space.</p>
+<ul>
+<li>Canisters carry a <b>pulsing beacon</b>: <span class="y">gold</span> = commodity cargo, <span class="c">cyan</span> = component pod (weapons / shields / armor). Same colours on the scanner.</li>
+<li>Tap <span class="key">LB</span> with no hostiles around to <b>lock the nearest canister</b> — gold brackets, live distance, edge arrow.</li>
+<li><b>Scoop by flying within 22&nbsp;m</b>. Slow down! A scoop run at full throttle is a collision course.</li>
+<li>Canisters drift but <b>never expire</b> — finish the fight first, then sweep the field at leisure. They're gone only when you leave the area.</li>
+</ul>
+<h3>The rack</h3>
+<p>Scooped components go to your <b>salvage rack</b> (size varies by ship —
+a REAVER carries 5, an ATLAS 8, a DART just 1). From outfitting you can
+<b>fit</b> them to free mounts, <b>swap</b> equipment into its slot, or
+<b>sell</b> (35–65% of list by condition). Each racked item also occupies a
+cargo slot.</p>
+<div class="tip"><b class="g">THE MERCENARY LOOP</b> — kill an ace, scoop
+his MILITARY gauss at 45%, repair it for a fraction of its price, and
+either fit it or flip it for profit. Tech skill makes refurbishing a
+business.</div>
+
+<!-- ============================================================ -->
+<h2 id="travel">Travel</h2>
+<div class="figrow">
+  <figure><img src="img/sysmap.png" alt="System map">
+  <figcaption><b>The system map</b> (pause → SYSTEM MAP): schematic
+  orbits, every planet and station, your position. Pick a destination and
+  engage.</figcaption></figure>
+  <figure><img src="img/planet_approach.png" alt="Arriving at a planet">
+  <figcaption><b>Arrival.</b> Supercruise auto-drops you 1.2&nbsp;Mm out;
+  planets fill the sky on approach.</figcaption></figure>
+</div>
+<h3>Supercruise</h3>
+<p>In-system distances are measured in <b>megametres</b> (1&nbsp;Mm =
+1,000&nbsp;km) — normal engines would take days. Supercruise compresses the
+trip: speed builds from a 2&nbsp;Mm/s floor toward a 3,000&nbsp;Mm/s
+ceiling, then the drive brakes you automatically on approach. The HUD ETA
+models the full accelerate-cruise-brake envelope. Throttle still works —
+ease off to fine-tune an approach. <span class="key">B</span> drops you
+out anywhere mid-flight.</p>
+<h3>Hyperspace</h3>
+<div class="figrow">
+  <figure><img src="img/hyperspace.png" alt="Hyperspace">
+  <figcaption><b>The jump.</b> Starlines stretch past as the drive spools —
+  arrival is at the destination system's nav beacon.</figcaption></figure>
+</div>
+<p>Jumps between stars cost <b>fuel equal to the distance</b> (tank:
+30&nbsp;ly, refill at stations) and are limited by your hull's <b>jump
+range</b> — bigger, costlier ships reach further (SKIFF 6.5&nbsp;ly →
+BASILISK 12.5&nbsp;ly). The galaxy literally opens up as you upgrade:
+sparse sectors and remote high-tech yards need long legs to reach.</p>
+
+<!-- ============================================================ -->
+<h2 id="galaxy">The Galaxy</h2>
+<div class="figrow">
+  <figure><img src="img/galaxy_chart.png" alt="Galaxy chart">
+  <figcaption><b>The galaxy chart.</b> Stars in their true spectral
+  colours, nebula fields, your jump-range ring, and the name of the
+  highlighted system. Tap a direction to snap to the next star;
+  <span class="r">red diamonds pulse on mission objectives</span>.</figcaption></figure>
+</div>
+<p>The galaxy is <b>infinite and deterministic</b>: every star, planet,
+economy and pirate derives from your save's galaxy seed. Fly 10,000
+light-years in any direction and there's always more.</p>
+<h3>Star classes</h3>
+<table>
+<tr><th>Class</th><th>Colour</th><th>Share</th><th>Character</th></tr>
+<tr><td class="tag" style="color:#ff7164">M</td><td>red dwarf</td><td>40%</td><td>dim, tight habitable zones</td></tr>
+<tr><td class="tag" style="color:#ffa05a">K</td><td>orange</td><td>22%</td><td>modest systems</td></tr>
+<tr><td class="tag" style="color:#ffe994">G</td><td>yellow</td><td>16%</td><td>sun-like, good odds of temperate worlds</td></tr>
+<tr><td class="tag" style="color:#fff6b4">F</td><td>yellow-white</td><td>10%</td><td>bright, wide zones</td></tr>
+<tr><td class="tag" style="color:#ebf0f5">A</td><td>white</td><td>8%</td><td>big and brilliant (glow on the chart)</td></tr>
+<tr><td class="tag" style="color:#a0c3ff">B</td><td>blue-white</td><td>4%</td><td>giants — spectacular up close</td></tr>
+</table>
+<p>Systems hold 0–7 planets — lava, rock, ice, ocean, gas giants (some
+ringed) and rare <b class="g">earthlike</b> worlds, placed by orbital
+temperature. Stations orbit the better real estate.</p>
+<h3>Government, threat &amp; factions</h3>
+<ul>
+<li>Six government types from <b class="r">Anarchy</b> to <b class="c">Corporate</b>. Government drives <b>threat level</b> (0–4): how many pirates spawn and how skilled they are.</li>
+<li><b class="r">Anarchy and Feudal systems have black markets</b> — the only places that trade illegal goods.</li>
+<li>Three majors carve up the map in large sector blobs: the <b>COALITION</b>, the <b>DOMINION</b> and the <b>FREEHOLDS</b>. Reputation (−100…+100 each) rises with missions in their space and pays out as better mission rewards (+0.4% per point).</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="trading">Trading</h2>
+<div class="figrow">
+  <figure><img src="img/market.png" alt="Market">
+  <figcaption><b>The market.</b> Buy and sell prices per good;
+  <span class="key">A</span> buys, <span class="key">B</span> sells.
+  Illegal goods only appear where there's a black market.</figcaption></figure>
+</div>
+<p>Twenty commodities. Each station's economy type (Agricultural,
+Industrial, High-Tech, Extraction, Refinery, Tourism, Military, Service)
+biases prices: <b>producers sell cheap, consumers pay dear</b>. Tech level
+and a per-station jitter move prices further.</p>
+<table>
+<tr><th>Good</th><th>Galactic avg</th><th>Good</th><th>Galactic avg</th></tr>
+<tr><td>WATER</td><td class="y">4</td><td>ALLOYS</td><td class="y">70</td></tr>
+<tr><td>FOOD</td><td class="y">8</td><td>MACHINERY</td><td class="y">95</td></tr>
+<tr><td>HYDROGEN</td><td class="y">10</td><td>ELECTRONIC</td><td class="y">140</td></tr>
+<tr><td>TEXTILES</td><td class="y">12</td><td>LUXURIES</td><td class="y">180</td></tr>
+<tr><td>FUELCELLS</td><td class="y">18</td><td>COMPUTERS</td><td class="y">220</td></tr>
+<tr><td>MINERALS</td><td class="y">25</td><td>RARE GEMS</td><td class="y">400</td></tr>
+<tr><td>LIQUOR</td><td class="y">35</td><td>NARCOTICS</td><td class="r">320 ⚠</td></tr>
+<tr><td>METALS</td><td class="y">45</td><td>WEAPONS</td><td class="r">150 ⚠</td></tr>
+<tr><td>TOOLS</td><td class="y">55</td><td>SLAVES</td><td class="r">90 ⚠</td></tr>
+<tr><td>MEDICINE</td><td class="y">60</td><td>CONTRABAND</td><td class="r">65 ⚠</td></tr>
+</table>
+<p><span class="r">⚠ illegal</span> — tradeable only at black markets
+(Anarchy/Feudal systems), at juicy margins to match the danger of where
+you have to fly.</p>
+<div class="tip"><b class="g">THE TRADER'S LOOP</b> — find an Agricultural
+station (cheap FOOD/LIQUOR) near an Industrial or High-Tech one (pays
+dearly for them, sells cheap COMPUTERS/MACHINERY for the return leg). A
+big-hold hauler turns that circle into a money pump — an ATLAS moving 140
+units at +8&nbsp;cr margin banks over a thousand per leg. The Trading
+skill discounts everything you buy.</div>
+
+<!-- ============================================================ -->
+<h2 id="stations">Stations &amp; Docking</h2>
+<div class="figrow">
+  <figure><img src="img/station_home.png" alt="Station services">
+  <figcaption><b>Station services</b>, with the station itself turning in
+  the pane. Every station's structure is procedurally grown — drum cores,
+  habitat pods, solar wings; no two alike.</figcaption></figure>
+  <figure><img src="img/station_status.png" alt="Status from station">
+  <figcaption><b>Ship status</b> is available everywhere — at dock and
+  from the pause menu in flight.</figcaption></figure>
+</div>
+<p><b>To dock:</b> fly within 600&nbsp;m of a station and press
+<span class="key">LB</span>+<span class="key">RB</span>. The docking
+computer takes over and glides you in. On arrival, the station:</p>
+<ul>
+<li><b>repairs nothing automatically</b> — but rearms all magazines for credits,</li>
+<li>pays out any completed missions,</li>
+<li><b>saves your game</b> (this is the checkpoint system — see <a href="#death">Death &amp; Saves</a>).</li>
+</ul>
+<p>Services: <b>MARKET</b> (trade), <b>SHIPYARD</b> (hulls), <b>OUTFITTING</b>
+(weapons, equipment, repairs, salvage), <b>MISSIONS</b> (the board),
+<b>BAR</b> (rumours and local colour), <b>STATUS</b>, plus refuel.</p>
+
+<!-- ============================================================ -->
+<h2 id="ships">Ships &amp; the Shipyard</h2>
+<div class="figrow">
+  <figure><img src="img/shipyard.png" alt="Shipyard">
+  <figcaption><b>A dockyard.</b> Five ships in stock, each rendered live.
+  <span class="key">B</span> opens the full spec sheet before you commit.</figcaption></figure>
+  <figure><img src="img/status.png" alt="Ship status">
+  <figcaption><b>Your ship</b>, dimmed behind the full status sheet:
+  mounts, equipment, rack, cargo, skills, fuel.</figcaption></figure>
+</div>
+<p><b>Every dockyard stocks its own selection.</b> A station rolls five
+ships from its seed — class, look and name (like
+<span class="tag">SPARROW-K4</span>) are all unique to that yard. The same
+class re-rolled elsewhere <i>looks different</i>. Ship hunting is a real
+reason to explore; high-tech yards stock the big classes.</p>
+<table>
+<tr><th>Class</th><th>Price</th><th>Speed</th><th>Cargo</th><th>Jump</th><th>Mounts</th><th>Rack</th><th>Role</th></tr>
+<tr><td class="tag">SKIFF</td><td class="y">900</td><td>85</td><td>8</td><td>6.5 ly</td><td>Z1</td><td>2</td><td>where everyone starts</td></tr>
+<tr><td class="tag">DART</td><td class="y">3,200</td><td>150</td><td>3</td><td>7.0</td><td>Z2</td><td>1</td><td>courier — speed is the cargo</td></tr>
+<tr><td class="tag">PACK MULE</td><td class="y">7,000</td><td>80</td><td>32</td><td>7.5</td><td>Z1</td><td>4</td><td>first real freighter</td></tr>
+<tr><td class="tag">SPARROW</td><td class="y">8,500</td><td>120</td><td>10</td><td>8.0</td><td>Z2 Z1</td><td>3</td><td>fight + carry workhorse</td></tr>
+<tr><td class="tag">VIPER</td><td class="y">16,000</td><td>135</td><td>6</td><td>8.5</td><td>Z2 Z2</td><td>2</td><td>pure interceptor</td></tr>
+<tr><td class="tag">MULE</td><td class="y">21,000</td><td>70</td><td>64</td><td>9.0</td><td>Z2 Z1</td><td>6</td><td>serious trading</td></tr>
+<tr><td class="tag">REAVER</td><td class="y">24,000</td><td>125</td><td>16</td><td>9.5</td><td>Z2 Z2 Z1</td><td>5</td><td>the salvager-raider</td></tr>
+<tr><td class="tag">MAULER</td><td class="y">42,000</td><td>110</td><td>12</td><td>10.0</td><td>Z3 Z2 Z2</td><td>4</td><td>gun platform</td></tr>
+<tr><td class="tag">ATLAS</td><td class="y">58,000</td><td>60</td><td>140</td><td>11.0</td><td>Z2 Z2</td><td>8</td><td>a flying warehouse</td></tr>
+<tr><td class="tag">BASILISK</td><td class="y">130,000</td><td>95</td><td>40</td><td>12.5</td><td>Z3 Z3 Z2</td><td>6</td><td>the endgame warship</td></tr>
+</table>
+<p>Trading in your current hull returns <b>70% of its list price</b>.
+Mounted weapons migrate with you where they fit; the rest go to the rack
+(or are sold at salvage rates if there's no room). Equipment over the new
+frame's tier cap steps down a tier.</p>
+<h3>The fleet around you</h3>
+<figure class="wide"><img src="img/ships_fighters.png" alt="Fighters">
+<figcaption><b>Fighters and interceptors.</b> Every hull in the galaxy is
+procedurally built — lofted fuselages, swept wings, X-foils with wingtip
+cannons.</figcaption></figure>
+<figure class="wide"><img src="img/ships_capitals.png" alt="Cruisers and haulers">
+<figcaption><b>Cruisers and haulers.</b> Dorsal-finned warships and slab-sided
+freighters with cargo pods.</figcaption></figure>
+<figure class="wide"><img src="img/ships_exotic.png" alt="Exotic frames">
+<figcaption><b>Exotic frames.</b> Panel-pod fighters and broad saucers with
+twin mandibles. Pirates in each system share a local fleet style — you can
+tell where a wing was built by its silhouette.</figcaption></figure>
+
+<!-- ============================================================ -->
+<h2 id="missions">Missions, Bounties &amp; Reputation</h2>
+<div class="figrow">
+  <figure><img src="img/mission_board.png" alt="Mission board">
+  <figcaption><b>The board.</b> Offers refresh every visit. The faction and
+  pay scale with your reputation in this space.</figcaption></figure>
+  <figure><img src="img/mission_log.png" alt="Mission log">
+  <figcaption><b>Your log</b> holds up to four active contracts.</figcaption></figure>
+</div>
+<table>
+<tr><th>Type</th><th>What it asks</th><th>Pay</th></tr>
+<tr><td class="tag">DELIVERY</td><td>Haul N units of a good to a named station (cargo is handed to you — you need the hold space)</td><td>distance + cargo value based</td></tr>
+<tr><td class="tag">CULL</td><td>Destroy N pirates, anywhere</td><td>~320 cr per head</td></tr>
+<tr><td class="tag">BOUNTY</td><td>Kill a marked pilot waiting at a named system's nav beacon</td><td>600–6,500 cr by tier</td></tr>
+</table>
+<h3>Bounty hunting, step by step</h3>
+<ol>
+<li>Take a contract sized to your ship: <span class="tag">EASY MARK</span> (600&nbsp;cr) up to <span class="tag r">ACE MARK</span> (6,500&nbsp;cr — brings an escort, flies a heavy hull).</li>
+<li>Open the galaxy chart: the hunt system <b class="r">pulses as a red diamond</b>. Jump there.</li>
+<li>You arrive at the nav beacon — <span class="tag">BOUNTY MARK DETECTED</span>. Lock with <span class="key">LB</span>; the mark shows <span class="r">** MARK **</span>.</li>
+<li>Kill it, then <b>dock anywhere</b> to collect (and bank the save).</li>
+</ol>
+<p>Completed missions pay at the next dock and add <b>reputation</b> with
+the local faction (+8 bounty, +4 others). Rep boosts all future rewards in
+that faction's space — a +50 standing pays +20% on everything.</p>
+
+<!-- ============================================================ -->
+<h2 id="skills">Pilot Skills</h2>
+<p>Four skills level from what you actually do (thresholds at 2, 5, 10,
+18, 30, 50, 80, 120, 170 XP — ten levels):</p>
+<table>
+<tr><th>Skill</th><th>XP from</th><th>Each level gives</th></tr>
+<tr><td class="tag g">GUNNERY</td><td>kills, combat missions</td><td>−2.5% weapon heat</td></tr>
+<tr><td class="tag g">TRADING</td><td>profitable trades, deliveries</td><td>−1.2% on all purchases</td></tr>
+<tr><td class="tag g">TECH</td><td>scooping &amp; repairing components</td><td>−5% repair costs</td></tr>
+<tr><td class="tag g">PILOTING</td><td>flying — boosts, docks, jumps</td><td>+2% turn rate</td></tr>
+</table>
+<p>A maxed Tech rating halves your refurbishing costs — the heart of the
+salvage business. Check your levels any time in SHIP STATUS.</p>
+
+<!-- ============================================================ -->
+<h2 id="death">Death &amp; Saves</h2>
+<ul>
+<li><b>Docking saves</b> — automatically, every time. The save keeps your galaxy seed, ship, gear (with exact quality/wear/ammo), cargo, credits, reputation and mission log.</li>
+<li><b>Death = insurance recovery.</b> You wake at your last dock with everything as it was <i>then</i>. Kills, loot and credits earned since that dock are gone. Undocked space is always at stake — that's the tension.</li>
+<li><b>CONTINUE</b> on the title screen restores your universe exactly. <b>NEW GAME</b> rolls a fresh galaxy seed — new stars, names, markets, everything.</li>
+</ul>
+<div class="warn"><b class="r">GOLDEN RULE</b> — made money? Dock. The
+five minutes of swagger between a big score and the station pad is where
+fortunes vanish.</div>
+
+<h2>Quick-start: your first hour</h2>
+<ol>
+<li>Take your starter ship to the local station (it's on the scanner; <span class="key">LB</span>+<span class="key">RB</span> in close to engage supercruise toward it, the same chord under 600&nbsp;m requests docking).</li>
+<li>Check the MARKET — buy whatever's cheap that a neighbour wants. Grab a DELIVERY or EASY MARK from the board.</li>
+<li>Work the loop: deliveries + kill bounties + scooped loot. Sell salvage you can't use.</li>
+<li>First big purchase: a <b>SPARROW</b> (8,500) — fights and hauls. Or a <b>PACK MULE</b> if the trading bug bit you.</li>
+<li>Fit a shield upgrade before you fit a bigger gun. Staying alive earns more than alpha damage.</li>
+<li>Watch the chart for <b class="c">High-Tech</b> systems — their yards stock the serious hardware.</li>
+</ol>
+
+</main>
+<footer>THUMBYELITE — an infinite galaxy on the Thumby Color · Pilot's Handbook</footer>
+</body>
+</html>

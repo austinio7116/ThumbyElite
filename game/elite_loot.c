@@ -92,8 +92,8 @@ const char *loot_tick(float dt) {
     for (int i = 0; i < MAX_CANS; i++) {
         Canister *c = &s_cans[i];
         if (!c->alive) continue;
-        c->life -= dt;
-        if (c->life <= 0) { c->alive = false; continue; }
+        /* No expiry (user pref): loot drifts until scooped or you
+         * leave the area. life stays for the pulse phase only. */
         c->pos = v3_add(c->pos, v3_scale(c->vel, dt));
 
         if (!p->alive) continue;

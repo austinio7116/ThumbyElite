@@ -72,6 +72,7 @@ static uint32_t s_hyper_seed;
 
 static int   s_target = -1;      /* combat lock */
 static int   s_loot_target = -1; /* canister lock (no hostiles about) */
+static bool  s_station_lock;     /* station nav lock (nothing else) */
 static uint32_t s_boot_seed;
 static int   s_title_cursor;
 static char  s_scoop_toast[28];
@@ -254,9 +255,15 @@ static void cycle_target(void) {
         if (cur_d >= 0.0f && d > cur_d && d < best_d) { best_d = d; best = i; }
     }
     s_target = (best >= 0) ? best : first;
-    /* Nothing hostile to lock: lock the nearest salvage instead. */
-    if (s_target < 0)
+    /* Nothing hostile: lock salvage; failing that, the local station —
+     * a compass home when you have drifted off the dock (user req). */
+    s_station_lock = false;
+    if (s_target < 0) {
         s_loot_target = loot_nearest(pp, NULL);
+        if (s_loot_target < 0 && s_anchor_has_poi &&
+            s_anchor_poi.kind == POI_STATION)
+            s_station_lock = true;
+    }
 }
 
 /* Resume docked at a saved station. */
@@ -300,9 +307,6 @@ void elite_game_init(uint32_t seed) {
     s_prev_menu = s_prev_a = false;
 }
 
-/* TEST MODE: random starting hull + weapons + a fat wallet so every
- * combination can be flown. TODO: set to 0 before release. */
-#define ELITE_TEST_START 1
 
 static void start_new_game(uint32_t seed) {
     galaxy_set_seed(seed);
@@ -311,31 +315,44 @@ static void start_new_game(uint32_t seed) {
     combat_init();
     elite_input_reset();
     player_init();
-#if ELITE_TEST_START
+    /* Every commander starts at the bottom (user spec): a random cheap
+     * hull, a battered low-grade loadout (always at least one weapon,
+     * launchers very rare) and 1,000 credits. Earn the rest. */
     {
         uint32_t h = seed * 2654435761u;
         h ^= h >> 13; h *= 1274126177u; h ^= h >> 16;
-        g_player.hull_id = (uint8_t)(h % N_HULLS);
+        /* Hull: SKIFF 50% / DART 25% / PACK MULE 15% / SPARROW 10%. */
+        int r = (int)(h % 100u);
+        g_player.hull_id = (r < 50) ? 0 : (r < 75) ? 1 : (r < 90) ? 6 : 2;
         h ^= h << 13; h ^= h >> 17; h ^= h << 5;
         g_player.hull_seed = h;
         const HullDef *hd = &k_hulls[g_player.hull_id];
         for (int i = 0; i < hd->n_slots; i++) {
             h ^= h << 13; h ^= h >> 17; h ^= h << 5;
-            /* Any weapon that fits this slot's size. */
-            WeaponType w;
-            do {
-                h ^= h << 13; h ^= h >> 17; h ^= h << 5;
-                w = (WeaponType)(h % WPN_COUNT);
-            } while (k_weapons[w].size > hd->slot_size[i]);
+            if (i > 0 && (h & 1)) {            /* extra slots often empty */
+                g_player.mounts[i].in_use = 0;
+                continue;
+            }
             h ^= h << 13; h ^= h >> 17; h ^= h << 5;
+            int wr = (int)(h % 100u);
+            WeaponType w = (wr < 45) ? WPN_PULSE_S
+                         : (wr < 70) ? WPN_AUTOCANNON
+                         : (wr < 80) ? WPN_PULSE_M
+                         : (wr < 88) ? WPN_BEAM
+                         : (wr < 93) ? WPN_PHOTON
+                         : (wr < 97) ? WPN_GAUSS
+                         : (wr < 99) ? WPN_MISSILE : WPN_HOMING;
+            if (k_weapons[w].size > hd->slot_size[i]) w = WPN_PULSE_S;
+            h ^= h << 13; h ^= h >> 17; h ^= h << 5;
+            int q = ((h >> 4) % 100u < 70) ? Q_SALVAGED : Q_STANDARD;
             g_player.mounts[i] = (WeaponInst){
-                (uint8_t)w, (uint8_t)(h % 5u), 100, 1
+                (uint8_t)w, (uint8_t)q,
+                (uint8_t)(55 + (h % 36u)), 1, 0, {0}
             };
         }
-        g_player.credits = 50000;
+        g_player.credits = 1000;
     }
-#endif
-    spawn_player();    /* AFTER player state is final (test fill incl.) */
+    spawn_player();    /* AFTER player state is final */
     missions_init();
     s_state = ST_FLIGHT;
 
@@ -580,7 +597,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         if (btn->down && !td && s_title_cursor < 1) { s_title_cursor++; sfx_ui_move(); }
         tu = btn->up; td = btn->down;
         if (a_edge) {
-            sfx_ui_select();
+            /* No chime on game start (user pref) — straight in. */
             if (s_title_cursor == 0 && has_save) {
                 SaveMeta meta;
                 if (save_load(&meta)) {
@@ -625,7 +642,6 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         fx_tick(dt);
         if (s_dock_t >= 2.2f) {
             g_player.xp_piloting += 1;
-            sfx_dock();
             plat_rumble(0.4f, 0.12f);
             station_open(s_anchor_poi.index);
             mission_on_docked(system_info(), s_anchor_poi.index);
@@ -993,6 +1009,8 @@ void elite_game_draw_overlay(uint16_t *fb) {
             .target = s_target,
             .loot_valid = (s_target < 0 && s_loot_target >= 0),
             .loot_pos = lpos,
+            .station_valid = (s_target < 0 && s_loot_target < 0 &&
+                              s_station_lock),
             .kills = combat_kills(),
             .fuel01 = g_player.fuel / g_player.fuel_max,
             .render_ms = s_frame_ms,

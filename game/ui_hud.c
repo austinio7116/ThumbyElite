@@ -297,6 +297,37 @@ void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
 
     if (info->target >= 0 && g_ships[info->target].alive)
         target_box(fb, info->target);
+    else if (info->station_valid) {
+        /* Station nav lock: cyan diamond + distance, edge arrow when
+         * off screen. The station anchors the local frame at origin. */
+        Ship *p = &g_ships[PLAYER];
+        Vec3 rel = v3_scale(p->pos, -1.0f);
+        float sx, sy;
+        uint16_t d;
+        uint16_t sc2 = RGB565C(90, 210, 255);
+        if (r3d_scene_project(rel, &sx, &sy, &d)) {
+            int bx = (int)sx, by = (int)sy;
+            px(fb, bx - 6, by, sc2); px(fb, bx + 6, by, sc2);
+            px(fb, bx, by - 6, sc2); px(fb, bx, by + 6, sc2);
+            px(fb, bx - 4, by - 4, sc2); px(fb, bx + 4, by - 4, sc2);
+            px(fb, bx - 4, by + 4, sc2); px(fb, bx + 4, by + 4, sc2);
+            char buf[16];
+            snprintf(buf, sizeof buf, "STN %dM", (int)v3_len(rel));
+            craft_font_draw(fb, buf, bx - 14, by + 9, sc2);
+        } else {
+            Vec3 v = m3_mul_v3_t(&p->basis, rel);
+            float ax = v.x, ay = -v.y;
+            float al = sqrtf(ax * ax + ay * ay);
+            if (al < 1e-4f) { ax = 1; ay = 0; al = 1; }
+            ax /= al; ay /= al;
+            int ex = 64 + (int)(ax * 52.0f);
+            int ey = 60 + (int)(ay * 44.0f);
+            px(fb, ex, ey, sc2);
+            px(fb, ex - (int)(ax * 2 + ay * 2), ey - (int)(ay * 2 - ax * 2), sc2);
+            px(fb, ex - (int)(ax * 2 - ay * 2), ey - (int)(ay * 2 + ax * 2), sc2);
+            px(fb, ex - (int)(ax * 3), ey - (int)(ay * 3), sc2);
+        }
+    }
     else if (info->loot_valid) {
         /* Salvage lock: gold brackets + distance, same edge-arrow cue. */
         Ship *p = &g_ships[PLAYER];

@@ -12,6 +12,7 @@ typedef struct {
     int   target;        /* locked entity index, -1 none */
     int   loot_valid;    /* salvage lock (when no hostiles) */
     Vec3  loot_pos;      /* locked canister, local metres */
+    int   station_valid; /* station nav lock (station at local origin) */
     int   kills;
     float fuel01;        /* fuel fraction for the gauge */
     float render_ms;     /* pure render time (perf readout) */
