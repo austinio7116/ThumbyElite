@@ -323,8 +323,12 @@ void fx_sc_dust_emit(Vec3 cam_pos_mm, Vec3 vel_mms) {
     s_flow += speed * (1.0f / 30.0f) * 0.0035f;   /* tunnel units/frame */
     float k = speed * (1.0f / 2200.0f);
     if (k > 1.0f) k = 1.0f;
-    if (k < 0.06f) k = 0.06f;
-    for (int i = 0; i < 44; i++) {
+    /* Density + length follow speed with NO floor: braking on arrival
+     * thins the field out smoothly until the normal near-space dust is
+     * all that's left — no hard cut at the drop (user feedback). */
+    int count = (int)(44.0f * sqrtf(k));
+    if (count < 1) return;
+    for (int i = 0; i < count; i++) {
         uint32_t h = 0x5CD0u ^ (uint32_t)(i * 2654435761u);
         h ^= h >> 13; h *= 1274126177u; h ^= h >> 16;
         float ang = (float)(h & 0x3FF) * (6.2831853f / 1024.0f);
