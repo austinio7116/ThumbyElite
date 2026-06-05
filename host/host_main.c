@@ -81,6 +81,9 @@ static void dump_ppm(const char *path) {
     printf("[elite] wrote %s\n", path);
 }
 
+extern int g_dbg_dust[2];
+extern float g_dbg_dustf[4];
+
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
     const char *shot_path = getenv("ELITE_SHOT");
@@ -215,6 +218,11 @@ int main(int argc, char **argv) {
         while (elite_game_state() == 1 && f < 30 * 240) {
             elite_game_tick(&none, 1.0f / 30.0f);
             f++;
+            if (f == 120) { SNAP("mid");
+                printf("[dust] projected=%d onscreen=%d spd=%.1f R=%.1f "
+                       "rel0=(%.1f,%.1f)\n",
+                       g_dbg_dust[0], g_dbg_dust[1], g_dbg_dustf[0],
+                       g_dbg_dustf[1], g_dbg_dustf[2], g_dbg_dustf[3]); }
             if (f == 300 || f == 1800) SNAP("cruise");
         }
         printf("[travel] arrived after %ds, state=%d\n", f / 30,

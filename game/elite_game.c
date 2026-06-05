@@ -161,6 +161,26 @@ static void spawn_poi_content(void) {
         if (idx > 0) ship_set_tier(idx, tier, cls);
     }
 
+    /* Derelict debris (user req): some sites have loot just floating —
+     * old wrecks, jettisoned cargo. More in lawless space; beacons and
+     * planets are picked-over less often than patrolled stations. */
+    {
+        int chance = (s_anchor_poi.kind == POI_STATION) ? 12 : 30;
+        chance += (int)si->threat * 8;
+        if (s_anchor_has_poi && (int)(xorshift32() % 100u) < chance) {
+            int n = 1 + (int)(xorshift32() % 3u);
+            for (int i = 0; i < n; i++) {
+                float a = frand(0, 6.2831f);
+                float r = frand(250, 700);
+                Vec3 pos = v3(cosf(a) * r, frand(-150, 150),
+                              sinf(a) * r);
+                loot_on_kill(pos, v3(frand(-2, 2), frand(-2, 2),
+                                     frand(-2, 2)),
+                             (int)si->threat);
+            }
+        }
+    }
+
     /* Bounty mark: a flagged pilot at the mission's tier. ACE marks
      * bring an escort. */
     int btier = (s_anchor_has_poi && s_anchor_poi.kind == POI_BEACON)

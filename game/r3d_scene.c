@@ -73,7 +73,9 @@ int r3d_scene_project(Vec3 cam_rel, float *sx, float *sy, uint16_t *d) {
     *sx = 64.0f + focal * v.x * inv_z;
     *sy = 64.0f - focal * v.y * inv_z;
     float dd = R3D_DEPTH_K * inv_z;
-    *d = (dd >= 65535.0f) ? 65535u : (uint16_t)dd;
+    /* Floor at 1: Mm-scale points quantise to 0 = the sky-clear value
+     * and silently lose every depth test (SC dust was invisible). */
+    *d = (dd >= 65535.0f) ? 65535u : (dd < 1.0f ? 1u : (uint16_t)dd);
     return 1;
 }
 
