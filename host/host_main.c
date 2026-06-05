@@ -374,6 +374,31 @@ int main(int argc, char **argv) {
         #undef TAPM
     }
 
+    /* Status-bounce repro: pause -> down x3 -> A. Expect ST_STATUS (8). */
+    if (getenv("ELITE_STATUSTEST")) {
+        CraftRawButtons none = {0}, b;
+        for (int k = 0; k < 10; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        b = none; b.menu = true; elite_game_tick(&b, 1.0f / 30.0f);
+        for (int k = 0; k < 3; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        printf("[st] in pause: state=%d (want 5)\n", elite_game_state());
+        for (int i = 0; i < 3; i++) {
+            b = none; b.down = true; elite_game_tick(&b, 1.0f / 30.0f);
+            elite_game_tick(&none, 1.0f / 30.0f);
+            printf("[st] down %d: state=%d\n", i, elite_game_state());
+        }
+        b = none; b.a = true;
+        elite_game_tick(&b, 1.0f / 30.0f);          /* select SHIP STATUS */
+        printf("[st] after A1: state=%d (want 8)\n", elite_game_state());
+        elite_game_tick(&b, 1.0f / 30.0f);          /* A held one more frame */
+        printf("[st] after A2: state=%d (want 8)\n", elite_game_state());
+        for (int k = 0; k < 5; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        printf("[st] after release: state=%d (want 8)\n", elite_game_state());
+        b = none; b.a = true; elite_game_tick(&b, 1.0f / 30.0f);
+        elite_game_tick(&none, 1.0f / 30.0f);
+        printf("[st] after A tap: state=%d (want 0)\n", elite_game_state());
+        return 0;
+    }
+
     /* Hyperjump test: galaxy map, nudge cursor right until a new system
      * highlights in range, engage, ride the tunnel. */
     if (getenv("ELITE_JUMPTEST")) {

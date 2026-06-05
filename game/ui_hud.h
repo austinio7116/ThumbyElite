@@ -23,6 +23,7 @@ typedef struct {
     const char *dest_name;   /* NULL = no destination */
     Vec3  dest_rel_mm;       /* destination relative to the ship, Mm */
     float speed_mms;         /* Mm per second */
+    float eta_s;             /* envelope-aware ETA (game computes) */
     float throttle;
     float fuel01;
     float render_ms;

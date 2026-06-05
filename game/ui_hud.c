@@ -12,6 +12,7 @@
 #include "elite_combat.h"
 #include "r3d_scene.h"
 #include "craft_font.h"
+#include "ui_icons.h"
 #include <stdio.h>
 
 #define COL_SHIELD  RGB565C( 80, 180, 255)
@@ -227,9 +228,11 @@ void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
                      (int)p->ammo[p->active_w]);
         else
             snprintf(buf, sizeof buf, "%s", w->name);
-        craft_font_draw(fb, buf, 64 - craft_font_width(buf) / 2, 10,
-                        (w->ammo_max && p->ammo[p->active_w] <= 0)
-                            ? COL_HULL : COL_NUM);
+        int wx = 64 - craft_font_width(buf) / 2 + 7;
+        craft_font_draw(fb, buf, wx,
+                        10, (w->ammo_max && p->ammo[p->active_w] <= 0)
+                                ? COL_HULL : COL_NUM);
+        icon_weapon(fb, wx - 15, 9, p->weapons[p->active_w]);
     }
 
     /* Left panel: speed / throttle / status lights. */
@@ -315,9 +318,8 @@ void ui_hud_draw_sc(uint16_t *fb, const HudScInfo *info) {
             snprintf(buf, sizeof buf, "%d.%dMM", (int)dist,
                      ((int)(dist * 10)) % 10);
         craft_font_draw(fb, buf, 2, 19, COL_NUM);
-        float eta = (info->speed_mms > 0.001f) ? dist / info->speed_mms : 999;
-        if (eta < 999) {
-            snprintf(buf, sizeof buf, "ETA %dS", (int)eta);
+        if (info->eta_s > 0 && info->eta_s < 999) {
+            snprintf(buf, sizeof buf, "ETA %dS", (int)info->eta_s);
             craft_font_draw(fb, buf, 2, 26, COL_NUM);
         }
     }

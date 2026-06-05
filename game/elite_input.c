@@ -22,6 +22,8 @@ typedef struct {
 
 static Mod   s_lb, s_rb;
 static bool  s_prev_b;
+static bool  s_swallow_a;            /* A held over from a menu screen:
+                                      * no fire until it's released once */
 static float s_rb_pending = -1.0f;   /* >=0: single-tap action armed, waiting
                                       * out the double-tap window */
 
@@ -32,6 +34,7 @@ void elite_input_reset(void) {
     /* Swallow a still-held B from whatever screen we came from, and mark
      * LB/RB consumed so releasing them doesn't fire taps. */
     s_prev_b = true;
+    s_swallow_a = true;
     s_lb.down = s_rb.down = true;
     s_lb.consumed = s_rb.consumed = true;
     s_rb_pending = -1.0f;
@@ -84,7 +87,8 @@ void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) 
         if (s_rb_pending < 0.0f) out->assist_toggle = true;
     }
 
-    out->fire = btn->a;
+    if (!btn->a) s_swallow_a = false;
+    out->fire = btn->a && !s_swallow_a;
     out->secondary = btn->b && !s_prev_b;
     s_prev_b = btn->b;
 }

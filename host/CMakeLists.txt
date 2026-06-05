@@ -74,6 +74,7 @@ add_executable(thumbyelite_host
     ${GAME}/ui_map.c
     ${GAME}/ui_station.c
     ${GAME}/ui_status.c
+    ${GAME}/ui_icons.c
     ${GAME}/econ.c
     ${GAME}/elite_player.c
     ${GAME}/galaxy_gen.c

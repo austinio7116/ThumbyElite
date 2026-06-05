@@ -31,6 +31,7 @@
 #include "elite_player.h"
 #include "system_sim.h"
 #include "station_gen.h"
+#include "elite_ships.h"
 #include "galaxy_gen.h"
 #include "craft_font.h"
 #include "meshes_gen.h"
@@ -59,6 +60,7 @@ static Vec3    s_sc_pos_mm;      /* supercruise position */
 static Poi     s_sc_dest;
 static bool    s_sc_has_dest;
 static float   s_sc_speed;
+static float   s_sc_eta;
 
 static SysAddr s_jump_target;
 static float   s_jump_dist;
@@ -351,6 +353,28 @@ static void tick_supercruise(const CraftRawButtons *btn, float dt) {
     float want = p->throttle * vmax;
     /* Smooth speed chase. */
     s_sc_speed += (want - s_sc_speed) * (dt * 2.0f > 1 ? 1 : dt * 2.0f);
+
+    /* Envelope-aware ETA: cruise at the cap, then the exponential
+     * approach (v = eff/2 + 2 -> t = 2*ln ratio), scaled by throttle. */
+    if (s_sc_has_dest) {
+        float thr = p->throttle < 0.05f ? 0.05f : p->throttle;
+        float eff = dist - standoff;
+        if (eff < 0.0f) eff = 0.0f;
+        float vcap = 3000.0f * thr;
+        float eff_decay = 2.0f * (vcap - 2.0f);
+        if (eff_decay < 1.0f) eff_decay = 1.0f;
+        float t = 0.0f;
+        float e0 = eff;
+        if (e0 > eff_decay) {
+            t += (e0 - eff_decay) / vcap;
+            e0 = eff_decay;
+        }
+        t += (2.0f / thr) * logf((0.5f * e0 + 2.0f) / 2.6f);
+        if (t < 0) t = 0;
+        s_sc_eta = t + 1.0f;          /* spool-up allowance */
+    } else {
+        s_sc_eta = 0;
+    }
     s_sc_pos_mm = v3_add(s_sc_pos_mm,
                          v3_scale(p->basis.r[2], s_sc_speed * dt));
 
@@ -561,11 +585,46 @@ void elite_game_render_begin(void) {
     }
     case ST_GALAXY_MAP:
     case ST_SYSTEM_MAP:
-    case ST_DOCKED:
-    case ST_STATUS:
         /* Fullscreen UI: minimal empty scene (UI fills the band). */
         r3d_scene_begin(&p->basis, 60.0f);
         break;
+
+    case ST_DOCKED: {
+        /* Starfield backdrop + rotating preview (station or shipyard
+         * hull) in the right-hand pane the UI leaves open. */
+        Mat3 cam = m3_identity();
+        r3d_scene_begin(&cam, 60.0f);
+        int pv = station_preview();
+        if (pv != -2) {
+            const Mesh *m = (pv == -1)
+                ? (s_station_mesh ? s_station_mesh : &mesh_station)
+                : k_hulls[pv].mesh;
+            R3DObject obj;
+            obj.mesh = m;
+            obj.basis = m3_identity();
+            m3_rotate_local(&obj.basis, 1, s_time * 0.5f);
+            m3_rotate_local(&obj.basis, 0, 0.30f);
+            float dist = m->bound_r * 2.5f;
+            obj.pos = v3(dist * 0.29f, 0, dist);
+            r3d_scene_add_object(&obj);
+        }
+        break;
+    }
+
+    case ST_STATUS: {
+        /* Your ship turning gently in the sheet's top-right window. */
+        Mat3 cam = m3_identity();
+        r3d_scene_begin(&cam, 60.0f);
+        R3DObject obj;
+        obj.mesh = k_hulls[g_player.hull_id].mesh;
+        obj.basis = m3_identity();
+        m3_rotate_local(&obj.basis, 1, s_time * 0.5f);
+        m3_rotate_local(&obj.basis, 0, 0.30f);
+        float dist = obj.mesh->bound_r * 2.6f;
+        obj.pos = v3(dist * 0.345f, dist * 0.30f, dist);
+        r3d_scene_add_object(&obj);
+        break;
+    }
 
     case ST_SUPERCRUISE:
         r3d_scene_begin(&p->basis, 60.0f);
@@ -685,6 +744,7 @@ void elite_game_draw_overlay(uint16_t *fb) {
             .dest_rel_mm = s_sc_has_dest
                 ? v3_sub(s_sc_dest.pos_mm, s_sc_pos_mm) : v3(0, 0, 1),
             .speed_mms = s_sc_speed,
+            .eta_s = s_sc_eta,
             .throttle = p->throttle,
             .fuel01 = g_player.fuel / g_player.fuel_max,
             .render_ms = s_frame_ms,

@@ -12,6 +12,7 @@
 #include "econ.h"
 #include "elite_ships.h"
 #include "ui_status.h"
+#include "ui_icons.h"
 #include "elite_entity.h"
 #include "mission.h"
 #include "elite_weapons.h"
@@ -57,8 +58,10 @@ void station_open(int station_idx) {
     s_cursor = 0;
     s_scroll = 0;
     memset(s_bought, 0, sizeof s_bought);
-    /* Debounce: everything counts as held until released once. */
-    memset(&s_prev, 0xFF, sizeof s_prev);
+    /* Debounce: everything counts as held until released once.
+     * (Per-field true — memset(0xFF) breaks _Bool negation.) */
+    s_prev.up = s_prev.down = s_prev.left = s_prev.right = true;
+    s_prev.a = s_prev.b = s_prev.lb = s_prev.rb = s_prev.menu = true;
     s_hold_a = s_hold_b = s_repeat = 0;
     s_toast[0] = 0;
     s_toast_t = 0;
@@ -67,6 +70,12 @@ void station_open(int station_idx) {
 static void toast(const char *msg) {
     snprintf(s_toast, sizeof s_toast, "%s", msg);
     s_toast_t = 1.6f;
+}
+
+int station_preview(void) {
+    if (s_screen == SCR_HOME) return -1;
+    if (s_screen == SCR_SHIPYARD) return s_cursor;
+    return -2;
 }
 
 void station_toast(const char *msg) {
@@ -397,6 +406,17 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
 static void fill(uint16_t *fb, uint16_t c) {
     for (int i = 0; i < ELITE_FB_W * ELITE_FB_H; i++) fb[i] = c;
 }
+/* Fill everything EXCEPT the 3D preview pane (right column, body rows) —
+ * the scene behind shows the rotating station/ship there. */
+static void fill_with_pane(uint16_t *fb, uint16_t c, int body_y0, int body_y1) {
+    for (int y = 0; y < ELITE_FB_H; y++) {
+        int xmax = (y >= body_y0 && y < body_y1) ? 64 : ELITE_FB_W;
+        uint16_t *row = fb + y * ELITE_FB_W;
+        for (int x = 0; x < xmax; x++) row[x] = c;
+    }
+    for (int y = body_y0; y < body_y1; y++)
+        fb[y * ELITE_FB_W + 64] = COL_GRID;
+}
 static void hl(uint16_t *fb, int y, uint16_t c) {
     for (int x = 0; x < ELITE_FB_W; x++) fb[y * ELITE_FB_W + x] = c;
 }
@@ -489,7 +509,6 @@ static const char *k_qtag[5] = { "SLV", "STD", "RNF", "MIL", "PRO" };
 static void draw_shipyard(uint16_t *fb) {
     draw_header(fb);
     craft_font_draw(fb, "SHIPYARD", 2, 12, COL_DIM);
-    hl(fb, 19, COL_GRID);
     int y = 22;
     for (int i = s_scroll; i < N_HULLS && i < s_scroll + 7; i++, y += 10) {
         const HullDef *h = &k_hulls[i];
@@ -497,37 +516,32 @@ static void draw_shipyard(uint16_t *fb) {
                    : (i == g_player.hull_id) ? COL_CRED : COL_DIM;
         if (i == s_cursor) craft_font_draw(fb, ">", 2, y, COL_CUR);
         craft_font_draw(fb, h->name, 8, y, c);
-        char buf[16];
-        if (i == g_player.hull_id)
-            craft_font_draw(fb, "OWNED", 92, y, COL_CRED);
-        else {
-            int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
-            int cost = h->price - tradein;
-            if (cost < 0) cost = 0;
-            snprintf(buf, sizeof buf, "%d", cost);
-            craft_font_draw(fb, buf, 92, y, c);
-        }
+        if (i == g_player.hull_id) craft_font_draw(fb, "*", 56, y, COL_CRED);
     }
-    /* Selected hull stat strip. */
+    /* Selected hull: price + stat strip in the full-width footer. */
     const HullDef *sel = &k_hulls[s_cursor];
-    hl(fb, 96, COL_GRID);
+    hl(fb, 95, COL_GRID);
     char buf[36];
-    snprintf(buf, sizeof buf, "SPD%d CRG%d HUL%d SHD%d",
-             (int)sel->max_speed, sel->cargo, (int)sel->hull_base,
-             (int)sel->shield_base);
-    craft_font_draw(fb, buf, 2, 99, COL_DIM);
-    char slots[20] = "SLOTS ";
-    int sl = 6;
-    for (int i = 0; i < sel->n_slots; i++) {
-        slots[sl++] = (char)('0' + sel->slot_size[i]);
-        slots[sl++] = ' ';
+    if (s_cursor == g_player.hull_id) {
+        snprintf(buf, sizeof buf, "%s - OWNED", sel->name);
+    } else {
+        int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
+        int cost = sel->price - tradein;
+        if (cost < 0) cost = 0;
+        snprintf(buf, sizeof buf, "%s COST %dCR", sel->name, cost);
     }
+    craft_font_draw(fb, buf, 2, 98, COL_CRED);
+    char slots[8];
+    int sl = 0;
+    for (int i = 0; i < sel->n_slots; i++)
+        slots[sl++] = (char)('0' + sel->slot_size[i]);
     slots[sl] = 0;
-    snprintf(buf, sizeof buf, "%s STIER%d HTIER%d", slots,
-             sel->max_shield_tier, sel->max_hull_tier);
-    craft_font_draw(fb, buf, 2, 106, COL_DIM);
-    hl(fb, 115, COL_GRID);
-    craft_font_draw(fb, "A:BUY(TRADE-IN) MENU:BACK", 2, 118, COL_DIM);
+    snprintf(buf, sizeof buf, "SPD%d CRG%d H%d S%d SL%s",
+             (int)sel->max_speed, sel->cargo, (int)sel->hull_base,
+             (int)sel->shield_base, slots);
+    craft_font_draw(fb, buf, 2, 105, COL_DIM);
+    hl(fb, 113, COL_GRID);
+    craft_font_draw(fb, "A:BUY(TRADE-IN) MENU:BACK", 2, 117, COL_DIM);
 }
 
 static void draw_outfit(uint16_t *fb) {
@@ -546,14 +560,15 @@ static void draw_outfit(uint16_t *fb) {
         switch (r->kind) {
         case ROW_MOUNT: {
             const WeaponInst *m = &g_player.mounts[r->index];
-            if (m->in_use)
-                snprintf(buf, sizeof buf, "S%d %-8s%s %d%%",
+            if (m->in_use) {
+                icon_weapon(fb, 7, y - 1, m->type);
+                snprintf(buf, sizeof buf, "S%d %s %s %d%%",
                          h->slot_size[r->index], k_weapons[m->type].name,
                          k_qtag[m->quality], m->integrity);
-            else
+            } else
                 snprintf(buf, sizeof buf, "S%d ----",
                          h->slot_size[r->index]);
-            craft_font_draw(fb, buf, 8, y, c);
+            craft_font_draw(fb, buf, 21, y, c);
             if (m->in_use && m->integrity < 100) {
                 snprintf(buf, sizeof buf, "%d", repair_cost(m));
                 craft_font_draw(fb, buf, 104, y, COL_CRED);
@@ -581,16 +596,18 @@ static void draw_outfit(uint16_t *fb) {
         }
         case ROW_SALV: {
             const WeaponInst *m = &g_player.salvage[r->index];
-            snprintf(buf, sizeof buf, "RK %-8s%s %d%%",
+            icon_weapon(fb, 7, y - 1, m->type);
+            snprintf(buf, sizeof buf, "RK %s %s %d%%",
                      k_weapons[m->type].name, k_qtag[m->quality],
                      m->integrity);
-            craft_font_draw(fb, buf, 8, y, c);
+            craft_font_draw(fb, buf, 21, y, c);
             break;
         }
         case ROW_SHOP: {
-            snprintf(buf, sizeof buf, "BUY %-8sZ%d",
+            icon_weapon(fb, 7, y - 1, r->index);
+            snprintf(buf, sizeof buf, "BUY %s Z%d",
                      k_weapons[r->index].name, k_weapons[r->index].size);
-            craft_font_draw(fb, buf, 8, y, c);
+            craft_font_draw(fb, buf, 21, y, c);
             snprintf(buf, sizeof buf, "%d",
                      (int)(weapon_price(r->index, Q_STANDARD) *
                            skill_price_mult()));
@@ -705,7 +722,9 @@ static void draw_bar(uint16_t *fb) {
 }
 
 void station_draw(uint16_t *fb) {
-    fill(fb, COL_BG);
+    if (s_screen == SCR_HOME) fill_with_pane(fb, COL_BG, 10, 119);
+    else if (s_screen == SCR_SHIPYARD) fill_with_pane(fb, COL_BG, 10, 95);
+    else fill(fb, COL_BG);
     if (s_screen == SCR_MARKET) draw_market(fb);
     else if (s_screen == SCR_SHIPYARD) draw_shipyard(fb);
     else if (s_screen == SCR_OUTFIT) draw_outfit(fb);

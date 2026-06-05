@@ -8,6 +8,7 @@
 #include "elite_weapons.h"
 #include "econ.h"
 #include "craft_font.h"
+#include "ui_icons.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -22,9 +23,18 @@
 static int s_scroll;
 static CraftRawButtons s_prev;
 
+/* All-held button state for debouncing. NOTE: never memset(0xFF) over
+ * _Bool fields — !x compiles as x^1, and 0xFE is still truthy. */
+static CraftRawButtons buttons_all_held(void) {
+    CraftRawButtons b;
+    b.up = b.down = b.left = b.right = true;
+    b.a = b.b = b.lb = b.rb = b.menu = true;
+    return b;
+}
+
 void status_open(void) {
     s_scroll = 0;
-    memset(&s_prev, 0xFF, sizeof s_prev);   /* debounce */
+    s_prev = buttons_all_held();   /* debounce */
 }
 
 bool status_tick(const CraftRawButtons *btn, float dt) {
@@ -45,7 +55,14 @@ static const char *k_skill_names[4] = {
 };
 
 void status_draw(uint16_t *fb) {
-    for (int i = 0; i < ELITE_FB_W * ELITE_FB_H; i++) fb[i] = COL_BG;
+    /* Fill everything except the ship-preview window (top right). */
+    for (int y = 0; y < ELITE_FB_H; y++) {
+        uint16_t *row = fb + y * ELITE_FB_W;
+        int skip0 = (y >= 10 && y < 54) ? 76 : ELITE_FB_W;
+        for (int x = 0; x < ELITE_FB_W; x++)
+            if (x < skip0) row[x] = COL_BG;
+    }
+    for (int y = 10; y < 54; y++) fb[y * ELITE_FB_W + 76] = COL_GRID;
     const HullDef *h = &k_hulls[g_player.hull_id];
     char buf[36];
 
@@ -66,8 +83,7 @@ void status_draw(uint16_t *fb) {
     uint16_t c = COL_HDR;
     ROW("%s  S%d H%d", h->name, g_player.shield_tier, g_player.hull_tier);
     c = COL_DIM;
-    ROW("SPD %d TRN %d.%d CRG %d", (int)h->max_speed,
-        (int)h->turn_rate, ((int)(h->turn_rate * 10)) % 10, h->cargo);
+    ROW("SPD %d CRG %d", (int)h->max_speed, h->cargo);
 
     c = COL_HDR;
     ROW("MOUNTS:");
@@ -75,9 +91,10 @@ void status_draw(uint16_t *fb) {
         const WeaponInst *m = &g_player.mounts[i];
         if (m->in_use) {
             c = (m->integrity < 50) ? COL_WARN : COL_DIM;
-            ROW("S%d %-8s %s %d%%", h->slot_size[i],
-                k_weapons[m->type].name, k_qual_tag[m->quality],
-                m->integrity);
+            int yy = y;
+            ROW("   S%d %s %d%%", h->slot_size[i],
+                k_weapons[m->type].name, m->integrity);
+            if (yy >= 11 && yy < 120) icon_weapon(fb, 2, yy - 1, m->type);
         } else {
             c = COL_DIM;
             ROW("S%d ----", h->slot_size[i]);
@@ -92,8 +109,10 @@ void status_draw(uint16_t *fb) {
         if (!m->in_use) continue;
         any = 1;
         c = COL_DIM;
-        ROW("%-8s %s %d%%", k_weapons[m->type].name,
+        int yy = y;
+        ROW("   %s %s %d%%", k_weapons[m->type].name,
             k_qual_tag[m->quality], m->integrity);
+        if (yy >= 11 && yy < 120) icon_weapon(fb, 2, yy - 1, m->type);
     }
     if (!any) { c = COL_DIM; ROW("(EMPTY)"); }
 

@@ -39,8 +39,15 @@ static void fill(uint16_t *fb, uint16_t c) {
 typedef struct { CraftRawButtons prev; } Edges;
 static Edges s_edge;
 /* Debounce: treat every button as already-held on open, so whatever
- * press navigated INTO the screen must be released before it can act. */
-static void edges_reset(void) { memset(&s_edge, 0xFF, sizeof s_edge); }
+ * press navigated INTO the screen must be released before it can act.
+ * NOTE: never memset(0xFF) over _Bool — !x compiles as x^1 and 0xFE
+ * stays truthy; assign true per field. */
+static void edges_reset(void) {
+    CraftRawButtons b;
+    b.up = b.down = b.left = b.right = true;
+    b.a = b.b = b.lb = b.rb = b.menu = true;
+    s_edge.prev = b;
+}
 #define JUST(btn, field) ((btn)->field && !s_edge.prev.field)
 
 /* ====================== GALAXY MAP ===================================== */
