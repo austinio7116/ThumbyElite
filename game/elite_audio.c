@@ -109,10 +109,10 @@ void sfx_klaxon(void) {
 }
 
 void audio_engine_set(float throttle01, float speed01) {
-    /* The Thumby speaker rolls off hard below ~280 Hz — sub-bass comes
-     * out as a click train, so the 'hum' is really a turbine whine. */
-    s_eng_freq_t = 300.0f + 320.0f * throttle01;
-    s_eng_amp_t = 0.025f + 0.075f * speed01;
+    /* Pure-sine turbine whine, well inside the speaker passband. The
+     * saw version ticked: a sawtooth IS a per-cycle discontinuity. */
+    s_eng_freq_t = 380.0f + 300.0f * throttle01;
+    s_eng_amp_t = 0.018f + 0.055f * speed01;
 }
 
 /* --- mixing ------------------------------------------------------------*/
@@ -141,17 +141,14 @@ int audio_render(int16_t *out, int n) {
     for (int s = 0; s < n; s++) {
         int32_t mix = 0;
 
-        /* Engine hum: chase targets, triangle-ish via saw fold. */
+        /* Engine hum: pure sine, no gate (a threshold gate steps the
+         * output when amplitude hovers at it — audible ticks). Amp 0
+         * simply multiplies to silence with no discontinuity. */
         s_eng_freq += (s_eng_freq_t - s_eng_freq) * 0.0004f;
         s_eng_amp += (s_eng_amp_t - s_eng_amp) * 0.0004f;
-        if (s_eng_amp > 0.005f) {
-            s_eng_phase += (uint32_t)(s_eng_freq * 65536.0f * dt);
-            /* Saw + a fifth above for a turbine timbre, all in-band. */
-            int16_t v = wave_sample(W_SAW, s_eng_phase);
-            int16_t v2 = wave_sample(W_SINE,
-                                     s_eng_phase + (s_eng_phase >> 1));
-            mix += (int32_t)((v / 2 + v2 / 3) * s_eng_amp);
-        }
+        s_eng_phase += (uint32_t)(s_eng_freq * 65536.0f * dt);
+        mix += (int32_t)((float)wave_sample(W_SINE, s_eng_phase) *
+                         s_eng_amp);
 
         for (int i = 0; i < N_VOICES; i++) {
             Voice *v = &s_v[i];
