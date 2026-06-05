@@ -141,6 +141,222 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    /* Full gameplay movie: title -> dogfight -> loot -> supercruise ->
+     * dock -> trade/outfit/missions -> hyperjump. Dumps every frame to
+     * /tmp/movie/ for ffmpeg. ELITE_MOVIE=1. */
+    if (getenv("ELITE_MOVIE")) {
+        static int mf = 0;
+        CraftRawButtons none = {0};
+        #define MV(btns) do { \
+            CraftRawButtons _b = (btns); \
+            elite_game_tick(&_b, 1.0f / 30.0f); \
+            render_frame(); \
+            char _p[64]; \
+            snprintf(_p, sizeof _p, "/tmp/movie/f_%05d.ppm", mf++); \
+            dump_ppm(_p); \
+        } while (0)
+        #define MV_IDLE(n) do { for (int _i = 0; _i < (n); _i++) MV(none); } while (0)
+        #define MV_TAP(field, settle) do { \
+            CraftRawButtons _t = none; _t.field = true; MV(_t); \
+            MV_IDLE(settle); } while (0)
+
+        /* Phase 0: the title drifts, then NEW GAME. */
+        MV_IDLE(140);
+        MV_TAP(down, 4);
+        MV_TAP(a, 8);
+
+        /* Phase 1: arrival staging — clean sky, two raiders. */
+        Ship *pl = &g_ships[0];
+        elite_game_debug_face_away_from_sun();
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Vec3 fwd = pl->basis.r[2], rgt = pl->basis.r[0];
+        int p1 = ship_spawn(hull_mesh(0xACE1u, 2),
+                            v3_add(pl->pos, v3_add(v3_scale(fwd, 220.0f),
+                                                   v3_scale(rgt, 40.0f))),
+                            TEAM_HOSTILE);
+        if (p1 > 0) ship_set_tier(p1, 0, 2);
+        int p2 = ship_spawn(hull_mesh(0xBEE5u, 1),
+                            v3_add(pl->pos, v3_add(v3_scale(fwd, 300.0f),
+                                                   v3_scale(rgt, -70.0f))),
+                            TEAM_HOSTILE);
+        if (p2 > 0) ship_set_tier(p2, 0, 1);
+        pl->hull = pl->hull_max;                /* fresh paint */
+        MV_IDLE(20);
+        MV_TAP(lb, 2);                          /* lock */
+
+        /* Phase 2: the dogfight — steer via real d-pad input. */
+        for (int f = 0; f < 1500; f++) {
+            int tgt = -1;
+            for (int i = 1; i < MAX_SHIPS; i++)
+                if (g_ships[i].alive &&
+                    g_ships[i].team == TEAM_HOSTILE) { tgt = i; break; }
+            if (tgt < 0) break;
+            CraftRawButtons b = none;
+            Vec3 rel = v3_sub(g_ships[tgt].pos, pl->pos);
+            Vec3 local = m3_mul_v3_t(&pl->basis, rel);
+            if (local.x > 4.0f) b.right = true;
+            else if (local.x < -4.0f) b.left = true;
+            if (local.y > 4.0f) b.up = true;
+            else if (local.y < -4.0f) b.down = true;
+            float d2 = v3_len(rel);
+            if (local.z > 0 && local.x * local.x + local.y * local.y <
+                    d2 * d2 * 0.012f)
+                b.a = true;                     /* roughly on target */
+            if (f == 40) b.lb = true;           /* re-lock mid-fight */
+            MV(b);
+        }
+        MV_IDLE(50);                            /* watch the fireball */
+
+        /* Phase 3: salvage run — lock loot, fly to it, scoop. */
+        extern int loot_positions(Vec3 *, int *, int);
+        loot_on_kill(v3_add(pl->pos, v3_scale(pl->basis.r[2], 120.0f)),
+                     v3(0, 0, 0), 2);           /* guaranteed wreckage */
+        for (int c2 = 0; c2 < 2; c2++) {
+            MV_TAP(lb, 2);                      /* salvage lock */
+            for (int f = 0; f < 700; f++) {
+                Vec3 cans[6]; int comp[6];
+                int n = loot_positions(cans, comp, 6);
+                if (n == 0) break;
+                /* nearest */
+                int bi = 0; float bd = 1e30f;
+                for (int i = 0; i < n; i++) {
+                    float d3 = v3_len(v3_sub(cans[i], pl->pos));
+                    if (d3 < bd) { bd = d3; bi = i; }
+                }
+                CraftRawButtons b = none;
+                Vec3 local = m3_mul_v3_t(&pl->basis,
+                                         v3_sub(cans[bi], pl->pos));
+                if (local.x > 2.0f) b.right = true;
+                else if (local.x < -2.0f) b.left = true;
+                if (local.y > 2.0f) b.up = true;
+                else if (local.y < -2.0f) b.down = true;
+                pl->throttle = (bd > 120.0f) ? 0.85f
+                             : (bd > 40.0f) ? 0.45f : 0.22f;
+                MV(b);
+            }
+            Vec3 cans[6]; int comp[6];
+            if (loot_positions(cans, comp, 6) == 0) break;
+        }
+        pl->throttle = 0.2f;
+        MV_IDLE(30);
+
+        /* Phase 4: system map -> engage supercruise to the station. */
+        MV_TAP(menu, 6);
+        MV_TAP(down, 3); MV_TAP(down, 3);       /* SYSTEM MAP */
+        MV_TAP(a, 10);
+        /* Seed 42: the station is POI #5 in TEASO's list. */
+        for (int k = 0; k < 5; k++) MV_TAP(down, 3);
+        MV_TAP(a, 10);                          /* engage */
+
+        /* Phase 5: the cruise — dust, swelling planet, auto-drop. */
+        for (int f = 0; f < 30 * 30 && elite_game_state() == 1; f++)
+            MV(none);
+        MV_IDLE(40);
+
+        /* Phase 6: approach + dock. */
+        for (int f = 0; f < 1400; f++) {
+            float d3 = v3_len(pl->pos);         /* station at origin */
+            if (d3 < 420.0f) break;
+            CraftRawButtons b = none;
+            Vec3 local = m3_mul_v3_t(&pl->basis, v3_scale(pl->pos, -1.0f));
+            if (local.x > 12.0f) b.right = true;
+            else if (local.x < -12.0f) b.left = true;
+            if (local.y > 12.0f) b.up = true;
+            else if (local.y < -12.0f) b.down = true;
+            pl->throttle = (d3 > 700.0f) ? 0.85f : 0.4f;
+            MV(b);
+        }
+        pl->throttle = 0.05f;
+        printf("[movie] dock attempt at %.0fm state=%d\n",
+               v3_len(pl->pos), elite_game_state());
+        for (int k = 0; k < 3; k++) {           /* hold the chord */
+            CraftRawButtons b = none;
+            b.lb = true; b.rb = true;
+            MV(b);
+        }
+        for (int f = 0; f < 200 && elite_game_state() != 7; f++) MV(none);
+        printf("[movie] post-dock state=%d (7=DOCKED) frame=%d\n",
+               elite_game_state(), mf);
+        if (elite_game_state() != 7) {
+            printf("[movie] DOCK FAILED — aborting shoot\n");
+            return 1;
+        }
+        MV_IDLE(40);
+
+        /* Phase 7: station life — market, outfitting browse, mission. */
+        MV_TAP(a, 12);                          /* MARKET */
+        MV_TAP(a, 8); MV_TAP(a, 8);             /* buy 2 units */
+        MV_TAP(down, 4); MV_TAP(a, 8);          /* buy another good */
+        MV_TAP(menu, 10);
+        MV_TAP(down, 3); MV_TAP(down, 3);       /* OUTFITTING */
+        MV_TAP(a, 12);
+        MV_TAP(lb, 30);                         /* detail sheet, linger */
+        MV_TAP(rb, 26); MV_TAP(rb, 26);         /* cycle two more */
+        MV_TAP(b, 8);                           /* back to list */
+        MV_TAP(menu, 8);
+        MV_TAP(down, 3); MV_TAP(a, 12);         /* MISSIONS */
+        MV_TAP(a, 14);                          /* accept the first */
+        MV_TAP(menu, 8);
+        for (int k = 0; k < 5; k++) MV_TAP(down, 2);
+        MV_TAP(a, 20);                          /* LAUNCH */
+        MV_IDLE(40);
+
+        printf("[movie] station phase done, state=%d frame=%d\n",
+               elite_game_state(), mf);
+        /* Phase 8: galaxy chart -> survey -> hyperjump. */
+        MV_TAP(menu, 6);
+        MV_TAP(down, 3);
+        MV_TAP(a, 12);                          /* GALAXY CHART */
+        {
+            /* aim the snap at the nearest in-range neighbour */
+            const SystemInfo *si = system_info();
+            float px2, py2;
+            galaxy_star_pos(si->addr, &px2, &py2);
+            float bx = 0, by = 0, bd2 = 1e9f;
+            for (int sy2 = si->addr.sy - 2; sy2 <= si->addr.sy + 2; sy2++)
+                for (int sx2 = si->addr.sx - 2; sx2 <= si->addr.sx + 2;
+                     sx2++) {
+                    int n2 = galaxy_sector_stars(sx2, sy2);
+                    for (int i = 0; i < n2; i++) {
+                        SysAddr a2 = { sx2, sy2, (uint8_t)i };
+                        if (sysaddr_eq(a2, si->addr)) continue;
+                        float x2, y2;
+                        galaxy_star_pos(a2, &x2, &y2);
+                        float dd = sqrtf((x2 - px2) * (x2 - px2) +
+                                         (y2 - py2) * (y2 - py2));
+                        if (dd < bd2) { bd2 = dd; bx = x2 - px2;
+                                        by = y2 - py2; }
+                    }
+                }
+            CraftRawButtons b = none;
+            if (bx * bx > by * by) {
+                if (bx > 0) b.right = true; else b.left = true;
+            } else {
+                if (by > 0) b.down = true; else b.up = true;
+            }
+            MV(b); MV_IDLE(20);
+        }
+        MV_TAP(a, 70);                          /* survey sheet, linger */
+        MV_TAP(a, 6);                           /* commit the jump */
+
+        printf("[movie] jump committed, state=%d frame=%d\n",
+               elite_game_state(), mf);
+        /* Phase 9: recede + tunnel + arrival. */
+        for (int f = 0; f < 30 * 8 && elite_game_state() != 0; f++)
+            MV(none);
+        /* Phase 10: a parting cruise with a slow roll. */
+        pl->throttle = 0.5f;
+        for (int f = 0; f < 110; f++) {
+            CraftRawButtons b = none;
+            b.lb = true;
+            b.left = true;                      /* roll */
+            MV(b);
+        }
+        MV_IDLE(60);
+        printf("[movie] %d frames\n", mf);
+        return 0;
+    }
+
     /* Staged combat captures for the guide: hostiles close ahead,
      * lock, pulse volleys, a gauss helix, the kill. */
     if (getenv("ELITE_ACTION")) {
