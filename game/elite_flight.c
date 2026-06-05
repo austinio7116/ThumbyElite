@@ -12,9 +12,11 @@
 static float s_ramp_pitch, s_ramp_yaw, s_ramp_roll;
 static float ramp(float *t, float active, float dt) {
     if (active != 0.0f) *t += dt; else *t = 0.0f;
-    float k = *t / 0.45f;
+    float k = *t / 0.5f;
     if (k > 1.0f) k = 1.0f;
-    return 0.01f + 0.99f * k;
+    /* Quadratic ease-in: half a second in, you're still only at 25% —
+     * the whole first beat of a hold stays in fine-aim territory. */
+    return 0.01f + 0.99f * k * k;
 }
 
 /* Steering momentum (user request): the actual turn rate CHASES the
