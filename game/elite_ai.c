@@ -12,7 +12,9 @@
 #include "elite_combat.h"
 #include "elite_weapons.h"
 
-#define AI_BREAK_DIST  28.0f
+#define AI_BREAK_DIST  120.0f   /* break off the run EARLY — 28m read
+                                   as flying straight through the player
+                                   (user report); real pilots joust */
 #define AI_BREAK_TIME  2.2f
 
 /* Per-tier trigger discipline. */

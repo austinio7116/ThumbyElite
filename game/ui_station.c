@@ -944,14 +944,16 @@ static void draw_home(uint16_t *fb) {
         }
     }
 
+    /* Fuel + cargo live under the station pane on the right — the
+     * 10-row service list (PAY FINE) reclaimed their old left slot. */
     char fuel[24];
-    snprintf(fuel, sizeof fuel, "FUEL %d.%d/%d LY",
+    snprintf(fuel, sizeof fuel, "FUEL %d.%d/%dLY",
              (int)g_player.fuel, ((int)(g_player.fuel * 10)) % 10,
              (int)g_player.fuel_max);
-    craft_font_draw(fb, fuel, 2, 103, COL_DIM);
+    craft_font_draw(fb, fuel, 66, 100, COL_DIM);
     snprintf(fuel, sizeof fuel, "CARGO %d/%d", player_cargo_total(),
              player_cargo_cap());
-    craft_font_draw(fb, fuel, 2, 110, COL_DIM);
+    craft_font_draw(fb, fuel, 66, 108, COL_DIM);
     hl(fb, 118, COL_GRID);
     craft_font_draw(fb, "A:SELECT MENU:LEAVE MENU", 2, 121, COL_DIM);
 }
