@@ -8,6 +8,7 @@
  * careless owners at point blank).
  */
 #include "elite_proj.h"
+#include "elite_player.h"
 #include "elite_entity.h"
 #include "elite_combat.h"
 #include "r3d_scene.h"
@@ -43,6 +44,28 @@ int proj_count(void) {
 void proj_spawn(WeaponType type, int owner, int8_t target,
                 Vec3 pos, Vec3 dir, Vec3 inherit_vel) {
     proj_spawn_ex(type, owner, target, pos, dir, inherit_vel, 1.0f);
+}
+
+bool proj_homing_on(int victim) {
+    for (int i = 0; i < MAX_PROJ; i++) {
+        const Proj *p = &s_proj[i];
+        if (p->alive && p->target == victim &&
+            k_weapons[p->type].turn > 0)
+            return true;
+    }
+    return false;
+}
+
+int proj_break_locks(int victim) {
+    int n = 0;
+    for (int i = 0; i < MAX_PROJ; i++) {
+        Proj *p = &s_proj[i];
+        if (!p->alive || p->target != victim) continue;
+        if (k_weapons[p->type].turn <= 0) continue;
+        p->target = -1;            /* flies straight into the chaff */
+        n++;
+    }
+    return n;
 }
 
 void proj_spawn_mine(int owner, Vec3 pos, Vec3 vel, float dmg_mult) {
@@ -141,12 +164,14 @@ void proj_tick(float dt) {
 
         /* Homing guidance: steer velocity toward the target. */
         if (w->turn > 0 && p->target >= 0 && g_ships[p->target].alive) {
+            float turn_mult = (p->owner == PLAYER &&
+                               player_has_util(EQ_TARGETCOMP)) ? 1.4f : 1.0f;
             Vec3 want = v3_norm(v3_sub(g_ships[p->target].pos, p->pos));
             Vec3 cur = v3_norm(p->vel);
             Vec3 axis = v3_cross(cur, want);
             float sin_a = v3_len(axis);
             if (sin_a > 1e-4f) {
-                float step = w->turn * dt;
+                float step = w->turn * turn_mult * dt;
                 float ang = asinf(sin_a > 1 ? 1 : sin_a);
                 if (step > ang) step = ang;
                 Mat3 b = { { cur, v3(0, 0, 0), v3(0, 0, 0) } };

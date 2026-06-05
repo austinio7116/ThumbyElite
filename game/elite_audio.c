@@ -124,7 +124,30 @@ void sfx_explosion(float amp, float big01) {
     play(W_SINE, 340, 210, 0.45f * amp, 0.005f, dur * 1.2f);
 }
 
-void sfx_hit_shield(void) { play(W_SINE, 1400, 900, 0.30f, 0.001f, 0.06f); }
+void sfx_hit_shield(void) {
+    /* Your shield taking a hit: soft 'wom' + faint shimmer — less
+     * harsh than the old zap (user feedback). */
+    play(W_SINE, 740, 480, 0.26f, 0.004f, 0.11f);
+    play(W_NOISE, 3200, 2200, 0.07f, 0.002f, 0.05f);
+}
+
+void sfx_enemy_shield_hit(void) {
+    /* Their shield soaking your shot: bright glassy tick — tells you
+     * the strip isn't done yet. */
+    play(W_SINE, 1750, 1300, 0.13f, 0.001f, 0.05f);
+}
+
+void sfx_lock_acquire(void) {
+    /* Two-tone confirm: lock is ON. */
+    play(W_SQUARE, 980, 980, 0.12f, 0.001f, 0.04f);
+    play(W_SQUARE, 1470, 1470, 0.12f, 0.001f, 0.05f);
+}
+
+void sfx_lock_warn(void) {
+    /* Incoming seeker: urgent falling two-beep. */
+    play(W_SQUARE, 1180, 1180, 0.16f, 0.001f, 0.06f);
+    play(W_SQUARE, 880, 880, 0.16f, 0.001f, 0.07f);
+}
 void sfx_hit_hull(void) {
     play(W_NOISE, 1800, 500, 0.40f, 0.001f, 0.09f);
     play(W_SINE, 330, 220, 0.35f, 0.002f, 0.10f);
@@ -133,6 +156,10 @@ void sfx_ui_move(void)   { play(W_SQUARE, 880, 880, 0.10f, 0.001f, 0.025f); }
 void sfx_ui_select(void) { play(W_SQUARE, 1320, 1760, 0.14f, 0.001f, 0.05f); }
 void sfx_ui_deny(void)   { play(W_SQUARE, 320, 250, 0.16f, 0.001f, 0.09f); }
 void sfx_scoop(void)     { play(W_SINE, 620, 1240, 0.22f, 0.004f, 0.14f); }
+void sfx_chaff(void) {
+    play(W_NOISE, 2400, 1200, 0.22f, 0.002f, 0.18f);
+}
+
 void sfx_charge_step(int step) {
     /* Rising arm tones while the railgun charges (0..3). */
     play(W_SINE, 500.0f + 180.0f * (float)step,

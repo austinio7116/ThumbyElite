@@ -21,6 +21,9 @@ int  audio_render(int16_t *out, int n);
 void sfx_weapon(int wpn_type, float amp);
 void sfx_explosion(float amp, float big01);
 void sfx_hit_shield(void);
+void sfx_enemy_shield_hit(void);
+void sfx_lock_acquire(void);
+void sfx_lock_warn(void);
 void sfx_hit_hull(void);
 void sfx_ui_move(void);
 void sfx_ui_select(void);
@@ -29,6 +32,7 @@ void sfx_scoop(void);
 void sfx_jump(void);
 void sfx_sc_engage(void);
 void sfx_charge_step(int step);
+void sfx_chaff(void);
 void sfx_dock(void);
 void sfx_klaxon(void);
 

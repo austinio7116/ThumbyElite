@@ -195,6 +195,19 @@ static void shipyard_buy(int offer) {
     g_player.credits -= cost;
     g_player.hull_id = (uint8_t)hull_id;
     g_player.hull_seed = s_yard[offer].seed;
+    /* Turret: keep it if the new frame has a hardpoint; rack or sell
+     * otherwise. */
+    if (g_player.turret_eq.in_use && !h->has_turret) {
+        int sl = -1;
+        for (int t = 0; t < h->rack && t < MAX_SALVAGE; t++)
+            if (!g_player.salvage[t].in_use) { sl = t; break; }
+        if (sl >= 0 && player_cargo_total() < h->cargo)
+            g_player.salvage[sl] = g_player.turret_eq;
+        else
+            g_player.credits += (int)(instance_price(&g_player.turret_eq) *
+                                      0.35f);
+        g_player.turret_eq.in_use = 0;
+    }
     /* Fitted equipment over the frame's tier cap drops a tier. */
     if (g_player.shield_eq.in_use &&
         g_player.shield_eq.tier > h->max_shield_tier)
@@ -229,10 +242,11 @@ static void shipyard_buy(int offer) {
  * Row model: mounts, then upgrades, then the salvage rack, then the
  * shop list. Rebuilt every tick (cheap; counts change under actions). */
 typedef enum {
-    ROW_MOUNT, ROW_EQUIP, ROW_SALV, ROW_SHOP, ROW_EQSHOP, ROW_HDR
+    ROW_MOUNT, ROW_EQUIP, ROW_UTIL, ROW_TURRET, ROW_SALV, ROW_SHOP,
+    ROW_EQSHOP, ROW_UTILSHOP, ROW_HDR
 } RowKind;
 typedef struct { uint8_t kind, index; uint8_t tier; } OutfitRow;
-static OutfitRow s_rows[HULL_SLOTS + 2 + MAX_SALVAGE + WPN_COUNT + 9];
+static OutfitRow s_rows[HULL_SLOTS + 4 + MAX_SALVAGE + WPN_COUNT + 17];
 static int s_n_rows;
 
 /* Per-terminal armoury (user req): each station stocks a seeded,
@@ -345,6 +359,10 @@ static void outfit_build_rows(void) {
         s_rows[s_n_rows++] = (OutfitRow){ ROW_MOUNT, (uint8_t)i, 0 };
     s_rows[s_n_rows++] = (OutfitRow){ ROW_EQUIP, 0, 0 };   /* shield */
     s_rows[s_n_rows++] = (OutfitRow){ ROW_EQUIP, 1, 0 };   /* armor */
+    for (int u = 0; u < player_util_slots(); u++)
+        s_rows[s_n_rows++] = (OutfitRow){ ROW_UTIL, (uint8_t)u, 0 };
+    if (h->has_turret)
+        s_rows[s_n_rows++] = (OutfitRow){ ROW_TURRET, 0, 0 };
     s_rows[s_n_rows++] = (OutfitRow){ ROW_HDR, 1, 0 };
     for (int i = 0; i < MAX_SALVAGE; i++)
         if (g_player.salvage[i].in_use)
@@ -357,6 +375,21 @@ static void outfit_build_rows(void) {
         s_rows[s_n_rows++] = (OutfitRow){ ROW_EQSHOP, 0, (uint8_t)t };
     for (int t = 1; t <= h->max_hull_tier; t++)
         s_rows[s_n_rows++] = (OutfitRow){ ROW_EQSHOP, 1, (uint8_t)t };
+    /* Gadgets: heatsink/scanner/tank everywhere; the fancy ones need
+     * tech. index = EQ type offset from EQ_HEATSINK. */
+    {
+        const SystemInfo *si2 = system_info();
+        int tech = si2->stations[s_station].tech;
+        s_rows[s_n_rows++] = (OutfitRow){ ROW_UTILSHOP, 0, 0 }; /* heatsink */
+        s_rows[s_n_rows++] = (OutfitRow){ ROW_UTILSHOP, 1, 0 }; /* scanner */
+        s_rows[s_n_rows++] = (OutfitRow){ ROW_UTILSHOP, 2, 0 }; /* tank */
+        if (tech >= 7)
+            s_rows[s_n_rows++] = (OutfitRow){ ROW_UTILSHOP, 3, 0 }; /* scoop */
+        if (tech >= 9)
+            s_rows[s_n_rows++] = (OutfitRow){ ROW_UTILSHOP, 4, 0 }; /* tcomp */
+        if (tech >= 5)
+            s_rows[s_n_rows++] = (OutfitRow){ ROW_UTILSHOP, 5, 0 }; /* chaff */
+    }
 }
 
 static WeaponInst *equip_slot(int which) {
@@ -411,12 +444,66 @@ static void outfit_action_a(int row) {
         toast("REPAIRED");
         break;
     }
+    case ROW_UTIL: {
+        WeaponInst *e = &g_player.util_eq[r->index];
+        if (!e->in_use) { toast("EMPTY BAY"); return; }
+        if (e->integrity >= 100) { toast("NO DAMAGE"); return; }
+        int cost = (int)((100 - e->integrity) * instance_price(e) / 100 *
+                         0.6f * skill_repair_mult()) + 1;
+        if (g_player.credits < cost) { toast("NO CREDITS"); return; }
+        g_player.credits -= cost;
+        e->integrity = 100;
+        g_player.xp_tech += 1;
+        toast("REPAIRED");
+        break;
+    }
+    case ROW_UTILSHOP: {
+        int type = EQ_HEATSINK + r->index;
+        const SystemInfo *sie = system_info();
+        int price = (int)(k_equip[type - WPN_COUNT].base_price *
+                          econ_weapon_mult(sie->stations[s_station].econ) *
+                          skill_price_mult());
+        if (g_player.credits < price) { toast("NO CREDITS"); return; }
+        int slot = -1;
+        for (int u = 0; u < player_util_slots(); u++)
+            if (!g_player.util_eq[u].in_use) { slot = u; break; }
+        if (slot < 0) { toast("BAYS FULL"); return; }
+        g_player.credits -= price;
+        g_player.util_eq[slot] = (WeaponInst){ .type = (uint8_t)type,
+            .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
+        if (type == EQ_CHAFF) g_player.chaff_charges = 4;
+        toast("FITTED");
+        break;
+    }
+    case ROW_TURRET: {
+        if (g_player.turret_eq.in_use) { toast("ALREADY FITTED"); return; }
+        for (int t = 0; t < MAX_SALVAGE; t++) {
+            WeaponInst *sv = &g_player.salvage[t];
+            if (!sv->in_use || sv->type >= WPN_COUNT) continue;
+            if (k_weapons[sv->type].size > 1) continue;
+            g_player.turret_eq = *sv;
+            sv->in_use = 0;
+            player_apply_to_ship();
+            toast("TURRET ARMED");
+            return;
+        }
+        toast("NEED Z1 ON RACK");
+        break;
+    }
     case ROW_EQSHOP: {
         int type = WPN_COUNT + r->index;
         const SystemInfo *sie = system_info();
+        /* This station's variant for this tier (seeded). */
+        uint32_t vh = (uint32_t)(sie->seed >> 22) ^
+                      (uint32_t)((s_station + 1) * 7129u) ^
+                      (uint32_t)(r->index * 31u + r->tier);
+        vh ^= vh >> 13; vh *= 1274126177u; vh ^= vh >> 16;
+        uint8_t variant = (uint8_t)(vh % 4u);
+        float vprice = (variant == SHV_BULWARK || variant == ARV_ABLATIVE)
+                           ? 1.25f : (variant ? 1.15f : 1.0f);
         int price = (int)(equip_price(type, r->tier, Q_STANDARD) *
                           econ_weapon_mult(sie->stations[s_station].econ) *
-                          skill_price_mult());
+                          vprice * skill_price_mult());
         if (g_player.credits < price) { toast("NO CREDITS"); return; }
         WeaponInst *e = equip_slot(r->index);
         /* Trade in the old unit at 40% of its value. */
@@ -427,13 +514,26 @@ static void outfit_action_a(int row) {
         g_player.credits -= price;
         *e = (WeaponInst){ .type = (uint8_t)type, .quality = Q_STANDARD,
                            .integrity = 100, .in_use = 1,
-                           .tier = (uint8_t)r->tier };
+                           .tier = (uint8_t)r->tier, .affix = variant };
         player_apply_to_ship();
         toast("FITTED");
         break;
     }
     case ROW_SALV: {
         WeaponInst *sv = &g_player.salvage[r->index];
+        if (sv->type >= EQ_HEATSINK) {
+            /* Gadget from the rack: into a free utility bay. */
+            int slot2 = -1;
+            for (int u = 0; u < player_util_slots(); u++)
+                if (!g_player.util_eq[u].in_use) { slot2 = u; break; }
+            if (slot2 < 0) { toast("BAYS FULL"); return; }
+            g_player.util_eq[slot2] = *sv;
+            sv->in_use = 0;
+            if (g_player.util_eq[slot2].type == EQ_CHAFF)
+                g_player.chaff_charges = 4;
+            toast("FITTED");
+            return;
+        }
         if (sv->type >= WPN_COUNT) {
             /* Equipment from the rack: swap into its slot. */
             int which = sv->type - WPN_COUNT;
@@ -483,6 +583,32 @@ static void outfit_action_b(int row) {
     if (row >= s_n_rows) return;
     const OutfitRow *r = &s_rows[row];
     switch (r->kind) {
+    case ROW_TURRET: {
+        if (!g_player.turret_eq.in_use) return;
+        int sl = player_free_rack_slot();
+        if (sl < 0 || player_cargo_total() >= player_cargo_cap()) {
+            toast("NO RACK SPACE");
+            return;
+        }
+        g_player.salvage[sl] = g_player.turret_eq;
+        g_player.turret_eq.in_use = 0;
+        player_apply_to_ship();
+        toast("UNFITTED");
+        break;
+    }
+    case ROW_UTIL: {
+        WeaponInst *e = &g_player.util_eq[r->index];
+        if (!e->in_use) return;
+        int sl = player_free_rack_slot();
+        if (sl < 0 || player_cargo_total() >= player_cargo_cap()) {
+            toast("NO RACK SPACE");
+            return;
+        }
+        g_player.salvage[sl] = *e;
+        e->in_use = 0;
+        toast("UNFITTED");
+        break;
+    }
     case ROW_EQUIP: {
         WeaponInst *e = equip_slot(r->index);
         if (!e->in_use) return;
@@ -618,9 +744,16 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
                         ok = e->in_use;
                         break;
                     }
+                    case ROW_UTIL:
+                        ok = g_player.util_eq[rr->index].in_use;
+                        break;
+                    case ROW_TURRET:
+                        ok = g_player.turret_eq.in_use;
+                        break;
                     case ROW_SALV:
                     case ROW_SHOP:
                     case ROW_EQSHOP:
+                    case ROW_UTILSHOP:
                         ok = true;
                         break;
                     default:
@@ -901,9 +1034,12 @@ static void draw_outfit(uint16_t *fb) {
                                            : &g_player.shield_eq;
             icon_weapon(fb, 7, y - 1, WPN_COUNT + r->index);
             if (e->in_use) {
-                snprintf(buf, sizeof buf, "%s Z%d %s %d%%",
-                         item_name(e->type), e->tier, k_qtag[e->quality],
-                         e->integrity);
+                const char *vn = (e->type == EQ_ARMOR)
+                                     ? k_armor_var_names[e->affix & 3]
+                                     : k_shield_var_names[e->affix & 3];
+                snprintf(buf, sizeof buf, "%s%s%s Z%d %d%%", vn,
+                         e->affix ? " " : "", item_name(e->type),
+                         e->tier, e->integrity);
                 craft_font_draw(fb, buf, 21, y, c);
                 if (e->integrity < 100) {
                     int cost = (int)((100 - e->integrity) *
@@ -920,10 +1056,61 @@ static void draw_outfit(uint16_t *fb) {
             }
             break;
         }
+        case ROW_TURRET: {
+            const WeaponInst *t2 = &g_player.turret_eq;
+            if (t2->in_use) {
+                icon_weapon(fb, 7, y - 1, t2->type);
+                snprintf(buf, sizeof buf, "TURRET %s %d%%",
+                         k_weapons[t2->type].name, t2->integrity);
+            } else
+                snprintf(buf, sizeof buf, "TURRET ---- (Z1)");
+            craft_font_draw(fb, buf, 21, y, c);
+            break;
+        }
+        case ROW_UTIL: {
+            const WeaponInst *e = &g_player.util_eq[r->index];
+            if (e->in_use) {
+                icon_weapon(fb, 7, y - 1, e->type);
+                snprintf(buf, sizeof buf, "%s %d%%",
+                         item_name(e->type), e->integrity);
+                craft_font_draw(fb, buf, 21, y, c);
+            } else {
+                snprintf(buf, sizeof buf, "UTIL BAY %d ----", r->index + 1);
+                craft_font_draw(fb, buf, 21, y, c);
+            }
+            break;
+        }
+        case ROW_UTILSHOP: {
+            int ty = EQ_HEATSINK + r->index;
+            icon_weapon(fb, 7, y - 1, ty);
+            snprintf(buf, sizeof buf, "BUY %s", item_name(ty));
+            craft_font_draw(fb, buf, 21, y, c);
+            {
+                const SystemInfo *sie = system_info();
+                snprintf(buf, sizeof buf, "%d",
+                         (int)(k_equip[ty - WPN_COUNT].base_price *
+                               econ_weapon_mult(
+                                   sie->stations[s_station].econ) *
+                               skill_price_mult()));
+            }
+            craft_font_draw(fb, buf, 104, y, COL_CRED);
+            break;
+        }
         case ROW_EQSHOP: {
             icon_weapon(fb, 7, y - 1, WPN_COUNT + r->index);
-            snprintf(buf, sizeof buf, "BUY %s Z%d",
-                     item_name(WPN_COUNT + r->index), r->tier);
+            {
+                const SystemInfo *sie = system_info();
+                uint32_t vh = (uint32_t)(sie->seed >> 22) ^
+                              (uint32_t)((s_station + 1) * 7129u) ^
+                              (uint32_t)(r->index * 31u + r->tier);
+                vh ^= vh >> 13; vh *= 1274126177u; vh ^= vh >> 16;
+                uint8_t variant = (uint8_t)(vh % 4u);
+                const char *vn = r->index ? k_armor_var_names[variant]
+                                          : k_shield_var_names[variant];
+                snprintf(buf, sizeof buf, "BUY %s%s%s Z%d", vn,
+                         variant ? " " : "",
+                         item_name(WPN_COUNT + r->index), r->tier);
+            }
             craft_font_draw(fb, buf, 21, y, c);
             {
                 const SystemInfo *sie = system_info();
@@ -1115,7 +1302,33 @@ void station_draw(uint16_t *fb) {
         int price = -1;
         const char *plabel = "COST";
         const char *foot = "LB/RB:NEXT A:ACT B:BACK";
-        if (r->kind == ROW_EQUIP) {
+        if (r->kind == ROW_TURRET && g_player.turret_eq.in_use) {
+            wi = &g_player.turret_eq;
+            foot = "LB/RB:NEXT B:BACK";
+        } else if (r->kind == ROW_UTIL) {
+            const WeaponInst *e = &g_player.util_eq[r->index];
+            if (e->in_use) {
+                wi = e;
+                if (e->integrity < 100) {
+                    price = (int)((100 - e->integrity) *
+                                  instance_price(e) / 100 * 0.6f *
+                                  skill_repair_mult()) + 1;
+                    plabel = "REPAIR";
+                    foot = "LB/RB:NEXT A:RPR B:BACK";
+                } else foot = "LB/RB:NEXT B:BACK";
+            }
+        } else if (r->kind == ROW_UTILSHOP) {
+            const SystemInfo *sie = system_info();
+            tmp = (WeaponInst){ .type = (uint8_t)(EQ_HEATSINK + r->index),
+                                .quality = Q_STANDARD, .integrity = 100,
+                                .in_use = 1 };
+            wi = &tmp;
+            price = (int)(k_equip[EQ_HEATSINK + r->index - WPN_COUNT]
+                              .base_price *
+                          econ_weapon_mult(sie->stations[s_station].econ) *
+                          skill_price_mult());
+            foot = "LB/RB:NEXT A:BUY B:BACK";
+        } else if (r->kind == ROW_EQUIP) {
             const WeaponInst *e = equip_slot(r->index);
             if (e->in_use) {
                 wi = e;

@@ -145,6 +145,8 @@ yours to choose.</p>
 <tr><td><span class="key">B</span></td><td>Switch to the next mounted weapon</td></tr>
 <tr><td><span class="key">LB</span> hold + <span class="key">LEFT/RIGHT</span></td><td>Roll</td></tr>
 <tr><td><span class="key">LB</span> tap</td><td>Cycle target lock (nearest hostile first, then outward). With no hostiles around, locks the nearest <span class="y">salvage canister</span>; with no salvage either, locks the <span class="c">local station</span> (your way home)</td></tr>
+<tr><td><span class="key">LB</span> hold + <span class="key">B</span></td><td>Dump chaff (with a CHAFF pod fitted) — breaks seeker locks</td></tr>
+<tr><td><span class="key">A</span> hold/release</td><td>RAILGUN only: hold to charge, release to fire</td></tr>
 <tr><td><span class="key">RB</span> hold + <span class="key">UP/DOWN</span></td><td>Throttle up / down</td></tr>
 <tr><td><span class="key">RB</span> tap</td><td>Toggle flight assist (drift mode)</td></tr>
 <tr><td><span class="key">RB</span> double-tap</td><td>Afterburner boost (2.2&nbsp;s burn)</td></tr>
@@ -246,6 +248,13 @@ re-approach when your shields drop.</p>
 system's <b>threat level</b>. Anarchy systems breed DEADLY wings; safe
 democracies rarely spawn more than a NOVICE. Check the system info before
 you linger.</div>
+<h3>Reading the fight</h3>
+<ul>
+<li><b class="c">Blue shimmer</b> on your target = their shield is soaking it (with a glassy tick sound). <b class="r">Orange sparks</b> = you're cutting hull.</li>
+<li><b>Lock chirp</b> confirms every fresh target lock.</li>
+<li><b class="r">! INCOMING !</b> flashing + urgent two-beeps = a seeker is tracking you. Chaff it (<span class="key">LB</span>+<span class="key">B</span>), outrun it, or out-turn it.</li>
+<li><b class="c">SYSTEMS SCRAMBLED</b> = an ion strip got you: weapons dead for 2.5&nbsp;s, blue arcs on your hull. Run cold until it clears.</li>
+</ul>
 <h3>Heat</h3>
 <p>Every weapon adds heat per shot (the <b class="y">T</b> bar). Past the
 red line a klaxon sounds; at the top, weapons refuse to fire until things
@@ -292,7 +301,19 @@ larger. Base stats:</p>
 <tr><td class="tag" style="color:#ffd28c">AUTOCAN</td><td>Z1</td><td>5</td><td>71</td><td>17</td><td>750 m/s</td><td>900 m</td><td>160 rds</td><td class="y">900</td></tr>
 <tr><td class="tag" style="color:#ffaa5a">MISSILE</td><td>Z1</td><td>45 + 22&nbsp;m blast</td><td>56</td><td>2.5</td><td>220 m/s</td><td>2,000 m</td><td>8 rds</td><td class="y">1,200</td></tr>
 <tr><td class="tag" style="color:#ff78c8">HOMING</td><td>Z2</td><td>32 + 18&nbsp;m blast</td><td>29</td><td>1.8</td><td>190 m/s, seeks</td><td>2,600 m</td><td>6 rds</td><td class="y">2,800</td></tr>
+<tr><td class="tag" style="color:#ffbe6e">FLAK</td><td>Z2</td><td>5 × 6 pellets</td><td>46</td><td>7.7</td><td>420 m/s cone</td><td>400 m</td><td>40 rds</td><td class="y">1,600</td></tr>
+<tr><td class="tag" style="color:#aaf0ff">RAILGUN</td><td>Z3</td><td>90 (charged)</td><td>56</td><td>10</td><td>2,200 m/s</td><td>2,200 m</td><td>12 rds</td><td class="y">7,800</td></tr>
+<tr><td class="tag" style="color:#6ea0ff">ION</td><td>Z2</td><td>30 shield / 4 hull</td><td>67/9</td><td>18</td><td>340 m/s</td><td>700 m</td><td>energy</td><td class="y">3,000</td></tr>
+<tr><td class="tag" style="color:#ff8c46">MINE</td><td>Z1</td><td>45 + 18&nbsp;m blast</td><td>—</td><td>0.8</td><td>dropped astern</td><td>18 m trigger</td><td>6 rds</td><td class="y">1,400</td></tr>
+<tr><td class="tag" style="color:#ffd778">TRACTOR</td><td>Z1</td><td>—</td><td>—</td><td>6</td><td>pulls salvage</td><td>300 m</td><td>energy</td><td class="y">800</td></tr>
 </table>
+<ul>
+<li><b>FLAK</b> — a cone of pellets, devastating point-blank, useless at range. The brawler's answer to agile fighters.</li>
+<li><b>RAILGUN</b> — <b>hold <span class="key">A</span> to charge</b> (rising tones, reticle brackets close in), release at full charge to fire. 90 damage per lance; tech-12 yards only, and ELITE aces field it against you.</li>
+<li><b>ION</b> — melts shields, tickles hull (13%). Fully stripping a shield <b class="c">SCRAMBLES</b> the target: weapons offline 2.5&nbsp;s with blue arcs crawling on the hull. Strip → disable → execute. CAPABLE+ pirates carry them too — when YOUR shield breaks to ion fire, expect the klaxon and a dead trigger.</li>
+<li><b>MINE</b> — drops armed astern (blinking red), drifts to a stop, triggers at 18&nbsp;m, self-destructs at 25&nbsp;s. The hauler's escape tool: drop them in your wake while running.</li>
+<li><b>TRACTOR</b> — fires at nothing, <i>reels your locked canister in</i> at 26&nbsp;m/s instead. Costs a weapon slot — the REAVER salvager's trademark fit.</li>
+</ul>
 <h3>The armoury — every terminal stocks differently</h3>
 <p>Each station's outfitting bay carries a <b>seeded subset</b> of the
 catalogue (4–6 lines), gated by tech level: backwaters sell pulse
@@ -321,6 +342,22 @@ grade and a wear state. Effective damage = base × quality × condition:</p>
 <p>Condition (0–100%) scales output from ×0.6 to ×1.0 — a 70% PROTOTYPE
 still beats a fresh STANDARD. <b>Repair</b> at any outfitting bay; the
 Tech skill cuts repair prices.</p>
+<h3>Affixes — factory modifications</h3>
+<p>Some instances carry an affix — shown in the name
+(<span class="tag">GAUSS-VN</span> in lists, <span class="c">VENTED
+GAUSS</span> on the sheet) and folded into every effective stat and the
+compare deltas. Roughly a fifth of component drops, half of featured shop
+guns, and the occasional bargain-bin stock line:</p>
+<table>
+<tr><th>Affix</th><th>Tag</th><th>Effect</th><th>Found</th></tr>
+<tr><td>OVERCLOCKED</td><td class="tag">OC</td><td>+18% dmg, +30% heat</td><td>drops</td></tr>
+<tr><td>VENTED</td><td class="tag">VN</td><td>−35% heat, −8% dmg</td><td>drops, featured</td></tr>
+<tr><td>CALIBRATED</td><td class="tag">CL</td><td>+30% range</td><td>drops, featured</td></tr>
+<tr><td>RAPID</td><td class="tag">RP</td><td>−20% cooldown, −12% dmg</td><td>drops</td></tr>
+<tr><td>SURPLUS</td><td class="tag">SP</td><td>−30% price, no catch</td><td>shop bargain bins</td></tr>
+<tr><td>TUNED</td><td class="tag y">TN</td><td>+10% dmg, <b>no downside</b></td><td>PROTOTYPE drops only</td></tr>
+</table>
+
 <h3>Ammo</h3>
 <p>Ballistic weapons carry magazines. Rounds persist between fits — no
 free top-ups. <b>REARM is a station service</b> (next to REFUEL on the
@@ -342,8 +379,43 @@ instance with size, quality and integrity.</p>
 <li>Shield gens and armor plates <b>drop as salvage</b> (~1 in 4 component pods), can sit in your rack, swap-fit from it, repair, and sell.</li>
 </ul>
 <p>List prices: shields 1,400&nbsp;cr (Z1) / 2,800 (Z2) / 5,040 (Z3);
-armor 1,100 / 2,200 / 3,960 — times quality. Trading in your old unit
-returns ~40% of its value.</p>
+armor 1,100 / 2,200 / 3,960 — times quality and variant. Trading in your
+old unit returns ~40% of its value.</p>
+
+<h3>Variants — equipment with character</h3>
+<p>Each station's equipment rack sells a seeded <b>variant</b> per tier,
+and salvaged gear rolls them randomly. Elite pirates fly them too — a
+BULWARK wall fights differently from a REGEN skirmisher:</p>
+<table>
+<tr><th>Shield</th><th>Behaviour</th><th>Armor</th><th>Behaviour</th></tr>
+<tr><td class="tag">STANDARD</td><td>baseline</td><td class="tag">STANDARD</td><td>baseline</td></tr>
+<tr><td class="tag c">REGEN</td><td>cap ×0.7, recharge ×2.4, 2&nbsp;s delay</td><td class="tag c">REACTIVE</td><td>−50% missile/blast damage</td></tr>
+<tr><td class="tag c">BULWARK</td><td>cap ×1.5, recharge ×0.4</td><td class="tag c">ABLATIVE</td><td>+35% HP, wears 3× faster</td></tr>
+<tr><td class="tag v">PHASE</td><td>cap ×0.85, 15% of hits pass through</td><td class="tag c">COMPOSITE</td><td>−15% HP, +8% speed &amp; turn</td></tr>
+</table>
+<p><b>Wear is real now</b>: every hull hit chips your armor's integrity;
+every shield collapse chips the generator. Battle-worn protection
+under-performs until repaired — the Tech skill keeps the bills down.</p>
+
+<h3>Utility gadgets</h3>
+<p>Every hull has a <b>utility bay</b> (ATLAS and BASILISK: two). Gadgets
+fit there, never competing with guns or protection:</p>
+<table>
+<tr><th>Gadget</th><th>Effect</th><th>Price</th></tr>
+<tr><td class="tag">HEATSINK</td><td>−25% weapon heat</td><td class="y">2,200</td></tr>
+<tr><td class="tag">SCANNER+</td><td>radar range 400 → 700&nbsp;m</td><td class="y">1,500</td></tr>
+<tr><td class="tag">AB TANK</td><td>boost burn 2.2 → 4.0&nbsp;s</td><td class="y">1,800</td></tr>
+<tr><td class="tag">FUELSCOOP</td><td>skim close to a star in supercruise for free fuel — heat builds while you do (T7+ shops)</td><td class="y">2,600</td></tr>
+<tr><td class="tag">TARGETCOMP</td><td>+40% seeker agility + a <b class="g">lead pip</b> for ballistic guns: put the cross on the pip and the rounds connect (T9+)</td><td class="y">3,400</td></tr>
+<tr><td class="tag">CHAFF</td><td><span class="key">LB</span>+<span class="key">B</span> dumps chaff: every seeker tracking you goes blind. 4 charges, 20&nbsp;cr each at REARM (T5+)</td><td class="y">1,200</td></tr>
+</table>
+
+<h3>The turret hardpoint</h3>
+<p><b>MULE, ATLAS and BASILISK</b> carry an auto-turret bay: fit any Z1
+weapon from your rack (outfitting → TURRET row) and it fires itself at
+your locked target — full sphere coverage, 60% damage, slower cycle,
+energy-fed. Haulers stop being helpless, and the BASILISK becomes a
+broadside ship. Watch for it on big pirates too.</p>
 
 <!-- ============================================================ -->
 <h2 id="salvage">Salvage &amp; Loot</h2>

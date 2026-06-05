@@ -44,6 +44,9 @@ typedef struct {
     WeaponInst salvage[MAX_SALVAGE];    /* loose components in the hold */
     WeaponInst shield_eq;               /* fitted shield generator */
     WeaponInst armor_eq;                /* fitted armor plating */
+    WeaponInst util_eq[2];              /* utility bays (hull-gated) */
+    WeaponInst turret_eq;               /* auto-turret (big hulls, Z1) */
+    int8_t chaff_charges;               /* CHAFF ammo (4 max) */
     int16_t ammo[HULL_SLOTS];           /* rounds per mount (-1 energy) */
 
     /* Pilot skills: XP accumulators (levels derived). */
@@ -72,6 +75,8 @@ int   equip_price(int type, int tier, int q);
 /* Effective output of an equipment instance (quality x integrity). */
 float equip_mult(const WeaponInst *e);
 int   instance_price(const WeaponInst *w);  /* base x quality x affix */
+int   player_util_slots(void);              /* hull-dependent (1 or 2) */
+bool  player_has_util(int eq_type);         /* gadget fitted + working? */
 
 /* Effective damage/heat for a mounted instance (quality + integrity). */
 float mount_dmg_mult(const WeaponInst *w);

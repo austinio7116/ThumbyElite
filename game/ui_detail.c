@@ -59,6 +59,45 @@ void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
     fill(fb, COL_BG);
     char buf[28];
 
+    if (wi->type >= EQ_HEATSINK && wi->type < ITEM_COUNT) {
+        /* Gadget sheet: what it does, in one line. */
+        static const char *k_fx1[6] = {
+            "-25% WEAPON HEAT", "RADAR 400>700M", "BOOST 2.2>4.0S",
+            "SKIM STARS FOR FUEL", "+40% SEEKERS, LEAD PIP",
+            "LB+B BREAKS LOCKS",
+        };
+        icon_weapon_2x(fb, 4, 3, wi->type);
+        craft_font_draw(fb, item_name(wi->type), 32, 4, COL_HDR);
+        craft_font_draw(fb, "UTILITY GADGET", 32, 11, COL_DIM);
+        hl(fb, 19, COL_GRID);
+        int y = 26;
+        craft_font_draw(fb, k_fx1[wi->type - EQ_HEATSINK], 4, y, COL_VAL);
+        y += 10;
+        if (wi->type == EQ_CHAFF) {
+            craft_font_draw(fb, "4 CHARGES, RESTOCK", 4, y, COL_DIM);
+            y += 8;
+            craft_font_draw(fb, "AT REARM (20CR EA)", 4, y, COL_DIM);
+            y += 10;
+        }
+        if (wi->type == EQ_FUELSCOOP) {
+            craft_font_draw(fb, "HEAT BUILDS - WATCH T", 4, y, COL_WARN);
+            y += 10;
+        }
+        char ibuf[16];
+        snprintf(ibuf, sizeof ibuf, "%d%%", wi->integrity);
+        stat(fb, y, "INTEGRITY", ibuf,
+             wi->integrity < 60 ? COL_WARN : COL_VAL);
+        y += 8;
+        if (price >= 0) {
+            hl(fb, y + 1, COL_GRID);
+            snprintf(ibuf, sizeof ibuf, "%s %dCR", price_label, price);
+            craft_font_draw(fb, ibuf, 4, y + 5, COL_CRED);
+        }
+        hl(fb, 118, COL_GRID);
+        craft_font_draw(fb, footer, 2, 121, COL_DIM);
+        return;
+    }
+
     if (wi->type >= WPN_COUNT) {
         /* Equipment sheet: protection rather than firepower. */
         icon_weapon_2x(fb, 4, 3, wi->type);
@@ -68,6 +107,24 @@ void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
                         (wi->quality >= Q_MILITARY) ? COL_CRED : COL_DIM);
         hl(fb, 19, COL_GRID);
         int y = 24;
+        if (wi->affix) {
+            static const char *k_shv_fx[4] = { "", "FAST REGEN, -CAP",
+                                               "+50% CAP, SLOW REGEN",
+                                               "15% HITS PASS THRU" };
+            static const char *k_arv_fx[4] = { "", "-50% BLAST DAMAGE",
+                                               "+35% HP, FAST WEAR",
+                                               "-15% HP, +8% SPD/TRN" };
+            const char *vn = (wi->type == EQ_ARMOR)
+                                 ? k_armor_var_names[wi->affix & 3]
+                                 : k_shield_var_names[wi->affix & 3];
+            const char *fx2 = (wi->type == EQ_ARMOR)
+                                  ? k_arv_fx[wi->affix & 3]
+                                  : k_shv_fx[wi->affix & 3];
+            craft_font_draw(fb, vn, 4, y, RGB565C(150, 220, 255));
+            y += 8;
+            craft_font_draw(fb, fx2, 4, y, COL_DIM);
+            y += 9;
+        }
         snprintf(buf, sizeof buf, "Z%d", wi->tier);
         stat(fb, y, "SIZE", buf, COL_VAL); y += 8;
         float mult = k_tier_mult[wi->tier > 3 ? 3 : wi->tier] *

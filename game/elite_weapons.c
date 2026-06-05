@@ -38,10 +38,20 @@ const AffixDef k_affixes[AFX_COUNT] = {
     [AFX_TUNED]       = { "TUNED",      "TN", 1.10f, 1.00f, 1.00f, 1.00f, 1.80f },
 };
 
-const EquipDef k_equip[2] = {
+const EquipDef k_equip[8] = {
     { "SHIELD", 1400 },
     { "ARMOR", 1100 },
+    { "HEATSINK", 2200 },
+    { "SCANNER+", 1500 },
+    { "AB TANK", 1800 },
+    { "FUELSCOOP", 2600 },
+    { "TARGETCOMP", 3400 },
+    { "CHAFF", 1200 },
 };
+
+const char *k_shield_var_names[4] = { "", "REGEN", "BULWARK", "PHASE" };
+const char *k_armor_var_names[4] = { "", "REACTIVE", "ABLATIVE",
+                                     "COMPOSITE" };
 
 const char *item_name(int type) {
     if (type >= WPN_COUNT && type < ITEM_COUNT)

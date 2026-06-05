@@ -25,6 +25,8 @@ static int   s_kills;
 static float s_hitmark, s_killmark;
 static int   s_kill_pay;
 static int   s_shot_type = -1;   /* weapon type of the shot being resolved */
+static int   s_player_target = -1;   /* for the player's auto-turret */
+void combat_set_player_target(int t) { s_player_target = t; }
 
 void combat_init(void) {
     for (int i = 0; i < MAX_SHIPS; i++) s_regen_hold[i] = 0;
@@ -68,7 +70,14 @@ static float ray_sphere(Vec3 o, Vec3 dir, Vec3 c, float r) {
 void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
     Ship *v = &g_ships[victim];
     if (!v->alive) return;
-    s_regen_hold[victim] = SHIELD_DELAY;
+    /* PHASE shields: a slice of hits pass through harmlessly. */
+    if (v->shield_var == SHV_PHASE && v->shield > 0.0f &&
+        (frnd_pub() % 100u) < 15u) {
+        fx_spawn_shield_flash(hit_pos, v->vel, 1);   /* ghost shimmer */
+        return;
+    }
+    s_regen_hold[victim] = v->shield_delay > 0 ? v->shield_delay
+                                               : SHIELD_DELAY;
     bool had_shield = v->shield > 0.0f;
     if (s_shot_type == WPN_ION) {
         /* Ion: savage vs shields, feeble vs hull; a full strip
@@ -100,12 +109,31 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
         if (had_shield) {
             plat_rumble(0.28f, 0.08f);
             sfx_hit_shield();
+            /* Generator wear when the shield collapses. */
+            if (v->shield <= 0.0f && g_player.shield_eq.in_use) {
+                int w2 = (g_player.shield_eq.affix == SHV_PHASE) ? 2 : 2;
+                if (g_player.shield_eq.integrity > 10)
+                    g_player.shield_eq.integrity =
+                        (uint8_t)(g_player.shield_eq.integrity -
+                                  (g_player.shield_eq.integrity > w2 ? w2
+                                   : 0));
+            }
         } else {
             plat_rumble(0.60f, 0.16f);
             sfx_hit_hull();
+            /* Plating wear on every hull hit; ABLATIVE wears 3x. */
+            if (g_player.armor_eq.in_use) {
+                int w2 = (g_player.armor_eq.affix == ARV_ABLATIVE) ? 3 : 1;
+                if (g_player.armor_eq.integrity > 10 + w2)
+                    g_player.armor_eq.integrity =
+                        (uint8_t)(g_player.armor_eq.integrity - w2);
+            }
         }
     }
-    if (shooter == PLAYER) s_hitmark = 0.12f;
+    if (shooter == PLAYER) {
+        s_hitmark = 0.12f;
+        if (had_shield && v->shield > 0.0f) sfx_enemy_shield_hit();
+    }
     if (v->hull <= 0.0f) {
         v->alive = false;
         fx_spawn_explosion(v->pos, v->vel);
@@ -145,6 +173,7 @@ void combat_explosion_damage(int shooter, Vec3 centre, float radius,
         if (d < 0) d = 0;
         if (d > radius) continue;
         float k = 1.0f - 0.7f * (d / radius);    /* 100% .. 30% falloff */
+        if (v->armor_var == ARV_REACTIVE) k *= 0.5f;   /* blast plating */
         combat_direct_damage(shooter, i, dmg * k, v->pos);
     }
 }
@@ -170,6 +199,7 @@ int combat_fire(int shooter, float spread, int target) {
             range_mult = ax->range;
         }
         heat_mult *= skill_heat_mult();
+        if (player_has_util(EQ_HEATSINK)) heat_mult *= 0.75f;
     }
 
     s->fire_cool = w->cooldown * cd_mult;
@@ -283,6 +313,55 @@ void combat_tick(float dt) {
     for (int i = 0; i < MAX_SHIPS; i++) {
         Ship *s = &g_ships[i];
         if (!s->alive) continue;
+        /* Auto-turret: tracks the owner's target anywhere in the
+         * sphere at 60% damage, slower cycle, energy-fed. */
+        if (s->turret_type && s->sys_offline_t <= 0.0f) {
+            if (s->turret_cool > 0.0f) s->turret_cool -= dt;
+            int tgt = (i == PLAYER) ? s_player_target : PLAYER;
+            if (s->turret_cool <= 0.0f && tgt >= 0 &&
+                g_ships[tgt].alive) {
+                int wt = s->turret_type - 1;
+                const WeaponDef *tw = &k_weapons[wt];
+                Vec3 rel = v3_sub(g_ships[tgt].pos, s->pos);
+                float dist = v3_len(rel);
+                if (dist < tw->range * 0.9f && s->heat < HEAT_MAX - 8) {
+                    s->turret_cool = tw->cooldown * 1.6f;
+                    s->heat += tw->heat * 0.6f;
+                    float mult = 0.6f;
+                    if (i == PLAYER)
+                        mult *= mount_dmg_mult(&g_player.turret_eq);
+                    /* Lead the target. */
+                    float tt = tw->speed > 0 ? dist / tw->speed : 0;
+                    Vec3 aim = v3_add(g_ships[tgt].pos,
+                                      v3_scale(v3_sub(g_ships[tgt].vel,
+                                                      s->vel), tt));
+                    Vec3 dir2 = v3_norm(v3_sub(aim, s->pos));
+                    Vec3 muz = v3_add(s->pos,
+                                      v3_scale(dir2,
+                                               s->mesh->bound_r * 0.8f));
+                    sfx_weapon(wt, i == PLAYER ? 0.5f
+                               : 0.4f - dist / 900.0f);
+                    if (tw->speed > 0) {
+                        proj_spawn_ex((WeaponType)wt, i, (int8_t)tgt,
+                                      muz, dir2, s->vel, mult);
+                    } else {
+                        float t2 = ray_sphere(s->pos, dir2,
+                                              g_ships[tgt].pos,
+                                              g_ships[tgt].mesh->bound_r
+                                                  * 0.85f);
+                        Vec3 end2 = v3_add(s->pos,
+                                           v3_scale(dir2, t2 >= 0 ? t2
+                                                    : tw->range));
+                        fx_beam(muz, end2, tw->color);
+                        if (t2 >= 0) {
+                            combat_set_shot_type(wt);
+                            combat_direct_damage(i, tgt, tw->dmg * mult,
+                                                 end2);
+                        }
+                    }
+                }
+            }
+        }
         if (s->fire_cool > 0.0f) s->fire_cool -= dt;
         if (s->sys_offline_t > 0.0f) {
             s->sys_offline_t -= dt;
@@ -296,7 +375,8 @@ void combat_tick(float dt) {
         if (s_regen_hold[i] > 0.0f) {
             s_regen_hold[i] -= dt;
         } else if (s->shield < s->shield_max) {
-            s->shield += SHIELD_REGEN * dt;
+            s->shield += (s->shield_regen > 0 ? s->shield_regen
+                                              : SHIELD_REGEN) * dt;
             if (s->shield > s->shield_max) s->shield = s->shield_max;
         }
     }

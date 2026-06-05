@@ -41,7 +41,12 @@ typedef struct {
     float fire_cool;
     /* Status effects (D1): timers tick down in ship_tick. */
     float sys_offline_t;     /* weapons scrambled (ion strips) */
-    float engine_drag_t;     /* thrust halved */      /* s until next shot */
+    float engine_drag_t;     /* thrust halved */
+    float shield_regen;      /* pts/s (variant-dependent) */
+    float shield_delay;      /* s after a hit before regen */
+    uint8_t shield_var, armor_var;   /* SHV_* / ARV_* */
+    uint8_t turret_type;     /* weapon type + 1; 0 = no turret */
+    float   turret_cool;      /* s until next shot */
 
     /* Hardpoints: fitted weapons + per-mount ammo; A fires the active
      * mount, B cycles it. Slot counts/sizes come from the hull (full

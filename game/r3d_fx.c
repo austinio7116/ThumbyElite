@@ -122,6 +122,14 @@ void fx_spawn_spark(Vec3 pos, Vec3 base_vel) {
 
 uint32_t frnd_pub(void) { return frnd(); }
 
+void fx_chaff_burst(Vec3 pos, Vec3 base_vel) {
+    for (int i = 0; i < 22; i++) {
+        Vec3 v = v3_add(base_vel, v3_scale(rnd_dir(), frand(10, 35)));
+        spawn(pos, v, frand(0.5f, 1.2f),
+              RGB565C(230, 230, 240), RGB565C(90, 90, 100));
+    }
+}
+
 void fx_spawn_shield_flash(Vec3 pos, Vec3 base_vel, int ion) {
     /* Shield impact: a blue shimmer burst — reads instantly as 'their
      * shields are still up' (vs orange hull sparks). */

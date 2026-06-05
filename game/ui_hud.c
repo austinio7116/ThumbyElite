@@ -7,6 +7,7 @@
  * frame the view. Centre: crosshair, target brackets, hit/kill markers.
  */
 #include "ui_hud.h"
+#include "elite_player.h"
 #include "elite_types.h"
 #include "elite_entity.h"
 #include "elite_combat.h"
@@ -105,7 +106,8 @@ static void dashboard(uint16_t *fb) {
 #define SC_CY 110
 #define SC_RX 24
 #define SC_RY 13
-#define SC_RANGE 400.0f
+#define SC_RANGE_BASE 400.0f
+#define SC_RANGE (player_has_util(EQ_SCANNER) ? 700.0f : SC_RANGE_BASE)
 
 static void scanner(uint16_t *fb) {
     /* Dim grid cross first, then the rim. */
@@ -181,6 +183,25 @@ static void target_box(uint16_t *fb, int target) {
     uint16_t d;
     if (r3d_scene_project(v3_sub(t->pos, p->pos), &sx, &sy, &d) &&
         sx > -20 && sx < 148 && sy > -20 && sy < 148) {
+        /* TARGETCOMP: lead pip for the active ballistic weapon — put
+         * the cross on the pip and the rounds arrive on target. */
+        if (player_has_util(EQ_TARGETCOMP)) {
+            const WeaponDef *aw = &k_weapons[p->weapons[p->active_w]];
+            if (aw->speed > 0.0f && aw->turn <= 0.0f) {
+                float tt = v3_len(v3_sub(t->pos, p->pos)) / aw->speed;
+                Vec3 lead = v3_add(t->pos,
+                                   v3_scale(v3_sub(t->vel, p->vel), tt));
+                float lx, ly;
+                uint16_t ld;
+                if (r3d_scene_project(v3_sub(lead, p->pos), &lx, &ly, &ld)) {
+                    uint16_t lc = RGB565C(140, 255, 160);
+                    px(fb, (int)lx, (int)ly - 2, lc);
+                    px(fb, (int)lx, (int)ly + 2, lc);
+                    px(fb, (int)lx - 2, (int)ly, lc);
+                    px(fb, (int)lx + 2, (int)ly, lc);
+                }
+            }
+        }
         float z = R3D_DEPTH_K / (float)d;
         int h = (int)(r3d_pipe_focal() * t->mesh->bound_r / z);
         if (h < 5) h = 5;
@@ -272,6 +293,11 @@ void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
     }
 
     /* Left panel: speed / throttle / status lights. */
+    if (player_has_util(EQ_CHAFF)) {
+        char cb[6];
+        snprintf(cb, sizeof cb, "C%d", g_player.chaff_charges);
+        craft_font_draw(fb, cb, 30, 124, RGB565C(200, 200, 215));
+    }
     craft_font_draw(fb, "SP", 2, 102, COL_TEXT);
     bar(fb, 13, 105, 20, v3_len(p->vel) / (p->max_speed * 1.8f), COL_TEXT);
     craft_font_draw(fb, "TH", 2, 109, COL_NUM);
@@ -307,6 +333,15 @@ void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
         px(fb, 64, 60 - g, cc); px(fb, 64, 60 + g, cc);
         px(fb, 64 - g, 60 - 1, cc); px(fb, 64 + g, 60 - 1, cc);
         px(fb, 64 - g, 60 + 1, cc); px(fb, 64 + g, 60 + 1, cc);
+    }
+    if (info->incoming) {
+        static uint8_t iflash;
+        iflash++;
+        if (iflash & 8) {
+            const char *iw = "! INCOMING !";
+            craft_font_draw(fb, iw, 64 - craft_font_width(iw) / 2, 18,
+                            RGB565C(255, 70, 50));
+        }
     }
     if (g_ships[PLAYER].sys_offline_t > 0.0f) {
         /* Scrambled: weapons dead — make sure the pilot knows why. */
@@ -448,6 +483,11 @@ void ui_hud_draw_sc(uint16_t *fb, const HudScInfo *info) {
     craft_font_draw(fb, "SUPERCRUISE", 42, 110, COL_SHIELD);
 
     /* Left panel: speed (Mm/s) + throttle. */
+    if (player_has_util(EQ_CHAFF)) {
+        char cb[6];
+        snprintf(cb, sizeof cb, "C%d", g_player.chaff_charges);
+        craft_font_draw(fb, cb, 30, 124, RGB565C(200, 200, 215));
+    }
     craft_font_draw(fb, "SP", 2, 102, COL_TEXT);
     bar(fb, 13, 105, 20, info->speed_mms / 50.0f, COL_TEXT);
     craft_font_draw(fb, "TH", 2, 109, COL_NUM);

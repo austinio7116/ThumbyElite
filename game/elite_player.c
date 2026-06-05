@@ -129,13 +129,33 @@ void player_apply_to_ship(void) {
     p->max_speed = h->max_speed;
     p->accel = h->accel;
     p->turn_rate = h->turn_rate * skill_turn_mult();
-    /* Protection from fitted equipment: tier size x quality x wear. */
+    /* Protection from fitted equipment: tier x quality x wear x
+     * variant character. */
     float sh_t = g_player.shield_eq.in_use
                      ? k_tier_mult[g_player.shield_eq.tier] : 1.0f;
     float ar_t = g_player.armor_eq.in_use
                      ? k_tier_mult[g_player.armor_eq.tier] : 1.0f;
-    p->hull_max = h->hull_base * ar_t * equip_mult(&g_player.armor_eq);
-    p->shield_max = h->shield_base * sh_t * equip_mult(&g_player.shield_eq);
+    int shv = g_player.shield_eq.in_use ? g_player.shield_eq.affix : 0;
+    int arv = g_player.armor_eq.in_use ? g_player.armor_eq.affix : 0;
+    static const float k_shv_cap[4] = { 1.0f, 0.70f, 1.50f, 0.85f };
+    static const float k_shv_rgn[4] = { 1.0f, 2.40f, 0.40f, 1.00f };
+    static const float k_arv_hp[4]  = { 1.0f, 1.00f, 1.35f, 0.85f };
+    p->hull_max = h->hull_base * ar_t * equip_mult(&g_player.armor_eq) *
+                  k_arv_hp[arv & 3];
+    p->shield_max = h->shield_base * sh_t *
+                    equip_mult(&g_player.shield_eq) * k_shv_cap[shv & 3];
+    p->shield_regen = 3.0f * k_shv_rgn[shv & 3];
+    p->shield_delay = (shv == SHV_REGEN) ? 2.0f : 4.5f;
+    p->shield_var = (uint8_t)shv;
+    p->armor_var = (uint8_t)arv;
+    p->turret_type = (k_hulls[g_player.hull_id].has_turret &&
+                      g_player.turret_eq.in_use)
+                         ? (uint8_t)(g_player.turret_eq.type + 1) : 0;
+    p->turret_cool = 0;
+    if (arv == ARV_COMPOSITE) {
+        p->max_speed *= 1.08f;
+        p->turn_rate *= 1.08f;
+    }
     if (p->hull > p->hull_max) p->hull = p->hull_max;
     if (p->shield > p->shield_max) p->shield = p->shield_max;
 
@@ -180,6 +200,8 @@ void player_sync_ammo(int ship_slot, int ammo) {
 
 int player_rearm_cost(void) {
     int cost = 0;
+    if (player_has_util(EQ_CHAFF))
+        cost += (4 - g_player.chaff_charges) * 20;
     for (int i = 0; i < HULL_SLOTS; i++) {
         const WeaponInst *m = &g_player.mounts[i];
         if (!m->in_use) continue;
@@ -192,6 +214,7 @@ int player_rearm_cost(void) {
 }
 
 void player_rearm(void) {
+    if (player_has_util(EQ_CHAFF)) g_player.chaff_charges = 4;
     for (int i = 0; i < HULL_SLOTS; i++) {
         const WeaponInst *m = &g_player.mounts[i];
         if (!m->in_use) continue;
@@ -204,4 +227,17 @@ void player_load_mount_ammo(int mount, float fill01) {
     const WeaponInst *m = &g_player.mounts[mount];
     int maxa = m->in_use ? k_weapons[m->type].ammo_max : 0;
     g_player.ammo[mount] = maxa ? (int16_t)((float)maxa * fill01) : -1;
+}
+
+int player_util_slots(void) {
+    return k_hulls[g_player.hull_id].util_slots;
+}
+
+bool player_has_util(int eq_type) {
+    int n = player_util_slots();
+    for (int i = 0; i < n && i < 2; i++)
+        if (g_player.util_eq[i].in_use &&
+            g_player.util_eq[i].type == eq_type)
+            return true;
+    return false;
 }

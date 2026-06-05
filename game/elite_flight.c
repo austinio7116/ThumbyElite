@@ -2,6 +2,7 @@
  * ThumbyElite — flight model.
  */
 #include "elite_flight.h"
+#include "elite_player.h"
 
 #define BOOST_TIME   2.2f
 #define BOOST_MULT   1.8f
@@ -56,7 +57,8 @@ void flight_apply_input(const FlightInput *in, float dt) {
     if (p->throttle > 1.0f) p->throttle = 1.0f;
 
     if (in->assist_toggle) p->assist = !p->assist;
-    if (in->boost && p->boost_t <= 0.0f) p->boost_t = BOOST_TIME;
+    if (in->boost && p->boost_t <= 0.0f)
+        p->boost_t = player_has_util(EQ_TANK) ? 4.0f : BOOST_TIME;
 }
 
 static void ship_physics(Ship *s, float dt) {

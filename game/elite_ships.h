@@ -27,6 +27,8 @@ typedef struct {
     float hull_base, shield_base;
     float jump_range;               /* light-years per hop */
     uint8_t rack;                   /* salvage workbench slots (<=8) */
+    uint8_t util_slots;             /* gadget bays (1; big iron 2) */
+    uint8_t has_turret;             /* auto-turret hardpoint (Z1) */
 } HullDef;
 
 extern const HullDef k_hulls[N_HULLS];   /* class STAT templates; the

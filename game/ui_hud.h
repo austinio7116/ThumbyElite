@@ -15,6 +15,7 @@ typedef struct {
     int   station_valid; /* station nav lock (station at local origin) */
     int   kills;
     float rail_charge01;   /* railgun charge arc (0 = hidden) */
+    int   incoming;        /* seeker locked on us: flash INCOMING */
     float fuel01;        /* fuel fraction for the gauge */
     float render_ms;     /* pure render time (perf readout) */
     int   show_perf;

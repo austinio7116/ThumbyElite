@@ -25,6 +25,7 @@ typedef struct {
     float throttle_delta; /* -1..1 while RB held */
     bool  fire;           /* held */
     bool  secondary;      /* just pressed */
+    bool  chaff;          /* LB held + B tap: countermeasures */
     bool  cycle_target;   /* event */
     bool  assist_toggle;  /* event */
     bool  boost;          /* event */

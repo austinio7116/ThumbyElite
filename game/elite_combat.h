@@ -29,6 +29,7 @@ void  combat_set_kills(int n);
 /* Instant per-kill bounty since last call (player kills only). */
 int   combat_take_kill_pay(void);
 void  combat_set_shot_type(int wt);   /* proj impact tagging */
+void  combat_set_player_target(int t);  /* auto-turret target feed */
 float combat_hitmarker(void);
 float combat_killmarker(void);
 

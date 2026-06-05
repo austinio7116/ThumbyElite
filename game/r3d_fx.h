@@ -20,6 +20,7 @@ void fx_spawn_explosion(Vec3 pos, Vec3 base_vel);
 void fx_gauss_helix(Vec3 prev, Vec3 cur, Vec3 dir, float traveled);
 void fx_spawn_crackle(Vec3 pos, Vec3 base_vel, float r);
 void fx_spawn_shield_flash(Vec3 pos, Vec3 base_vel, int ion);
+void fx_chaff_burst(Vec3 pos, Vec3 base_vel);
 uint32_t frnd_pub(void);
 void fx_spawn_spark(Vec3 pos, Vec3 base_vel);
 /* Per-frame engine trail emission for a thrusting ship. */

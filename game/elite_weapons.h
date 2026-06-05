@@ -32,6 +32,13 @@ typedef enum {
     /* Equipment shares the instance/rack/icon machinery: */
     EQ_SHIELD = WPN_COUNT,
     EQ_ARMOR,
+    /* Utility gadgets (one util bay per hull, two on the big iron): */
+    EQ_HEATSINK,       /* -25% weapon heat */
+    EQ_SCANNER,        /* radar range 400 -> 700m */
+    EQ_TANK,           /* afterburner burn 2.2s -> 4s */
+    EQ_FUELSCOOP,      /* skim stars in supercruise for free fuel */
+    EQ_TARGETCOMP,     /* +40% seeker agility + ballistic lead reticle */
+    EQ_CHAFF,          /* LB+B: break enemy missile locks (4 charges) */
     ITEM_COUNT
 } WeaponType;
 
@@ -49,12 +56,30 @@ typedef struct {
 } AffixDef;
 extern const AffixDef k_affixes[AFX_COUNT];
 
+/* Equipment variants (stored in the instance's affix byte):
+ * shields: 1 REGEN (cap x0.7, recharge x2.4, 2s delay)
+ *          2 BULWARK (cap x1.5, recharge x0.4)
+ *          3 PHASE (cap x0.85, 15% of hits pass clean through)
+ * armor:   1 REACTIVE (-50% missile/blast damage)
+ *          2 ABLATIVE (+35% HP, wears 3x faster)
+ *          3 COMPOSITE (-15% HP, +8% speed & turn) */
+#define SHV_STANDARD 0
+#define SHV_REGEN    1
+#define SHV_BULWARK  2
+#define SHV_PHASE    3
+#define ARV_STANDARD 0
+#define ARV_REACTIVE 1
+#define ARV_ABLATIVE 2
+#define ARV_COMPOSITE 3
+extern const char *k_shield_var_names[4];
+extern const char *k_armor_var_names[4];
+
 /* Equipment catalogue (indexed EQ_x - WPN_COUNT). */
 typedef struct {
     const char *name;
     int16_t base_price;     /* tier 1; higher tiers scale x2 / x3.6 */
 } EquipDef;
-extern const EquipDef k_equip[2];
+extern const EquipDef k_equip[8];
 const char *item_name(int type);
 
 typedef struct {

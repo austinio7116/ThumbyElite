@@ -77,6 +77,7 @@ void loot_on_kill(Vec3 pos, Vec3 vel, int tier) {
             if ((rnd() % 4u) == 0) {
                 c->comp.type = (uint8_t)(WPN_COUNT + (rnd() & 1));
                 c->comp.tier = (uint8_t)(1 + rnd() % 3u);
+                c->comp.affix = (uint8_t)(rnd() % 4u);   /* variant */
             } else {
                 c->comp.type = (uint8_t)(rnd() % WPN_COUNT);
                 c->comp.tier = 0;

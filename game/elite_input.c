@@ -89,6 +89,9 @@ void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) 
 
     if (!btn->a) s_swallow_a = false;
     out->fire = btn->a && !s_swallow_a;
-    out->secondary = btn->b && !s_prev_b;
+    /* B while LB is held = chaff (weapon switch needs LB up). */
+    bool b_edge = btn->b && !s_prev_b;
+    out->secondary = b_edge && !btn->lb;
+    out->chaff = b_edge && btn->lb;
     s_prev_b = btn->b;
 }

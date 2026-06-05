@@ -84,6 +84,29 @@ void ship_set_tier(int idx, int tier, int hull_class) {
     s->hull_max = h->hull_base * 0.55f * k;
     s->hull = s->hull_max;
     s->shield_max = h->shield_base * 0.55f * k;
+    /* High-tier pilots fly variant gear: BULWARK walls or REGEN
+     * skirmish shields — they FIGHT differently. */
+    s->shield_var = SHV_STANDARD;
+    s->shield_regen = 0;
+    s->shield_delay = 0;
+    if (tier >= 3) {
+        if (idx & 1) {
+            s->shield_var = SHV_BULWARK;
+            s->shield_max *= 1.5f;
+            s->shield_regen = 1.2f;
+        } else {
+            s->shield_var = SHV_REGEN;
+            s->shield_max *= 0.7f;
+            s->shield_regen = 7.2f;
+            s->shield_delay = 2.0f;
+        }
+    }
+    if (tier >= 4 && (idx % 3) == 0) s->shield_var = SHV_PHASE;
+    s->armor_var = (tier >= 3 && (idx & 1)) ? ARV_REACTIVE : ARV_STANDARD;
+    /* Hauler-class pirates (big bound radius) carry a belly turret. */
+    s->turret_type = (s->mesh->bound_r > 9.0f && tier >= 2)
+                         ? (uint8_t)(WPN_PULSE_S + 1) : 0;
+    s->turret_cool = 0;
     s->shield = s->shield_max;
     /* Loadout by tier. */
     s->n_weapons = 0;

@@ -24,6 +24,8 @@ static void hbar(uint16_t *fb, int x0, int x1, int y, uint16_t c) {
 void icon_weapon(uint16_t *fb, int x, int y, int wpn_type) {
     uint16_t hot = (wpn_type == EQ_SHIELD) ? RGB565C(80, 180, 255)
                  : (wpn_type == EQ_ARMOR) ? RGB565C(255, 140, 70)
+                 : (wpn_type >= EQ_HEATSINK && wpn_type < ITEM_COUNT)
+                       ? RGB565C(140, 255, 180)
                  : k_weapons[wpn_type].color;
     switch (wpn_type) {
     case WPN_PULSE_S:
@@ -121,6 +123,55 @@ void icon_weapon(uint16_t *fb, int x, int y, int wpn_type) {
         px(fb, x + 2, y + 3, hot); px(fb, x + 8, y + 3, hot);
         px(fb, x + 3, y + 4, hot); px(fb, x + 7, y + 4, hot);
         px(fb, x + 5, y + 3, BODY);
+        break;
+    case EQ_HEATSINK:
+        /* finned radiator */
+        for (int k = 0; k < 4; k++) {
+            px(fb, x + 2 + k * 2, y + 1, BODY);
+            px(fb, x + 2 + k * 2, y + 2, BODY);
+            px(fb, x + 2 + k * 2, y + 3, BODY);
+            px(fb, x + 2 + k * 2, y + 4, BODY2);
+        }
+        px(fb, x + 10, y + 2, hot);
+        break;
+    case EQ_SCANNER:
+        /* radar sweep */
+        px(fb, x + 5, y + 3, BODY);
+        px(fb, x + 3, y + 1, hot); px(fb, x + 7, y + 1, hot);
+        px(fb, x + 1, y + 3, hot); px(fb, x + 9, y + 3, hot);
+        px(fb, x + 3, y + 5, hot); px(fb, x + 7, y + 5, hot);
+        break;
+    case EQ_TANK:
+        /* twin bottles */
+        for (int k = 0; k < 2; k++) {
+            hbar(fb, x + 2 + k * 5, x + 4 + k * 5, y + 2, BODY);
+            hbar(fb, x + 2 + k * 5, x + 4 + k * 5, y + 3, BODY);
+            hbar(fb, x + 2 + k * 5, x + 4 + k * 5, y + 4, BODY2);
+            px(fb, x + 3 + k * 5, y + 1, hot);
+        }
+        break;
+    case EQ_FUELSCOOP:
+        /* intake funnel */
+        px(fb, x + 1, y + 1, hot); px(fb, x + 1, y + 5, hot);
+        px(fb, x + 2, y + 2, BODY); px(fb, x + 2, y + 4, BODY);
+        hbar(fb, x + 3, x + 8, y + 3, BODY);
+        px(fb, x + 9, y + 3, BODY2);
+        break;
+    case EQ_TARGETCOMP:
+        /* reticle chip */
+        hbar(fb, x + 2, x + 8, y + 1, BODY2);
+        hbar(fb, x + 2, x + 8, y + 5, BODY2);
+        px(fb, x + 2, y + 2, BODY2); px(fb, x + 2, y + 4, BODY2);
+        px(fb, x + 8, y + 2, BODY2); px(fb, x + 8, y + 4, BODY2);
+        px(fb, x + 5, y + 3, hot);
+        px(fb, x + 4, y + 3, hot); px(fb, x + 6, y + 3, hot);
+        break;
+    case EQ_CHAFF:
+        /* burst spray */
+        px(fb, x + 2, y + 3, BODY);
+        px(fb, x + 5, y + 1, hot); px(fb, x + 6, y + 3, hot);
+        px(fb, x + 5, y + 5, hot); px(fb, x + 8, y + 2, hot);
+        px(fb, x + 8, y + 4, hot); px(fb, x + 10, y + 3, hot);
         break;
     case EQ_ARMOR:
         /* layered plates */

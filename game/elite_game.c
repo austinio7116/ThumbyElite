@@ -75,6 +75,7 @@ static int   s_target = -1;      /* combat lock */
 static int   s_loot_target = -1; /* canister lock (no hostiles about) */
 static bool  s_station_lock;     /* station nav lock (nothing else) */
 static float s_rail_charge01;    /* railgun charge for the HUD arc */
+static bool  s_incoming;         /* seeker tracking the player */
 static uint32_t s_boot_seed;
 static int   s_title_cursor;
 static char  s_scoop_toast[28];
@@ -473,7 +474,41 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
         }
         if (in.secondary && p->n_weapons > 1)       /* B = next weapon */
             p->active_w = (uint8_t)((p->active_w + 1) % p->n_weapons);
-        if (in.cycle_target) cycle_target();
+        if (in.chaff && player_has_util(EQ_CHAFF) &&
+            g_player.chaff_charges > 0) {
+            g_player.chaff_charges--;
+            int broke = proj_break_locks(PLAYER);
+            fx_chaff_burst(v3_sub(p->pos, v3_scale(p->basis.r[2],
+                                                   p->mesh->bound_r)),
+                           p->vel);
+            sfx_chaff();
+            snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                     broke ? "CHAFF! %d LOCKS BROKEN" : "CHAFF AWAY",
+                     broke);
+            s_scoop_toast_t = 1.5f;
+        }
+        if (in.cycle_target) {
+            int before = s_target;
+            cycle_target();
+            if (s_target >= 0 && s_target != before) sfx_lock_acquire();
+        }
+        /* Seeker tracking you: repeating alarm + HUD INCOMING flash. */
+        {
+            static float warn_cd;
+            if (proj_homing_on(PLAYER)) {
+                s_incoming = true;
+                warn_cd -= dt;
+                if (warn_cd <= 0.0f) {
+                    sfx_lock_warn();
+                    warn_cd = 0.55f;
+                }
+            } else {
+                s_incoming = false;
+                warn_cd = 0;
+            }
+        }
+        combat_set_player_target(
+            (s_target >= 0 && g_ships[s_target].alive) ? s_target : -1);
     } else {
         if (!dead_latch) { dead_latch = true; respawn_t = 3.0f; }
         respawn_t -= dt;
@@ -539,6 +574,25 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
 }
 
 static void tick_supercruise(const CraftRawButtons *btn, float dt) {
+    /* FUELSCOOP: skim close to the star to refuel — heat builds while
+     * you do (free fuel, sweaty palms). */
+    if (player_has_util(EQ_FUELSCOOP)) {
+        const SystemInfo *si = system_info();
+        float scoop_r = si->star_radius_mm * 4.5f;
+        float d = v3_len(s_sc_pos_mm);
+        if (d < scoop_r && g_player.fuel < g_player.fuel_max) {
+            g_player.fuel += 1.6f * dt;
+            if (g_player.fuel > g_player.fuel_max)
+                g_player.fuel = g_player.fuel_max;
+            g_ships[PLAYER].heat += 9.0f * dt;
+            if (((int)(s_time * 2.0f) & 1) == 0) {
+                snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                         "SCOOPING %d.%d LY", (int)g_player.fuel,
+                         ((int)(g_player.fuel * 10)) % 10);
+                s_scoop_toast_t = 0.6f;
+            }
+        }
+    }
     {
         /* Drive drone follows cruise speed (lower band than flight). */
         float k = s_sc_speed * (1.0f / 3000.0f);
@@ -1116,6 +1170,7 @@ void elite_game_draw_overlay(uint16_t *fb) {
             .station_valid = (s_target < 0 && s_loot_target < 0 &&
                               s_station_lock),
             .rail_charge01 = s_rail_charge01,
+            .incoming = s_incoming,
             .kills = combat_kills(),
             .fuel01 = g_player.fuel / g_player.fuel_max,
             .render_ms = s_frame_ms,
