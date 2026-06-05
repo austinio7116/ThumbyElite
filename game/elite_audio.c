@@ -70,7 +70,7 @@ void sfx_weapon(int t, float amp) {
     case WPN_PHOTON:  play(W_SINE, 300, 900, 0.40f * amp, 0.010f, 0.18f); break;
     case WPN_GAUSS:
         play(W_NOISE, 4000, 800, 0.35f * amp, 0.001f, 0.10f);
-        play(W_SINE, 180, 60, 0.30f * amp, 0.002f, 0.12f);
+        play(W_SINE, 360, 230, 0.30f * amp, 0.002f, 0.12f);
         break;
     case WPN_AUTOCANNON: play(W_NOISE, 3000, 1500, 0.22f * amp, 0.001f, 0.045f); break;
     default:          /* missiles: launch whoosh */
@@ -82,26 +82,26 @@ void sfx_weapon(int t, float amp) {
 void sfx_explosion(float amp, float big01) {
     if (amp < 0.05f) return;
     float dur = 0.45f + 0.55f * big01;
-    play(W_NOISE, 2600, 200, 0.55f * amp, 0.004f, dur);
-    play(W_SINE, 110, 35, 0.50f * amp, 0.005f, dur * 1.2f);
+    play(W_NOISE, 2600, 300, 0.55f * amp, 0.004f, dur);
+    play(W_SINE, 340, 210, 0.45f * amp, 0.005f, dur * 1.2f);
 }
 
 void sfx_hit_shield(void) { play(W_SINE, 1400, 900, 0.30f, 0.001f, 0.06f); }
 void sfx_hit_hull(void) {
-    play(W_NOISE, 1800, 400, 0.40f, 0.001f, 0.09f);
-    play(W_SINE, 140, 70, 0.35f, 0.002f, 0.10f);
+    play(W_NOISE, 1800, 500, 0.40f, 0.001f, 0.09f);
+    play(W_SINE, 330, 220, 0.35f, 0.002f, 0.10f);
 }
 void sfx_ui_move(void)   { play(W_SQUARE, 880, 880, 0.10f, 0.001f, 0.025f); }
 void sfx_ui_select(void) { play(W_SQUARE, 1320, 1760, 0.14f, 0.001f, 0.05f); }
-void sfx_ui_deny(void)   { play(W_SQUARE, 240, 180, 0.16f, 0.001f, 0.09f); }
+void sfx_ui_deny(void)   { play(W_SQUARE, 320, 250, 0.16f, 0.001f, 0.09f); }
 void sfx_scoop(void)     { play(W_SINE, 620, 1240, 0.22f, 0.004f, 0.14f); }
 void sfx_jump(void) {
-    play(W_NOISE, 300, 3600, 0.30f, 0.40f, 1.8f);
-    play(W_SAW, 60, 480, 0.22f, 0.50f, 2.2f);
+    play(W_NOISE, 400, 3600, 0.30f, 0.40f, 1.8f);
+    play(W_SAW, 250, 620, 0.18f, 0.50f, 2.2f);
 }
 void sfx_dock(void) {
-    play(W_NOISE, 700, 250, 0.25f, 0.002f, 0.10f);
-    play(W_SINE, 90, 60, 0.40f, 0.002f, 0.16f);
+    play(W_NOISE, 700, 350, 0.25f, 0.002f, 0.10f);
+    play(W_SINE, 300, 220, 0.35f, 0.002f, 0.16f);
 }
 void sfx_klaxon(void) {
     play(W_SQUARE, 700, 700, 0.22f, 0.005f, 0.12f);
@@ -109,27 +109,29 @@ void sfx_klaxon(void) {
 }
 
 void audio_engine_set(float throttle01, float speed01) {
-    s_eng_freq_t = 36.0f + 70.0f * throttle01;
-    s_eng_amp_t = 0.05f + 0.13f * speed01;
+    /* The Thumby speaker rolls off hard below ~280 Hz — sub-bass comes
+     * out as a click train, so the 'hum' is really a turbine whine. */
+    s_eng_freq_t = 300.0f + 320.0f * throttle01;
+    s_eng_amp_t = 0.025f + 0.075f * speed01;
 }
 
 /* --- mixing ------------------------------------------------------------*/
 static inline int16_t wave_sample(uint8_t w, uint32_t phase) {
-    uint16_t p = (uint16_t)(phase >> 1);     /* cycle in Q15 */
+    uint16_t p = (uint16_t)phase;            /* one cycle = 65536 */
     switch (w) {
-    case W_SQUARE: return (p & 0x8000) ? 12000 : -12000;
-    case W_SAW:    return (int16_t)((int32_t)p - 16384) / 2 * 3 / 2;
+    case W_SQUARE: return (p & 0x8000) ? 11000 : -11000;
+    case W_SAW:    /* clean ramp, no wrap discontinuity artefacts */
+        return (int16_t)((((int32_t)p - 32768) * 11000) >> 15);
     case W_SINE: {
-        /* Parabolic sine approximation. */
-        int32_t x = (int32_t)p - 16384;       /* -16384..16383 */
-        int32_t up = (x < 0) ? -1 : 1;
-        int32_t ax = x < 0 ? -x : x;
-        int32_t y = (ax * (32768 - ax)) >> 13;
-        return (int16_t)(up * y * 12000 / 32768 * 2);
+        /* Parabolic approximation, hump per half-cycle. */
+        int32_t t = p & 0x7FFF;
+        int32_t y = (int32_t)((t * (32768 - t)) >> 14);   /* 0..16384 */
+        if (p & 0x8000) y = -y;
+        return (int16_t)((y * 11000) >> 14);
     }
     default: {
         s_lfsr = (uint16_t)((s_lfsr >> 1) ^ (-(int)(s_lfsr & 1) & 0xB400u));
-        return (int16_t)((int32_t)s_lfsr - 32768) / 3;
+        return (int16_t)(((int32_t)s_lfsr - 32768) / 3);
     }
     }
 }
@@ -144,9 +146,10 @@ int audio_render(int16_t *out, int n) {
         s_eng_amp += (s_eng_amp_t - s_eng_amp) * 0.0004f;
         if (s_eng_amp > 0.005f) {
             s_eng_phase += (uint32_t)(s_eng_freq * 65536.0f * dt);
+            /* Saw + a fifth above for a turbine timbre, all in-band. */
             int16_t v = wave_sample(W_SAW, s_eng_phase);
-            /* Soften: add a sub-octave square. */
-            int16_t v2 = wave_sample(W_SQUARE, s_eng_phase >> 1);
+            int16_t v2 = wave_sample(W_SINE,
+                                     s_eng_phase + (s_eng_phase >> 1));
             mix += (int32_t)((v / 2 + v2 / 3) * s_eng_amp);
         }
 

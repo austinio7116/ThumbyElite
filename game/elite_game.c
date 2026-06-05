@@ -515,6 +515,11 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
     bool a_edge = btn->a && !s_prev_a;
     s_prev_a = btn->a;
 
+    /* Engine hum only exists in flight states; everything else mutes
+     * it (prevents any residual tone on title/menus). */
+    if (s_state != ST_FLIGHT && s_state != ST_SUPERCRUISE)
+        audio_engine_set(0, 0);
+
     switch (s_state) {
     case ST_TITLE: {
         bool has_save = save_exists();
