@@ -78,6 +78,11 @@ typedef struct {
     uint8_t threat;             /* 0 safe .. 4 pirate-infested */
 } SystemInfo;
 
+/* Galaxy seed: set once at new-game (and on save load). Every system,
+ * name and price derives from it — same seed, same universe. */
+void galaxy_set_seed(uint32_t seed);
+uint32_t galaxy_get_seed(void);
+
 /* How many stars in a sector (0-2). */
 int galaxy_sector_stars(int32_t sx, int32_t sy);
 

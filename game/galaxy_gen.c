@@ -10,8 +10,17 @@
 #include <math.h>
 #include <string.h>
 
+/* Galaxy seed: every playthrough rolls its own universe (persisted by
+ * the save). All galaxy content flows through this one hash, so one
+ * value swap re-rolls everything — positions, names, economies. */
+static uint32_t s_galaxy_seed = 0xE117Eu;
+
+void galaxy_set_seed(uint32_t seed) { s_galaxy_seed = seed; }
+uint32_t galaxy_get_seed(void) { return s_galaxy_seed; }
+
 static uint32_t hash2i(int32_t x, int32_t y) {
-    uint32_t h = (uint32_t)x * 374761393u + (uint32_t)y * 668265263u;
+    uint32_t h = (uint32_t)x * 374761393u + (uint32_t)y * 668265263u +
+                 s_galaxy_seed * 951274213u;
     h = (h ^ (h >> 13)) * 1274126177u;
     return h ^ (h >> 16);
 }

@@ -198,6 +198,7 @@ static void cycle_target(void) {
 
 void elite_game_init(uint32_t seed) {
     s_rng = seed | 1u;
+    galaxy_set_seed(seed);     /* fresh universe per new game */
     ships_init();
     fx_init();
     combat_init();
@@ -207,21 +208,27 @@ void elite_game_init(uint32_t seed) {
     s_state = ST_FLIGHT;
     s_prev_menu = s_prev_a = false;
 
-    /* Find a starting system: first populated sector spiralling out from
-     * the origin — deterministic for a given galaxy (which is fixed). */
+    /* Find a starting system: spiral out from the origin for the first
+     * system WITH A STATION (a home dock for fuel/trade), falling back
+     * to any populated sector if the neighbourhood is barren. */
     SysAddr start = {0, 0, 0};
-    bool found = false;
-    for (int ring = 0; ring < 8 && !found; ring++)
+    SysAddr fallback = {0, 0, 0};
+    bool found = false, have_fallback = false;
+    for (int ring = 0; ring < 10 && !found; ring++)
         for (int sy = -ring; sy <= ring && !found; sy++)
             for (int sx = -ring; sx <= ring && !found; sx++) {
                 if (sx > -ring && sx < ring && sy > -ring && sy < ring)
                     continue;
-                if (galaxy_sector_stars(sx, sy) > 0) {
-                    start.sx = sx; start.sy = sy; start.idx = 0;
-                    found = true;
+                int n = galaxy_sector_stars(sx, sy);
+                for (int i = 0; i < n && !found; i++) {
+                    SysAddr a = { sx, sy, (uint8_t)i };
+                    if (!have_fallback) { fallback = a; have_fallback = true; }
+                    SystemInfo probe;
+                    galaxy_generate(a, &probe);
+                    if (probe.n_stations > 0) { start = a; found = true; }
                 }
             }
-    arrive_in_system(start);
+    arrive_in_system(found ? start : fallback);
     r3d_starfield_init((uint32_t)(system_info()->seed >> 16));
 }
 
