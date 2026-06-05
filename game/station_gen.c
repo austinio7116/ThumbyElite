@@ -229,9 +229,9 @@ const Mesh *station_gen_mesh(uint32_t seed) {
         float core_hz = rndf(8, 16);
         drum(core_r, core_hz, HULL, GLASS);   /* +z cap = docking face */
     } else if (core_roll < 45) {
-        /* Ring station: the wheel. */
-        core_r = rndf(16, 22);
-        ring_core(core_r, rndf(3.5f, 5.0f), HULL, HULL2, GLASS);
+        /* Ring station: the wheel — slim tube, large radius. */
+        core_r = rndf(18, 24);
+        ring_core(core_r, rndf(1.8f, 2.8f), HULL, HULL2, GLASS);
     } else if (core_roll < 60) {
         core_r = rndf(12, 16);
         ball(core_r, HULL, WIN);
