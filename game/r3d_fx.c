@@ -311,43 +311,40 @@ static Vec3 s_sc_dust[SC_DUST_N];
 static int  s_sc_seeded;
 
 void fx_sc_dust_emit(Vec3 cam_pos_mm, Vec3 vel_mms) {
+    /* Screen-space starline flow (same z-cycling technique as the
+     * hyperspace tunnel, throttled by real speed). The old free-space
+     * motes crossed their wrap box in ~3 frames at cruise speed and
+     * read as flickering "pulsing lines" (user report) — this flows.
+     * Travel direction is always the nose in SC, so the vanishing
+     * point is screen centre. */
+    (void)cam_pos_mm;
     float speed = v3_len(vel_mms);
-    float R = speed * 0.25f;
-    if (R < 1.2f) R = 1.2f;
-    if (R > 180.0f) R = 180.0f;     /* tighter box = denser stream */
-    if (!s_sc_seeded) {
-        s_sc_seeded = 1;
-        for (int i = 0; i < SC_DUST_N; i++)
-            s_sc_dust[i] = v3_add(cam_pos_mm,
-                                  v3(frand(-R, R), frand(-R, R), frand(-R, R)));
-    }
-    Vec3 streak = v3_scale(vel_mms, 0.05f);
-    uint16_t c = RGB565C(130, 140, 165);
-    int dbg_proj = 0, dbg_draw = 0;
-    for (int i = 0; i < SC_DUST_N; i++) {
-        dust_wrap(&s_sc_dust[i], cam_pos_mm, R);
-        Vec3 rel = v3_scale(v3_sub(s_sc_dust[i], cam_pos_mm), 1.0e6f);
-        float sx, sy;
-        uint16_t d;
-        if (!r3d_scene_project(rel, &sx, &sy, &d)) continue;
-        dbg_proj++;
-        if (sx < -8 || sx > 136 || sy < -8 || sy > 136) continue;
-        dbg_draw++;
-        if (speed > 0.02f) {
-            float ex, ey;
-            uint16_t ed;
-            Vec3 rel2 = v3_add(rel, v3_scale(streak, 1.0e6f));
-            if (r3d_scene_project(rel2, &ex, &ey, &ed))
-                r3d_scene_add_line(sx, sy, d, ex, ey, ed, c);
-        } else {
-            r3d_scene_add_point(sx, sy, d, c, 1);
-        }
-    }
-    {
-        g_dbg_dust[0] = dbg_proj; g_dbg_dust[1] = dbg_draw;
-        g_dbg_dustf[0] = speed; g_dbg_dustf[1] = R;
-        Vec3 r0 = v3_sub(s_sc_dust[0], cam_pos_mm);
-        g_dbg_dustf[2] = r0.x; g_dbg_dustf[3] = r0.z;
+    static float s_flow;
+    s_flow += speed * (1.0f / 30.0f) * 0.0035f;   /* tunnel units/frame */
+    float k = speed * (1.0f / 2200.0f);
+    if (k > 1.0f) k = 1.0f;
+    if (k < 0.06f) k = 0.06f;
+    for (int i = 0; i < 44; i++) {
+        uint32_t h = 0x5CD0u ^ (uint32_t)(i * 2654435761u);
+        h ^= h >> 13; h *= 1274126177u; h ^= h >> 16;
+        float ang = (float)(h & 0x3FF) * (6.2831853f / 1024.0f);
+        float sm = 0.55f + (float)((h >> 10) & 0xFF) * (1.0f / 255.0f);
+        float z0 = (float)((h >> 18) & 0x3FF) * (2.4f / 1024.0f);
+        float zz = z0 - s_flow * sm;
+        zz = zz - 2.4f * floorf(zz / 2.4f);
+        zz += 0.14f;
+        float r1 = 9.5f / zz;
+        if (r1 < 4.5f) continue;                 /* far hole: keep clear */
+        if (r1 > 96.0f) r1 = 96.0f;
+        float dz = 0.045f * k * sm;
+        float r0 = 9.5f / (zz + dz);
+        float ca = cosf(ang), sa = sinf(ang) * 0.92f;
+        float x0 = 64.0f + ca * r0, y0 = 60.0f + sa * r0;
+        float x1 = 64.0f + ca * r1, y1 = 60.0f + sa * r1;
+        uint16_t c = (zz < 0.5f) ? RGB565C(170, 185, 215)
+                   : (zz < 1.2f) ? RGB565C(110, 125, 160)
+                                 : RGB565C(60, 72, 100);
+        r3d_scene_add_line(x0, y0, 1, x1, y1, 1, c);
     }
 }
 
