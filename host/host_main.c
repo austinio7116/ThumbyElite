@@ -569,6 +569,9 @@ int main(int argc, char **argv) {
             b = none; elite_game_tick(&b, 1.0f / 30.0f);
             b = none; b.a = true; elite_game_tick(&b, 1.0f / 30.0f);
             b = none; elite_game_tick(&b, 1.0f / 30.0f);
+            render_frame(); dump_ppm("/tmp/jump_survey.ppm");
+            b = none; b.a = true; elite_game_tick(&b, 1.0f / 30.0f);
+            b = none; elite_game_tick(&b, 1.0f / 30.0f);
         }
         printf("[jump] state=%d after pan (2=hyperjump)\n", elite_game_state());
         render_frame(); dump_ppm("/tmp/jump_1_engaged.ppm");

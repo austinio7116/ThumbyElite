@@ -11,8 +11,11 @@
  */
 #include "ui_map.h"
 #include "mission.h"
+#include "craft_font.h"
+#include "econ.h"
 #include "elite_types.h"
 #include "craft_font.h"
+#include "econ.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -59,6 +62,7 @@ static float s_fuel, s_range;
 static float s_cx_ly, s_cy_ly;   /* cursor (and view centre) */
 static SysAddr s_hl;             /* highlighted star */
 static bool s_hl_valid;
+static bool s_gmap_info;       /* survey sheet over the chart */
 static float s_hl_dist;
 
 void map_galaxy_open(SysAddr current, float fuel_ly, float range_ly) {
@@ -69,6 +73,7 @@ void map_galaxy_open(SysAddr current, float fuel_ly, float range_ly) {
     s_hl = current;
     s_hl_valid = true;
     s_hl_dist = 0;
+    s_gmap_info = false;
     edges_reset();
 }
 
@@ -150,12 +155,21 @@ MapAction map_galaxy_tick(const CraftRawButtons *btn, float dt,
     gmap_highlight();
 
     MapAction act = MAP_NONE;
-    if (JUST(btn, a) && s_hl_valid && !sysaddr_eq(s_hl, s_cur_sys) &&
-        s_hl_dist <= s_range && s_hl_dist <= s_fuel) {
-        *out_addr = s_hl;
-        *out_dist_ly = s_hl_dist;
-        act = MAP_ENGAGE_JUMP;
+    /* A on a highlighted system opens the survey sheet; A inside it
+     * commits the jump (user req: full intel before burning fuel). */
+    if (s_gmap_info) {
+        if (JUST(btn, a) && s_hl_valid && !sysaddr_eq(s_hl, s_cur_sys) &&
+            s_hl_dist <= s_range && s_hl_dist <= s_fuel) {
+            *out_addr = s_hl;
+            *out_dist_ly = s_hl_dist;
+            s_gmap_info = false;
+            act = MAP_ENGAGE_JUMP;
+        }
+        if (JUST(btn, b) || JUST(btn, menu)) s_gmap_info = false;
+        s_edge.prev = *btn;
+        return act;
     }
+    if (JUST(btn, a) && s_hl_valid) s_gmap_info = true;
     if (JUST(btn, b) || JUST(btn, menu)) act = MAP_CLOSE;
     s_edge.prev = *btn;
     return act;
@@ -179,6 +193,88 @@ static float nnoise(float x, float y) {
     float v11 = (nhash(xi + 1, yi + 1) & 0xFFFF) * (1.0f / 65535.0f);
     float a = v00 + (v10 - v00) * sx, b = v01 + (v11 - v01) * sx;
     return a + (b - a) * sy;
+}
+
+/* Survey sheet: everything about the highlighted system. */
+static void draw_gmap_info(uint16_t *fb) {
+    SystemInfo si;
+    galaxy_generate(s_hl, &si);
+    uint16_t BG = RGB565C(6, 10, 20), GRID = RGB565C(28, 40, 58);
+    uint16_t HDR = RGB565C(200, 210, 225), VAL = RGB565C(120, 255, 120);
+    for (int i = 0; i < ELITE_FB_W * ELITE_FB_H; i++) fb[i] = BG;
+    char buf[30];
+
+    craft_font_draw(fb, si.name, 2, 2, HDR);
+    /* star chip */
+    uint16_t sc2 = si.star_color;
+    for (int yy = 2; yy < 8; yy++)
+        for (int xx = 110; xx < 116; xx++)
+            fb[yy * ELITE_FB_W + xx] = sc2;
+    for (int x = 0; x < 128; x++) fb[10 * ELITE_FB_W + x] = GRID;
+
+    int y = 14;
+    static const char *k_cls[6] = { "M DWARF", "K ORANGE", "G YELLOW",
+                                    "F WHITE", "A WHITE", "B GIANT" };
+    static const char *k_gov[6] = { "ANARCHY", "FEUDAL", "DICTATOR",
+                                    "CONFED", "DEMOCRACY", "CORPORATE" };
+    static const char *k_econ[8] = { "AGRI", "INDUST", "HITECH", "EXTRACT",
+                                     "REFINE", "TOURISM", "MILITARY",
+                                     "SERVICE" };
+    #define ROW(label, fmt, ...) do { \
+        craft_font_draw(fb, label, 2, y, RGB565C(110, 116, 135)); \
+        snprintf(buf, sizeof buf, fmt, __VA_ARGS__); \
+        craft_font_draw(fb, buf, 52, y, VAL); \
+        y += 8; \
+    } while (0)
+    ROW("DIST", "%d.%dLY%s", (int)s_hl_dist,
+        ((int)(s_hl_dist * 10)) % 10,
+        sysaddr_eq(s_hl, s_cur_sys) ? " (HERE)"
+        : (s_hl_dist <= s_range && s_hl_dist <= s_fuel) ? "" : " OUT!");
+    ROW("STAR", "%s", k_cls[si.star_class]);
+    ROW("GOV", "%s", k_gov[si.gov]);
+    {
+        static const char *k_threat[5] = { "SAFE", "LOW", "MEDIUM",
+                                           "HIGH", "LETHAL" };
+        craft_font_draw(fb, "THREAT", 2, y, RGB565C(110, 116, 135));
+        snprintf(buf, sizeof buf, "%s", k_threat[si.threat > 4 ? 4
+                                                              : si.threat]);
+        craft_font_draw(fb, buf, 52, y,
+                        si.threat >= 3 ? RGB565C(255, 120, 70)
+                      : si.threat >= 2 ? RGB565C(255, 200, 60) : VAL);
+        y += 8;
+    }
+    ROW("FACTION", "%s", k_faction_names[system_faction(s_hl)]);
+    ROW("PLANETS", "%d", si.n_planets);
+    if (econ_has_black_market(&si)) {
+        craft_font_draw(fb, "BLACK MARKET", 2, y, RGB565C(220, 100, 200));
+        y += 8;
+    }
+    if (mission_objective_here(s_hl)) {
+        craft_font_draw(fb, "! MISSION OBJECTIVE", 2, y,
+                        RGB565C(255, 120, 70));
+        y += 8;
+    }
+    #undef ROW
+
+    y += 2;
+    craft_font_draw(fb, si.n_stations ? "STATIONS:" : "NO STATIONS", 2, y,
+                    HDR);
+    y += 8;
+    for (int i = 0; i < si.n_stations && y < 108; i++) {
+        snprintf(buf, sizeof buf, "%s", si.stations[i].name);
+        craft_font_draw(fb, buf, 4, y, RGB565C(160, 170, 190));
+        y += 7;
+        snprintf(buf, sizeof buf, " %s T%d", k_econ[si.stations[i].econ],
+                 si.stations[i].tech);
+        craft_font_draw(fb, buf, 4, y, RGB565C(110, 116, 135));
+        y += 9;
+    }
+
+    for (int x = 0; x < 128; x++) fb[118 * ELITE_FB_W + x] = GRID;
+    bool can = s_hl_valid && !sysaddr_eq(s_hl, s_cur_sys) &&
+               s_hl_dist <= s_range && s_hl_dist <= s_fuel;
+    craft_font_draw(fb, can ? "A:JUMP B:BACK" : "B:BACK", 2, 121,
+                    RGB565C(110, 116, 135));
 }
 
 void map_galaxy_draw(uint16_t *fb) {
@@ -285,6 +381,11 @@ void map_galaxy_draw(uint16_t *fb) {
                 }
             }
         }
+
+    if (s_gmap_info && s_hl_valid) {
+        draw_gmap_info(fb);
+        return;
+    }
 
     /* Highlight + cursor + floating name tag. */
     if (s_hl_valid) {
