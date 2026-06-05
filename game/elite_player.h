@@ -28,7 +28,7 @@ typedef struct {
     uint8_t pad[3];
 } WeaponInst;
 
-#define MAX_SALVAGE 8   /* array size; per-hull limit = HullDef.rack */
+#define MAX_SALVAGE 10  /* array size; per-hull limit = HullDef.rack */
 
 typedef struct {
     int32_t credits;

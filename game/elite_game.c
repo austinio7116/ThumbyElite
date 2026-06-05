@@ -69,6 +69,7 @@ static SysAddr s_jump_target;
 static float   s_jump_dist;
 static float   s_hyper_t;
 static uint32_t s_hyper_seed;
+static Vec3    s_hyper_from_mm;   /* departure point: system recedes */
 
 static int   s_target = -1;      /* combat lock */
 static int   s_loot_target = -1; /* canister lock (no hostiles about) */
@@ -753,6 +754,8 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             sfx_jump();
             s_jump_target = target;
             s_jump_dist = dist;
+            s_hyper_from_mm = v3_add(s_anchor_mm,
+                                     v3_scale(g_ships[PLAYER].pos, 1.0e-6f));
             s_hyper_t = 0;
             s_hyper_seed = xorshift32();
             ships_despawn_npcs();
@@ -812,11 +815,18 @@ void elite_game_render_begin(void) {
     }
 
     case ST_HYPERJUMP: {
-        /* Witchspace: empty scene, tumbling slowly — streaks drawn in
-         * the overlay. */
+        /* The departure system stays on screen and RECEDES (user req):
+         * a virtual camera accelerates exponentially along the nose, so
+         * planets and the sun shrink away as the drive spools, then the
+         * starline tunnel takes over. */
         Mat3 cam = p->basis;
         m3_rotate_local(&cam, 2, s_hyper_t * 0.4f);
         r3d_scene_begin(&cam, 60.0f);
+        float d_mm = 60.0f * (expf(s_hyper_t * 3.4f) - 1.0f);
+        Vec3 vcam = v3_add(s_hyper_from_mm,
+                           v3_scale(p->basis.r[2], d_mm));
+        r3d_pipe_set_sun(v3_norm(v3_scale(vcam, -1.0f)));
+        r3d_planet_emit(vcam);
         break;
     }
     case ST_GALAXY_MAP:
