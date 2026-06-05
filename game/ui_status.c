@@ -192,7 +192,7 @@ void status_draw(uint16_t *fb) {
                                        : &g_player.salvage[r->index];
             int v = (int)(weapon_price(wi->type, wi->quality) *
                           (0.35f + 0.30f * wi->integrity * 0.01f));
-            detail_draw_weapon(fb, wi, v, "VALUE", "A/B:BACK");
+            detail_draw_weapon(fb, wi, NULL, v, "VALUE", "A/B:BACK");
         }
         return;
     }

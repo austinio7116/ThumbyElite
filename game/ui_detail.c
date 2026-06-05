@@ -31,11 +31,29 @@ static void stat(uint16_t *fb, int y, const char *k, const char *v,
     craft_font_draw(fb, v, 60, y, vc);
 }
 
+/* Delta tag beside a stat: green when better, red when worse.
+ * lower_better flips the sense (heat). */
+static void stat_delta(uint16_t *fb, int y, float delta, int lower_better) {
+    if (delta > -0.05f && delta < 0.05f) {
+        craft_font_draw(fb, "=", 104, y, COL_DIM);
+        return;
+    }
+    char buf[12];
+    int better = lower_better ? (delta < 0) : (delta > 0);
+    if (delta >= 10.0f || delta <= -10.0f)
+        snprintf(buf, sizeof buf, "%+d", (int)delta);
+    else
+        snprintf(buf, sizeof buf, "%+d.%d", (int)delta,
+                 (int)(delta < 0 ? -delta * 10 : delta * 10) % 10);
+    craft_font_draw(fb, buf, 96, y, better ? COL_VAL : COL_WARN);
+}
+
 static const char *k_qual_long[5] = {
     "SALVAGED", "STANDARD", "REINFORCED", "MILITARY", "PROTOTYPE",
 };
 
 void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
+                        const WeaponInst *cmp,
                         int price, const char *price_label,
                         const char *footer) {
     fill(fb, COL_BG);
@@ -57,7 +75,14 @@ void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
                      (0.6f + 0.4f * wi->integrity * 0.01f);
         snprintf(buf, sizeof buf, "X%d.%d", (int)mult,
                  ((int)(mult * 10)) % 10);
-        stat(fb, y, "PROTECTION", buf, COL_VAL); y += 8;
+        stat(fb, y, "PROTECTION", buf, COL_VAL);
+        if (cmp && cmp->in_use && cmp->type == wi->type && cmp != wi) {
+            float cm = k_tier_mult[cmp->tier > 3 ? 3 : cmp->tier] *
+                       quality_dmg_mult(cmp->quality) *
+                       (0.6f + 0.4f * cmp->integrity * 0.01f);
+            stat_delta(fb, y, mult - cm, 0);
+        }
+        y += 8;
         snprintf(buf, sizeof buf, "%d%%", wi->integrity);
         stat(fb, y, "INTEGRITY", buf,
              wi->integrity < 60 ? COL_WARN : COL_VAL); y += 8;
@@ -72,6 +97,13 @@ void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
     }
 
     const WeaponDef *w = &k_weapons[wi->type];
+    /* Comparator stats (effective). */
+    const WeaponDef *cw = NULL;
+    float cdm = 0;
+    if (cmp && cmp->in_use && cmp->type < WPN_COUNT && cmp != wi) {
+        cw = &k_weapons[cmp->type];
+        cdm = mount_dmg_mult(cmp);
+    }
 
     icon_weapon_2x(fb, 4, 3, wi->type);
     craft_font_draw(fb, w->name, 32, 4, COL_HDR);
@@ -85,21 +117,30 @@ void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
     stat(fb, y, "SLOT SIZE", buf, COL_VAL); y += 8;
     snprintf(buf, sizeof buf, "%d.%d", (int)(w->dmg * dm),
              ((int)(w->dmg * dm * 10)) % 10);
-    stat(fb, y, "DAMAGE", buf, COL_VAL); y += 8;
+    stat(fb, y, "DAMAGE", buf, COL_VAL);
+    if (cw) stat_delta(fb, y, w->dmg * dm - cw->dmg * cdm, 0);
+    y += 8;
     float dps = w->dmg * dm / w->cooldown;
     snprintf(buf, sizeof buf, "%d.%d", (int)dps, ((int)(dps * 10)) % 10);
-    stat(fb, y, "DPS", buf, COL_VAL); y += 8;
+    stat(fb, y, "DPS", buf, COL_VAL);
+    if (cw) stat_delta(fb, y, dps - cw->dmg * cdm / cw->cooldown, 0);
+    y += 8;
     snprintf(buf, sizeof buf, "%d.%d/S", (int)(w->heat / w->cooldown),
              ((int)(w->heat / w->cooldown * 10)) % 10);
     stat(fb, y, "HEAT", buf,
-         (w->heat / w->cooldown > 30) ? COL_WARN : COL_VAL); y += 8;
+         (w->heat / w->cooldown > 30) ? COL_WARN : COL_VAL);
+    if (cw) stat_delta(fb, y, w->heat / w->cooldown -
+                                  cw->heat / cw->cooldown, 1);
+    y += 8;
     if (w->speed > 0)
         snprintf(buf, sizeof buf, "%dM/S", (int)w->speed);
     else
         snprintf(buf, sizeof buf, "HITSCAN");
     stat(fb, y, "VELOCITY", buf, COL_VAL); y += 8;
     snprintf(buf, sizeof buf, "%dM", (int)w->range);
-    stat(fb, y, "RANGE", buf, COL_VAL); y += 8;
+    stat(fb, y, "RANGE", buf, COL_VAL);
+    if (cw) stat_delta(fb, y, w->range - cw->range, 0);
+    y += 8;
     if (w->ammo_max)
         snprintf(buf, sizeof buf, "%d RNDS", w->ammo_max);
     else
@@ -116,6 +157,11 @@ void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
     stat(fb, y, "INTEGRITY", buf,
          wi->integrity < 60 ? COL_WARN : COL_VAL); y += 8;
 
+    if (cw) {
+        snprintf(buf, sizeof buf, "VS FITTED %s", cw->name);
+        craft_font_draw(fb, buf, 4, y + 1, COL_DIM);
+        y += 8;
+    }
     if (price >= 0) {
         hl(fb, y + 1, COL_GRID);
         snprintf(buf, sizeof buf, "%s %dCR", price_label, price);

@@ -596,18 +596,20 @@ static void draw_home(uint16_t *fb) {
         uint16_t c = (i == s_cursor) ? COL_CUR : COL_DIM;
         if (i == s_cursor) craft_font_draw(fb, ">", 8, 23 + i * 9, COL_CUR);
         craft_font_draw(fb, k_home[i], 16, 23 + i * 9, c);
-        /* Live price hints on the service rows. */
+        /* Live price hints tucked right beside the service rows (the
+         * right side belongs to the station render). */
+        int hx = 16 + craft_font_width(k_home[i]) + 5;
         if (i == 6) {
             float need = g_player.fuel_max - g_player.fuel;
             if (need >= 0.1f) {
                 snprintf(buf, sizeof buf, "%d", (int)(need * 12.0f) + 1);
-                craft_font_draw(fb, buf, 96, 23 + i * 9, COL_CRED);
+                craft_font_draw(fb, buf, hx, 23 + i * 9, COL_CRED);
             }
         } else if (i == 7) {
             int rc = player_rearm_cost();
             if (rc > 0) {
                 snprintf(buf, sizeof buf, "%d", rc);
-                craft_font_draw(fb, buf, 96, 23 + i * 9, COL_CRED);
+                craft_font_draw(fb, buf, hx, 23 + i * 9, COL_CRED);
             }
         }
     }
@@ -938,6 +940,7 @@ void station_draw(uint16_t *fb) {
         const OutfitRow *r = &s_rows[s_cursor];
         WeaponInst tmp;
         const WeaponInst *wi = NULL;
+        const WeaponInst *cmp = NULL;
         int price = -1;
         const char *plabel = "COST";
         const char *foot = "A:ACTION B:BACK";
@@ -961,7 +964,31 @@ void station_draw(uint16_t *fb) {
                           skill_price_mult());
             foot = "A:BUY B:BACK";
         }
-        if (wi) { detail_draw_weapon(fb, wi, price, plabel, foot); return; }
+        if (wi) {
+            /* Comparator (user spec): the fitted weapon of the SAME
+             * type if you have one, else your most expensive fitted
+             * weapon. Equipment compares to its fitted counterpart.
+             * Viewing an already-fitted item itself: no diff. */
+            if (wi->type >= WPN_COUNT) {
+                const WeaponInst *e = equip_slot(wi->type - WPN_COUNT);
+                if (e->in_use && e != wi) cmp = e;
+            } else if (r->kind != ROW_MOUNT) {
+                const HullDef *hh = &k_hulls[g_player.hull_id];
+                int best_price = -1;
+                for (int m = 0; m < hh->n_slots; m++) {
+                    const WeaponInst *mw = &g_player.mounts[m];
+                    if (!mw->in_use || mw->type >= WPN_COUNT) continue;
+                    if (mw->type == wi->type) { cmp = mw; best_price = -2; break; }
+                    int pr = weapon_price(mw->type, mw->quality);
+                    if (best_price >= -1 && pr > best_price) {
+                        best_price = pr;
+                        cmp = mw;
+                    }
+                }
+            }
+            detail_draw_weapon(fb, wi, cmp, price, plabel, foot);
+            return;
+        }
         s_detail = 0;
     }
 

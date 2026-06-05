@@ -14,7 +14,10 @@
 /* Weapon sheet: effective stats for THIS instance (quality+integrity).
  * price >= 0 draws a price line with the given label ("COST"/"REPAIR"/
  * "SELL"). footer = button hints. */
+/* cmp: currently-fitted item to diff against (NULL = no comparison).
+ * Deltas render beside each stat, green = better, red = worse. */
 void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
+                        const WeaponInst *cmp,
                         int price, const char *price_label,
                         const char *footer);
 
