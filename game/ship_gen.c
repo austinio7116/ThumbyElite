@@ -191,35 +191,25 @@ static void slab(float cx, float cy, float cz, float hx, float hy,
     quad(v000, v100, v101, v001, top);     /* -y */
 }
 
-/* Tapered mandible prong: root quad at the hull's bow edge, narrower
- * raked tip. inner_x is the notch wall (kept straight); the OUTER edge
- * and the top chisel inward/down toward the tip. */
-static void prong(float sx, float inner_x, float outer_x, float hy,
-                  float z0, float z1, float tip_w, float tip_h,
+/* Tapered mandible prong, built with slab()'s proven winding: caller
+ * passes explicit root x-extent (xl < xr) and tip x-extent — mirroring
+ * is the caller's job, so there is exactly one face-order code path. */
+static void prong(float xl, float xr, float xtl, float xtr, float hy,
+                  float hy_tip, float z0, float z1,
                   uint16_t top, uint16_t side, uint16_t tipc) {
-    float out_tip = inner_x + (outer_x - inner_x) * tip_w;
-    float hy_tip = hy * tip_h;
-    int r0 = vtx(sx * inner_x, -hy, z0);
-    int r1 = vtx(sx * outer_x, -hy, z0);
-    int r2 = vtx(sx * outer_x, hy, z0);
-    int r3 = vtx(sx * inner_x, hy, z0);
-    int t0 = vtx(sx * inner_x, -hy_tip, z1);
-    int t1 = vtx(sx * out_tip, -hy_tip, z1);
-    int t2 = vtx(sx * out_tip, hy_tip, z1);
-    int t3 = vtx(sx * inner_x, hy_tip, z1);
-    if (sx > 0) {
-        quad(r3, r2, t2, t3, top);       /* top slope */
-        quad(r1, r0, t0, t1, top);       /* bottom slope */
-        quad(r2, r1, t1, t2, side);      /* outer rake */
-        quad(r0, r3, t3, t0, side);      /* inner (notch) wall */
-        quad(t0, t1, t2, t3, tipc);      /* raked tip */
-    } else {
-        quad(t3, t2, r2, r3, top);
-        quad(t1, t0, r0, r1, top);
-        quad(t2, t1, r1, r2, side);
-        quad(t0, t3, r3, r0, side);
-        quad(t3, t2, t1, t0, tipc);
-    }
+    int r0 = vtx(xl, -hy, z0);
+    int r1 = vtx(xr, -hy, z0);
+    int r2 = vtx(xr, hy, z0);
+    int r3 = vtx(xl, hy, z0);
+    int t0 = vtx(xtl, -hy_tip, z1);
+    int t1 = vtx(xtr, -hy_tip, z1);
+    int t2 = vtx(xtr, hy_tip, z1);
+    int t3 = vtx(xtl, hy_tip, z1);
+    quad(t3, t2, r2, r3, top);    /* top slope  (+y) */
+    quad(r0, r1, t1, t0, top);    /* belly      (-y) */
+    quad(t1, r1, r2, t2, side);   /* +x wall */
+    quad(r0, t0, t3, r3, side);   /* -x wall */
+    quad(t0, t1, t2, t3, tipc);   /* raked tip  (+z) */
 }
 
 /* Slim forward gun barrel (X-wing wingtips, prongs). */
@@ -606,12 +596,15 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             float pw = ax * rndf(0.16f, 0.26f);
             float tw = rndf(0.45f, 0.7f);    /* tip width fraction */
             float th2 = rndf(0.5f, 0.75f);   /* tip height fraction */
-            for (int sd2 = 0; sd2 < 2; sd2++) {
-                float sx2 = sd2 ? -1.0f : 1.0f;
-                prong(sx2, gap, gap + pw * 2.0f, ry * 0.95f,
-                      frontz, frontz + ml, tw, th2,
-                      HULL, HULL2, RGB565C(40, 40, 48));
-            }
+            float xo = gap + pw * 2.0f;      /* outer root edge */
+            float xt = gap + pw * 2.0f * tw; /* outer tip edge */
+            uint16_t MUZ2 = RGB565C(40, 40, 48);
+            /* Right prong: inner wall straight at +gap, outer tapers. */
+            prong(gap, xo, gap, xt, ry * 0.95f, ry * 0.95f * th2,
+                  frontz, frontz + ml, HULL, HULL2, MUZ2);
+            /* Left prong: mirrored extents, same winding path. */
+            prong(-xo, -gap, -xt, -gap, ry * 0.95f, ry * 0.95f * th2,
+                  frontz, frontz + ml, HULL, HULL2, MUZ2);
         }
 
         /* Cockpit: embedded tube emerging at one rim edge. */
