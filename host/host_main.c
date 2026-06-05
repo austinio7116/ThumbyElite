@@ -15,6 +15,7 @@
 #include "elite_types.h"
 #include "elite_game.h"
 #include "elite_entity.h"
+#include "elite_player.h"
 #include "meshes_gen.h"
 #include "craft_buttons.h"
 
@@ -166,6 +167,53 @@ int main(int argc, char **argv) {
         return 0;
         #undef TAP
         #undef SNAP
+    }
+
+    /* Trade test: supercruise to a station POI, dock with LB+RB, browse
+     * the market, buy a couple of units, launch. ELITE_TRADETEST=poi. */
+    if (getenv("ELITE_TRADETEST")) {
+        int poi = atoi(getenv("ELITE_TRADETEST"));
+        CraftRawButtons none = {0}, b;
+        #define TAPB(field, settle_n) do { \
+            b = none; b.field = true; \
+            elite_game_tick(&b, 1.0f / 30.0f); \
+            for (int k = 0; k < (settle_n); k++) \
+                elite_game_tick(&none, 1.0f / 30.0f); \
+        } while (0)
+        for (int k = 0; k < 30; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        TAPB(menu, 4);
+        TAPB(down, 3); TAPB(down, 3);
+        TAPB(a, 4);
+        for (int i = 0; i < poi; i++) TAPB(down, 2);
+        TAPB(a, 4);
+        int f = 0;
+        while (elite_game_state() == 1 && f++ < 30 * 240)
+            elite_game_tick(&none, 1.0f / 30.0f);
+        printf("[trade] at station, state=%d\n", elite_game_state());
+        /* Dock: hold LB+RB. */
+        b = none; b.lb = b.rb = true;
+        for (int k = 0; k < 8; k++) elite_game_tick(&b, 1.0f / 30.0f);
+        f = 0;
+        while (elite_game_state() == 6 && f++ < 30 * 5)   /* 6 = DOCKING */
+            elite_game_tick(&none, 1.0f / 30.0f);
+        printf("[trade] docked, state=%d (7=DOCKED)\n", elite_game_state());
+        /* Let the dock debounce clear (everything reads as held on open). */
+        for (int k = 0; k < 4; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        render_frame(); dump_ppm("/tmp/trade_0_home.ppm");
+        TAPB(a, 4);                       /* open MARKET */
+        render_frame(); dump_ppm("/tmp/trade_1_market.ppm");
+        TAPB(a, 2); TAPB(a, 2);           /* buy 2 of FOOD (row 0) */
+        TAPB(down, 2); TAPB(down, 2);     /* down to WATER */
+        TAPB(a, 2);                       /* buy 1 */
+        render_frame(); dump_ppm("/tmp/trade_2_bought.ppm");
+        TAPB(menu, 4);                    /* back to home */
+        TAPB(down, 3); TAPB(down, 3);     /* cursor to LAUNCH */
+        TAPB(a, 8);
+        printf("[trade] launched, state=%d (0=FLIGHT)\n", elite_game_state());
+        for (int k = 0; k < 30; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        render_frame(); dump_ppm("/tmp/trade_3_launched.ppm");
+        return 0;
+        #undef TAPB
     }
 
     /* Hyperjump test: galaxy map, nudge cursor right until a new system

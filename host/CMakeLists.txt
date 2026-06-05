@@ -62,6 +62,9 @@ add_executable(thumbyelite_host
     ${GAME}/elite_ai.c
     ${GAME}/ui_hud.c
     ${GAME}/ui_map.c
+    ${GAME}/ui_station.c
+    ${GAME}/econ.c
+    ${GAME}/elite_player.c
     ${GAME}/galaxy_gen.c
     ${GAME}/enames.c
     ${GAME}/system_sim.c

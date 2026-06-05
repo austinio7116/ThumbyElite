@@ -23,6 +23,8 @@
 #include "elite_ai.h"
 #include "ui_hud.h"
 #include "ui_map.h"
+#include "ui_station.h"
+#include "elite_player.h"
 #include "system_sim.h"
 #include "galaxy_gen.h"
 #include "craft_font.h"
@@ -33,9 +35,11 @@
 typedef enum {
     ST_FLIGHT = 0, ST_SUPERCRUISE, ST_HYPERJUMP,
     ST_GALAXY_MAP, ST_SYSTEM_MAP, ST_PAUSE,
+    ST_DOCKING, ST_DOCKED,
 } GState;
 
-#define FUEL_MAX   30.0f
+#define DOCK_RANGE 600.0f
+
 #define JUMP_RANGE 7.5f
 #define HYPER_TIME 2.6f
 #define SC_DROP_MM 1.2f          /* auto-drop distance to destination */
@@ -51,7 +55,6 @@ static Poi     s_sc_dest;
 static bool    s_sc_has_dest;
 static float   s_sc_speed;
 
-static float   s_fuel = FUEL_MAX;
 static SysAddr s_jump_target;
 static float   s_jump_dist;
 static float   s_hyper_t;
@@ -187,7 +190,7 @@ void elite_game_init(uint32_t seed) {
     combat_init();
     elite_input_reset();
     spawn_player();
-    s_fuel = FUEL_MAX;
+    player_init();
     s_state = ST_FLIGHT;
     s_prev_menu = s_prev_a = false;
 
@@ -212,6 +215,15 @@ void elite_game_init(uint32_t seed) {
 void elite_game_set_frame_ms(float ms) { s_frame_ms = ms; }
 
 /* --- state ticks ---------------------------------------------------------*/
+/* Docking availability: anchored at a station, close, not under fire. */
+static bool can_dock(void) {
+    if (!s_anchor_has_poi || s_anchor_poi.kind != POI_STATION) return false;
+    if (!g_ships[PLAYER].alive) return false;
+    return v3_len(g_ships[PLAYER].pos) < DOCK_RANGE;
+}
+
+static float s_dock_t;
+
 static void tick_flight(const CraftRawButtons *btn, float dt) {
     FlightInput in;
     elite_input_update(btn, dt, &in);
@@ -221,6 +233,14 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
     static float respawn_t;
     if (p->alive) {
         dead_latch = false;
+
+        /* LB+RB chord near a station = engage docking computer. */
+        if (btn->lb && btn->rb && can_dock()) {
+            s_dock_t = 0;
+            s_state = ST_DOCKING;
+            return;
+        }
+
         flight_apply_input(&in, dt);
         if (in.fire) combat_fire_laser(PLAYER, 0.0f);
         if (in.cycle_target) cycle_target();
@@ -321,10 +341,11 @@ static void tick_supercruise(const CraftRawButtons *btn, float dt) {
 static void tick_hyperjump(float dt) {
     s_hyper_t += dt;
     if (s_hyper_t >= HYPER_TIME) {
-        s_fuel -= s_jump_dist;
-        if (s_fuel < 0) s_fuel = 0;
+        g_player.fuel -= s_jump_dist;
+        if (g_player.fuel < 0) g_player.fuel = 0;
         arrive_in_system(s_jump_target);
         r3d_starfield_init((uint32_t)(system_info()->seed >> 16));
+        elite_input_reset();
         s_state = ST_FLIGHT;
     }
 }
@@ -350,6 +371,51 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         tick_hyperjump(dt);
         break;
 
+    case ST_DOCKING: {
+        /* Docking computer: glide to the bay mouth, then services. */
+        s_dock_t += dt;
+        Ship *p = &g_ships[PLAYER];
+        Vec3 bay = v3(0, 0, 0);
+        float k = dt * 1.4f;
+        if (k > 1) k = 1;
+        p->pos = v3_lerp(p->pos, bay, k);
+        p->vel = v3(0, 0, 0);
+        /* Ease the nose onto the station. */
+        Vec3 want = v3_norm(v3_sub(bay, v3_len2(p->pos) > 1 ? p->pos
+                                                            : v3(0, 0, -1)));
+        p->basis.r[2] = v3_norm(v3_lerp(p->basis.r[2], want, k));
+        m3_orthonormalize(&p->basis);
+        fx_tick(dt);
+        if (s_dock_t >= 2.2f) {
+            station_open(s_anchor_poi.index);
+            s_state = ST_DOCKED;
+        }
+        break;
+    }
+
+    case ST_DOCKED: {
+        DockAction act = station_tick(btn, dt);
+        if (act == DOCK_LAUNCH) {
+            /* Emerge from the bay face (station +z, rotated by its spin),
+             * nose out, gentle drift. */
+            Ship *p = &g_ships[PLAYER];
+            float yaw = s_time * 0.05f;
+            Vec3 out = v3(sinf(yaw), 0, cosf(yaw));
+            p->pos = v3_scale(out, 320.0f);
+            p->basis.r[2] = out;
+            p->basis.r[1] = v3(0, 1, 0);
+            p->basis.r[0] = v3_norm(v3_cross(p->basis.r[1], out));
+            p->basis.r[1] = v3_cross(p->basis.r[2], p->basis.r[0]);
+            p->vel = v3_scale(out, 25.0f);
+            p->throttle = 0.25f;
+            p->shield = p->shield_max;     /* station services top you up */
+            p->heat = 0;
+            elite_input_reset();
+            s_state = ST_FLIGHT;
+        }
+        break;
+    }
+
     case ST_PAUSE: {
         static const int N_ITEMS = 3;
         bool up = btn->up, down = btn->down;
@@ -357,9 +423,12 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         if (up && !pu && s_pause_cursor > 0) s_pause_cursor--;
         if (down && !pd && s_pause_cursor < N_ITEMS - 1) s_pause_cursor++;
         pu = up; pd = down;
-        if (menu_edge || (a_edge && s_pause_cursor == 0)) s_state = ST_FLIGHT;
+        if (menu_edge || (a_edge && s_pause_cursor == 0)) {
+            elite_input_reset();
+            s_state = ST_FLIGHT;
+        }
         else if (a_edge && s_pause_cursor == 1) {
-            map_galaxy_open(s_addr, s_fuel, JUMP_RANGE);
+            map_galaxy_open(s_addr, g_player.fuel, JUMP_RANGE);
             s_state = ST_GALAXY_MAP;
         } else if (a_edge && s_pause_cursor == 2) {
             map_system_open(cam_pos_mm());
@@ -372,7 +441,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         SysAddr target;
         float dist;
         MapAction act = map_galaxy_tick(btn, dt, &target, &dist);
-        if (act == MAP_CLOSE) s_state = ST_FLIGHT;
+        if (act == MAP_CLOSE) { elite_input_reset(); s_state = ST_FLIGHT; }
         else if (act == MAP_ENGAGE_JUMP) {
             s_jump_target = target;
             s_jump_dist = dist;
@@ -387,7 +456,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
     case ST_SYSTEM_MAP: {
         Poi dest;
         MapAction act = map_system_tick(btn, dt, &dest);
-        if (act == MAP_CLOSE) s_state = ST_FLIGHT;
+        if (act == MAP_CLOSE) { elite_input_reset(); s_state = ST_FLIGHT; }
         else if (act == MAP_ENGAGE_SC) {
             s_sc_dest = dest;
             s_sc_has_dest = true;
@@ -405,6 +474,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             p->throttle = 0.7f;
             p->pos = v3(0, 0, 0);
             p->vel = v3(0, 0, 0);
+            elite_input_reset();
             s_state = ST_SUPERCRUISE;
         }
         break;
@@ -427,7 +497,8 @@ void elite_game_render_begin(void) {
     }
     case ST_GALAXY_MAP:
     case ST_SYSTEM_MAP:
-        /* Fullscreen UI: minimal empty scene (map fills the band). */
+    case ST_DOCKED:
+        /* Fullscreen UI: minimal empty scene (UI fills the band). */
         r3d_scene_begin(&p->basis, 60.0f);
         break;
 
@@ -532,6 +603,7 @@ void elite_game_draw_overlay(uint16_t *fb) {
     case ST_GALAXY_MAP: map_galaxy_draw(fb); return;
     case ST_SYSTEM_MAP: map_system_draw(fb); return;
     case ST_HYPERJUMP:  draw_hyperjump_overlay(fb); return;
+    case ST_DOCKED:     station_draw(fb); return;
     default: break;
     }
 
@@ -543,7 +615,7 @@ void elite_game_draw_overlay(uint16_t *fb) {
                 ? v3_sub(s_sc_dest.pos_mm, s_sc_pos_mm) : v3(0, 0, 1),
             .speed_mms = s_sc_speed,
             .throttle = p->throttle,
-            .fuel01 = s_fuel / FUEL_MAX,
+            .fuel01 = g_player.fuel / g_player.fuel_max,
             .render_ms = s_frame_ms,
             .show_perf = 1,
         };
@@ -555,11 +627,15 @@ void elite_game_draw_overlay(uint16_t *fb) {
         HudInfo info = {
             .target = s_target,
             .kills = combat_kills(),
-            .fuel01 = s_fuel / FUEL_MAX,
+            .fuel01 = g_player.fuel / g_player.fuel_max,
             .render_ms = s_frame_ms,
             .show_perf = 1,
         };
         ui_hud_draw(fb, &info);
+        if (s_state == ST_DOCKING)
+            craft_font_draw(fb, "DOCKING...", 44, 30, RGB565C(120, 230, 255));
+        else if (can_dock())
+            craft_font_draw(fb, "LB+RB: DOCK", 42, 30, RGB565C(120, 230, 255));
     } else {
         craft_font_draw_2x(fb, "SHIP LOST", 28, 52, RGB565C(255, 80, 60));
         craft_font_draw(fb, "RETURNING TO BEACON", 26, 70,

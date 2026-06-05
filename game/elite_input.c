@@ -29,7 +29,11 @@ void elite_input_reset(void) {
     memset(&s_lb, 0, sizeof s_lb);
     memset(&s_rb, 0, sizeof s_rb);
     s_lb.since_tap_s = s_rb.since_tap_s = 10.0f;
-    s_prev_b = false;
+    /* Swallow a still-held B from whatever screen we came from, and mark
+     * LB/RB consumed so releasing them doesn't fire taps. */
+    s_prev_b = true;
+    s_lb.down = s_rb.down = true;
+    s_lb.consumed = s_rb.consumed = true;
     s_rb_pending = -1.0f;
 }
 

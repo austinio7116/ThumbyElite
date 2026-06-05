@@ -38,7 +38,9 @@ static void fill(uint16_t *fb, uint16_t c) {
 /* --- shared edge detection --------------------------------------------*/
 typedef struct { CraftRawButtons prev; } Edges;
 static Edges s_edge;
-static void edges_reset(void) { memset(&s_edge, 0, sizeof s_edge); }
+/* Debounce: treat every button as already-held on open, so whatever
+ * press navigated INTO the screen must be released before it can act. */
+static void edges_reset(void) { memset(&s_edge, 0xFF, sizeof s_edge); }
 #define JUST(btn, field) ((btn)->field && !s_edge.prev.field)
 
 /* ====================== GALAXY MAP ===================================== */
