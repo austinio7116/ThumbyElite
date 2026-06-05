@@ -28,7 +28,9 @@
 #define COL_WARN  RGB565C(255, 120,  70)
 
 /* Row model. */
-typedef enum { RK_TEXT = 0, RK_MOUNT, RK_RACK, RK_CARGO, RK_EQ } RowKind;
+typedef enum {
+    RK_TEXT = 0, RK_MOUNT, RK_RACK, RK_CARGO, RK_EQ, RK_UTIL, RK_TURRET
+} RowKind;
 typedef struct {
     uint8_t kind, index;
     char text[30];
@@ -101,6 +103,23 @@ static void build_rows(void) {
         else
             row(RK_TEXT, 0, COL_WARN, -1, "%s ----",
                 item_name(WPN_COUNT + i));
+    }
+    for (int i = 0; i < player_util_slots(); i++) {
+        const WeaponInst *e = &g_player.util_eq[i];
+        if (e->in_use)
+            row(RK_UTIL, i, COL_DIM, e->type, "   %s %d%%",
+                item_name(e->type), e->integrity);
+        else
+            row(RK_TEXT, 0, COL_DIM, -1, "UTIL BAY ----");
+    }
+    if (k_hulls[g_player.hull_id].has_turret) {
+        if (g_player.turret_eq.in_use)
+            row(RK_TURRET, 0, COL_DIM, g_player.turret_eq.type,
+                "   TURRET %s %d%%",
+                k_weapons[g_player.turret_eq.type].name,
+                g_player.turret_eq.integrity);
+        else
+            row(RK_TEXT, 0, COL_DIM, -1, "TURRET ----");
     }
     {
         int used = 0;
@@ -193,6 +212,10 @@ void status_draw(uint16_t *fb) {
                                    : (r->kind == RK_EQ)
                                        ? (r->index ? &g_player.armor_eq
                                                    : &g_player.shield_eq)
+                                   : (r->kind == RK_UTIL)
+                                       ? &g_player.util_eq[r->index]
+                                   : (r->kind == RK_TURRET)
+                                       ? &g_player.turret_eq
                                        : &g_player.salvage[r->index];
             int v = (int)(weapon_price(wi->type, wi->quality) *
                           (0.35f + 0.30f * wi->integrity * 0.01f));

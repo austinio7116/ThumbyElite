@@ -200,6 +200,14 @@ or below your flight plane. <span class="r">Red</span> = hostile,
 <span class="d">grey</span> = neutral, <span class="y">gold (blinking)</span>
 = salvage canisters — <b>fast blink means component pod</b> (weapons or
 equipment inside), slow blink means commodity cargo.</p>
+<h3>Combat indicators</h3>
+<ul>
+<li><b class="d">C4</b> by the dashboard = chaff charges remaining (CHAFF pod fitted).</li>
+<li><b>Closing brackets</b> on the reticle = railgun charging; bright flash = ready to loose.</li>
+<li><b class="g">Green pip</b> near your target = TARGETCOMP's lead indicator — aim there, not at the ship.</li>
+<li><b class="r">! INCOMING !</b> + urgent beeps = seeker tracking you. <b class="c">SYSTEMS SCRAMBLED</b> = ion strip, weapons offline.</li>
+</ul>
+
 <h3>Target readout</h3>
 <p>Locking a target (tap <span class="key">LB</span>) shows its name, tier,
 distance and its own <b>S</b>/<b>H</b> bars top-right, plus a red box around
@@ -317,10 +325,14 @@ larger. Base stats:</p>
 <h3>The armoury — every terminal stocks differently</h3>
 <p>Each station's outfitting bay carries a <b>seeded subset</b> of the
 catalogue (4–6 lines), gated by tech level: backwaters sell pulse
-lasers, autocannons and dumbfire missiles; beams, heavy pulses and
-seekers need tech 6+; <b>photons and gauss need tech 11+</b>. Prices
-swing ±15% with the local economy — <span class="tag">MILITARY</span>
-worlds sell arms cheapest, agricultural ones mark them up.</p>
+lasers, autocannons, dumbfires and tractors; <b>T4+</b> adds flak and
+mines; <b>T6+</b> beams, heavy pulses and seekers; <b>T8+</b> ion
+blasters; <b>T11+</b> photons and gauss; <b>railguns are T12+ only</b>.
+Prices swing ±15% with the local economy —
+<span class="tag">MILITARY</span> worlds sell arms cheapest,
+agricultural ones mark them up. Gadgets and equipment follow the same
+economy pricing (fuel scoops T7+, targeting computers T9+, chaff
+T5+).</p>
 <p>And the reason to check every terminal you dock at:
 <b class="y">★ featured offers</b> — the occasional non-standard
 instance (REINFORCED, MILITARY, even PROTOTYPE) sold at its full
@@ -369,9 +381,12 @@ salvage fits at 40% load.</p>
 
 <!-- ============================================================ -->
 <h2 id="equipment">Equipment — Shields &amp; Armor</h2>
-<p>Defence works exactly like weapons: your ship has <b>one shield-generator
-slot and one armor slot</b>, separate from weapon mounts, each holding an
-instance with size, quality and integrity.</p>
+<p>Defence works exactly like weapons: your ship has <b>one
+shield-generator slot and one armor slot</b>, separate from weapon
+mounts, each holding an instance with size, quality and integrity — plus
+a <b>utility bay</b> for gadgets (two on ATLAS/BASILISK) and, on the big
+haulers, a <b>turret hardpoint</b>. Four fit categories, none competing
+with your guns.</p>
 <ul>
 <li><b>Size Z1–Z3</b> multiplies your hull's base protection ×1.0 / ×1.3 / ×1.6 / ×2.0 (frame tier caps what each hull can take).</li>
 <li>Quality and integrity multiply on top, exactly like weapons.</li>
@@ -574,7 +589,8 @@ computer takes over and glides you in. On arrival, the station:</p>
   <span class="key">B</span> opens the full spec sheet before you commit.</figcaption></figure>
   <figure><img src="img/status.png" alt="Ship status">
   <figcaption><b>Your ship</b>, dimmed behind the full status sheet:
-  mounts, equipment, rack, cargo, skills, fuel.</figcaption></figure>
+  mounts, shield/armor, gadget bays, turret, rack, cargo, skills, fuel —
+  every line drills into a detail sheet with <span class="key">A</span>.</figcaption></figure>
 </div>
 <p><b>Every dockyard stocks its own selection.</b> A station rolls five
 ships from its seed — class, look and name (like
