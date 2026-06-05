@@ -232,6 +232,21 @@ int combat_fire(int shooter, float spread, int target) {
     }
 
     Vec3 dir = s->basis.r[2];
+    /* NPC gunnery aims AT the target (the nose-cone gate allows ~10
+     * degrees of slack — firing along the nose missed by tens of
+     * metres at range; user report: 'they hit very rarely'). Spread
+     * is now the real per-tier accuracy knob. Projectiles lead. */
+    if (shooter != PLAYER && target >= 0 && g_ships[target].alive) {
+        Ship *tv = &g_ships[target];
+        Vec3 aim = tv->pos;
+        if (w->speed > 0.0f) {
+            float tt = v3_len(v3_sub(tv->pos, s->pos)) / w->speed;
+            aim = v3_add(aim, v3_scale(v3_sub(tv->vel, s->vel), tt));
+        }
+        Vec3 ad = v3_sub(aim, s->pos);
+        float al = v3_len(ad);
+        if (al > 1e-3f) dir = v3_scale(ad, 1.0f / al);
+    }
     if (spread > 0.0f) {
         uint32_t r = (uint32_t)(s->pos.x * 131.0f + s->pos.z * 17.0f)
                      ^ (uint32_t)(s->heat * 1e3f) ^ (uint32_t)shooter;

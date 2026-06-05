@@ -15,11 +15,11 @@
 #define AI_BREAK_DIST  120.0f   /* break off the run EARLY — 28m read
                                    as flying straight through the player
                                    (user report); real pilots joust */
-#define AI_BREAK_TIME  2.2f
+#define AI_BREAK_TIME  1.5f     /* quick turnaround between passes */
 
 /* Per-tier trigger discipline. */
 static const float k_refire[5] = { 1.05f, 0.85f, 0.65f, 0.48f, 0.34f };
-static const float k_spread[5] = { 0.075f, 0.055f, 0.038f, 0.025f, 0.014f };
+static const float k_spread[5] = { 0.050f, 0.034f, 0.022f, 0.013f, 0.007f };
 static const float k_cone[5]   = { 0.970f, 0.978f, 0.984f, 0.988f, 0.992f };
 
 /* Steer s so its nose tips toward world-space dir (unit). */
@@ -84,7 +84,12 @@ static void ai_ship(int idx, float dt) {
         if (dist < w->range &&
             v3_dot(s->basis.r[2], dir) > k_cone[tier] &&
             combat_can_fire(s)) {
-            combat_fire(idx, k_spread[tier], PLAYER);
+            /* Evasion is real: target's lateral speed widens the
+             * effective spread — flying hard across the line of fire
+             * dodges; sitting still gets you hit (and killed). */
+            Vec3 latv = v3_sub(t->vel, v3_scale(dir, v3_dot(t->vel, dir)));
+            float sp = k_spread[tier] * (1.0f + v3_len(latv) / 90.0f);
+            combat_fire(idx, sp, PLAYER);
             s->fire_cool = k_refire[tier];
         }
         break;

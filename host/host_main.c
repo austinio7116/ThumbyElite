@@ -101,6 +101,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_STARTCHECK") ||
         getenv("ELITE_ACTION") ||
         getenv("ELITE_INTELTEST") ||
+        getenv("ELITE_SIEGE") ||
         getenv("ELITE_SHOT")) {
         /* Harnesses start in-game: skip the title via NEW GAME. */
         remove("thumbyelite.sav");
@@ -139,6 +140,36 @@ int main(int argc, char **argv) {
             }
         printf("[startcheck] %s nearest=%.1f in6=%d in8=%d stations=%d\n",
                si->name, best, in6, in8, si->n_stations);
+        return 0;
+    }
+
+    /* Siege sim: stationary player vs one attacker of tier N — does
+     * the shield ever collapse, and how fast? (user: regen out-raced
+     * pass damage). ELITE_SIEGE=<tier> */
+    if (getenv("ELITE_SIEGE")) {
+        int tier = atoi(getenv("ELITE_SIEGE"));
+        for (int i = 1; i < MAX_SHIPS; i++) g_ships[i].alive = false;
+        Ship *pl = &g_ships[0];
+        pl->vel = v3(0, 0, 0);
+        pl->throttle = 0;
+        extern const Mesh *hull_mesh(uint32_t, int);
+        int e = ship_spawn(hull_mesh(0xACE1u, 2 + tier),
+                           v3_add(pl->pos, v3(80, 20, 320)),
+                           TEAM_HOSTILE);
+        if (e > 0) ship_set_tier(e, tier, 2 + tier);
+        CraftRawButtons none = {0};
+        float t_collapse = -1;
+        for (int f = 0; f < 60 * 30; f++) {
+            elite_game_tick(&none, 1.0f / 30.0f);
+            if (t_collapse < 0 && pl->shield <= 0.5f)
+                t_collapse = (float)f / 30.0f;
+            if (f % 150 == 149)
+                printf("[siege] t=%2ds shield=%5.1f hull=%5.1f\n",
+                       f / 30, pl->shield, pl->hull);
+            if (!pl->alive) break;
+        }
+        printf("[siege] tier=%d collapse=%.1fs dead=%d\n", tier,
+               t_collapse, !pl->alive);
         return 0;
     }
 
