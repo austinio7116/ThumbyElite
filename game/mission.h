@@ -33,6 +33,7 @@ typedef struct {
     uint8_t station;       /* delivery: target station index */
     int32_t reward;
     uint8_t faction;       /* rep paid here */
+    uint8_t tier;          /* bounty mark skill (1-4) */
     char    label[26];     /* "8 FOOD > ESXE DOCK" */
     bool    done;          /* conditions met, collect at any station */
 } Mission;
@@ -55,8 +56,10 @@ bool mission_accept(const Mission *m);     /* false if log full */
 /* Event hooks. */
 void mission_on_kill(int victim_tier, bool was_bounty_mark);
 void mission_on_docked(const SystemInfo *si, int station);
-/* Does an active bounty point at this system? (spawn the mark) */
-bool mission_bounty_here(SysAddr a);
+/* Active bounty mark tier for this system, or -1. */
+int mission_bounty_tier_here(SysAddr a);
+/* Any active mission objective in this system? (chart markers) */
+bool mission_objective_here(SysAddr a);
 /* Try to complete missions at the docked station; returns credits paid. */
 int mission_collect(const SystemInfo *si, int station);
 

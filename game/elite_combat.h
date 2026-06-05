@@ -26,6 +26,8 @@ void combat_explosion_damage(int shooter, Vec3 centre, float radius,
 /* Stats / HUD feedback. */
 int   combat_kills(void);
 void  combat_set_kills(int n);
+/* Instant per-kill bounty since last call (player kills only). */
+int   combat_take_kill_pay(void);
 float combat_hitmarker(void);
 float combat_killmarker(void);
 

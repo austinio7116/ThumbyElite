@@ -160,16 +160,27 @@ static void spawn_poi_content(void) {
         if (idx > 0) ship_set_tier(idx, tier, cls);
     }
 
-    /* Bounty mark: a flagged ace waits at the beacon. */
-    if (s_anchor_has_poi && s_anchor_poi.kind == POI_BEACON &&
-        mission_bounty_here(s_addr)) {
+    /* Bounty mark: a flagged pilot at the mission's tier. ACE marks
+     * bring an escort. */
+    int btier = (s_anchor_has_poi && s_anchor_poi.kind == POI_BEACON)
+                    ? mission_bounty_tier_here(s_addr) : -1;
+    if (btier > 0) {
         float a = frand(0, 6.2831f);
         Vec3 pos = v3(cosf(a) * 800.0f, frand(-150, 150), sinf(a) * 800.0f);
         uint32_t mseed = (uint32_t)(si->seed >> 20) ^ 0xB011B011u;
-        int idx = ship_spawn(hull_mesh(mseed, 5), pos, TEAM_HOSTILE);
+        int cls = 2 + btier;          /* bigger marks at higher tier */
+        int idx = ship_spawn(hull_mesh(mseed, cls), pos, TEAM_HOSTILE);
         if (idx > 0) {
-            ship_set_tier(idx, 4, 5);
+            ship_set_tier(idx, btier, cls);
             g_ships[idx].is_mark = 1;
+            snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                     "BOUNTY MARK DETECTED");
+            s_scoop_toast_t = 3.0f;
+        }
+        if (btier >= 4) {
+            int e2 = ship_spawn(hull_mesh(mseed ^ 0x55u, 3),
+                                v3_add(pos, v3(120, 30, 60)), TEAM_HOSTILE);
+            if (e2 > 0) ship_set_tier(e2, 2, 3);
         }
     }
 }
@@ -397,6 +408,14 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
         }
         audio_engine_set(p->throttle,
                          v3_len(p->vel) / (p->max_speed * 1.2f));
+    }
+    {
+        int pay = combat_take_kill_pay();
+        if (pay > 0) {
+            snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                     "BOUNTY %dCR", pay);
+            s_scoop_toast_t = 1.6f;
+        }
     }
     {
         const char *scooped = loot_tick(dt);
@@ -826,29 +845,36 @@ void elite_game_render(uint16_t *fb, int y_min, int y_max) {
 
 /* --- overlays ------------------------------------------------------------*/
 static void draw_hyperjump_overlay(uint16_t *fb) {
-    /* Radial witchspace streaks. */
+    /* Star-Wars-style starline field: stars distributed across the WHOLE
+     * screen stretch past with perspective — streaks are short near the
+     * centre, long at the edges, accelerating through the jump. */
     float t = s_hyper_t;
-    for (int i = 0; i < 28; i++) {
+    float accel = t < 0.5f ? t * 2.0f : 1.0f;          /* spool up */
+    for (int i = 0; i < 56; i++) {
         uint32_t h = s_hyper_seed ^ (uint32_t)(i * 2654435761u);
         h ^= h >> 13; h *= 1274126177u; h ^= h >> 16;
-        float ang = (float)(h & 0xFF) * (6.2831853f / 256.0f);
-        float phase = (float)((h >> 8) & 0xFF) * (1.0f / 256.0f);
-        float r0 = fmodf(t * (30.0f + (float)((h >> 16) & 31)) + phase * 60.0f,
-                         60.0f);
-        float r1 = r0 + 6.0f + r0 * 0.5f;
+        float ang = (float)(h & 0x3FF) * (6.2831853f / 1024.0f);
+        float base = (float)((h >> 10) & 0x3F);
+        /* Radius cycles outward; speed scales with radius (perspective). */
+        float r0 = 5.0f + fmodf(base + t * (18.0f + base * 1.6f) * accel,
+                                72.0f);
+        if (r0 > 88.0f) continue;
+        float len = (2.0f + r0 * 0.45f) * accel;       /* stretch w/ r */
+        float r1 = r0 + len;
         float ca = cosf(ang), sa = sinf(ang);
-        int x0 = 64 + (int)(ca * r0), y0 = 64 + (int)(sa * r0);
-        int x1 = 64 + (int)(ca * r1), y1 = 64 + (int)(sa * r1);
-        uint16_t c = (r0 > 40.0f) ? RGB565C(200, 215, 255)
-                   : (r0 > 18.0f) ? RGB565C(120, 140, 220)
-                                  : RGB565C(60, 70, 140);
-        /* simple line */
-        int steps = 12;
-        for (int s = 0; s <= steps; s++) {
-            int x = x0 + (x1 - x0) * s / steps;
-            int y = y0 + (y1 - y0) * s / steps;
-            if ((unsigned)x < ELITE_FB_W && (unsigned)y < ELITE_FB_H)
-                fb[y * ELITE_FB_W + x] = c;
+        /* Bright head, dimming tail. */
+        int steps = (int)len + 1;
+        if (steps > 26) steps = 26;
+        for (int s2 = 0; s2 <= steps; s2++) {
+            float rr = r1 - (r1 - r0) * (float)s2 / (float)steps;
+            int x = 64 + (int)(ca * rr);
+            int y = 60 + (int)(sa * rr * 0.92f);
+            if ((unsigned)x >= ELITE_FB_W || (unsigned)y >= ELITE_FB_H)
+                continue;
+            uint16_t c = (s2 < 3) ? RGB565C(235, 240, 255)
+                       : (s2 < 9) ? RGB565C(150, 170, 240)
+                                  : RGB565C(70, 85, 170);
+            fb[y * ELITE_FB_W + x] = c;
         }
     }
     char name[14];

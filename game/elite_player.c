@@ -26,6 +26,7 @@ void player_init(void) {
     g_player.fuel = g_player.fuel_max;
     /* One battered salvaged pulse laser + bottom-shelf protection. */
     g_player.mounts[0] = (WeaponInst){ WPN_PULSE_S, Q_SALVAGED, 70, 1, 0, {0} };
+    for (int i = 0; i < HULL_SLOTS; i++) g_player.ammo[i] = -1;
     g_player.shield_eq = (WeaponInst){ EQ_SHIELD, Q_SALVAGED, 80, 1, 1, {0} };
     g_player.armor_eq = (WeaponInst){ EQ_ARMOR, Q_SALVAGED, 75, 1, 1, {0} };
 }
@@ -131,7 +132,57 @@ void player_apply_to_ship(void) {
         p->weapons[m] = g_player.mounts[i].type;
         const WeaponDef *w = &k_weapons[g_player.mounts[i].type];
         /* Ammo persists per session; refilled when docked (free, v1). */
-        p->ammo[m] = w->ammo_max ? (int16_t)w->ammo_max : -1;
+        /* -1 = never tracked (fresh fit) -> full magazine. */
+        p->ammo[m] = !w->ammo_max ? -1
+                   : (g_player.ammo[i] < 0) ? (int16_t)w->ammo_max
+                                            : g_player.ammo[i];
         p->n_weapons++;
     }
+}
+
+/* Per-round restock prices (credits). */
+static int round_cost(int type) {
+    switch (type) {
+    case WPN_AUTOCANNON: return 1;
+    case WPN_GAUSS: return 8;
+    case WPN_MISSILE: return 35;
+    case WPN_HOMING: return 55;
+    default: return 0;
+    }
+}
+
+void player_sync_ammo(int ship_slot, int ammo) {
+    for (int i = 0; i < HULL_SLOTS; i++)
+        if (s_mount_map[i] == ship_slot && g_player.mounts[i].in_use) {
+            g_player.ammo[i] = (int16_t)ammo;
+            return;
+        }
+}
+
+int player_rearm_cost(void) {
+    int cost = 0;
+    for (int i = 0; i < HULL_SLOTS; i++) {
+        const WeaponInst *m = &g_player.mounts[i];
+        if (!m->in_use) continue;
+        int maxa = k_weapons[m->type].ammo_max;
+        if (!maxa) continue;
+        int have = g_player.ammo[i] < 0 ? maxa : g_player.ammo[i];
+        cost += (maxa - have) * round_cost(m->type);
+    }
+    return cost;
+}
+
+void player_rearm(void) {
+    for (int i = 0; i < HULL_SLOTS; i++) {
+        const WeaponInst *m = &g_player.mounts[i];
+        if (!m->in_use) continue;
+        int maxa = k_weapons[m->type].ammo_max;
+        g_player.ammo[i] = maxa ? (int16_t)maxa : -1;
+    }
+}
+
+void player_load_mount_ammo(int mount, float fill01) {
+    const WeaponInst *m = &g_player.mounts[mount];
+    int maxa = m->in_use ? k_weapons[m->type].ammo_max : 0;
+    g_player.ammo[mount] = maxa ? (int16_t)((float)maxa * fill01) : -1;
 }

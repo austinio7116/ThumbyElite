@@ -216,22 +216,26 @@ static void shipyard_buy(int offer) {
  * Row model: mounts, then upgrades, then the salvage rack, then the
  * shop list. Rebuilt every tick (cheap; counts change under actions). */
 typedef enum {
-    ROW_MOUNT, ROW_EQUIP, ROW_SALV, ROW_SHOP, ROW_EQSHOP
+    ROW_MOUNT, ROW_EQUIP, ROW_SALV, ROW_SHOP, ROW_EQSHOP, ROW_HDR
 } RowKind;
 typedef struct { uint8_t kind, index; uint8_t tier; } OutfitRow;
-static OutfitRow s_rows[HULL_SLOTS + 2 + MAX_SALVAGE + WPN_COUNT + 6];
+static OutfitRow s_rows[HULL_SLOTS + 2 + MAX_SALVAGE + WPN_COUNT + 9];
 static int s_n_rows;
 
 static void outfit_build_rows(void) {
     const HullDef *h = &k_hulls[g_player.hull_id];
     s_n_rows = 0;
+    /* Sections: YOUR SHIP / YOUR HOLD / STATION SHOP (user req). */
+    s_rows[s_n_rows++] = (OutfitRow){ ROW_HDR, 0, 0 };
     for (int i = 0; i < h->n_slots; i++)
         s_rows[s_n_rows++] = (OutfitRow){ ROW_MOUNT, (uint8_t)i, 0 };
     s_rows[s_n_rows++] = (OutfitRow){ ROW_EQUIP, 0, 0 };   /* shield */
     s_rows[s_n_rows++] = (OutfitRow){ ROW_EQUIP, 1, 0 };   /* armor */
+    s_rows[s_n_rows++] = (OutfitRow){ ROW_HDR, 1, 0 };
     for (int i = 0; i < MAX_SALVAGE; i++)
         if (g_player.salvage[i].in_use)
             s_rows[s_n_rows++] = (OutfitRow){ ROW_SALV, (uint8_t)i, 0 };
+    s_rows[s_n_rows++] = (OutfitRow){ ROW_HDR, 2, 0 };
     for (int i = 0; i < WPN_COUNT; i++)
         s_rows[s_n_rows++] = (OutfitRow){ ROW_SHOP, (uint8_t)i, 0 };
     /* Equipment shop: tiers the frame can take. */
@@ -331,6 +335,7 @@ static void outfit_action_a(int row) {
         if (slot < 0) { toast("NO FREE SLOT"); return; }
         g_player.mounts[slot] = *sv;
         sv->in_use = 0;
+        player_load_mount_ammo(slot, 0.4f);     /* salvage: part-loaded */
         player_apply_to_ship();
         toast("FITTED");
         break;
@@ -437,7 +442,7 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
                 yard_build();
                 s_screen = SCR_SHIPYARD; s_cursor = 0; s_scroll = 0;
             }
-            else if (s_cursor == 2) { s_screen = SCR_OUTFIT; s_cursor = 0; s_scroll = 0; }
+            else if (s_cursor == 2) { s_screen = SCR_OUTFIT; s_cursor = 1; s_scroll = 0; }
             else if (s_cursor == 3) {
                 mission_make_offers(system_info(), s_station, s_offers);
                 s_screen = SCR_MISSIONS; s_cursor = 0;
@@ -470,8 +475,18 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
             if (b_edge || back) s_detail = 0;
             break;
         }
-        if (up && s_cursor > 0) s_cursor--;
-        if (down && s_cursor < s_n_rows - 1) s_cursor++;
+        if (up && s_cursor > 0) {
+            s_cursor--;
+            while (s_cursor > 0 && s_rows[s_cursor].kind == ROW_HDR)
+                s_cursor--;
+            if (s_rows[s_cursor].kind == ROW_HDR) s_cursor++;
+        }
+        if (down && s_cursor < s_n_rows - 1) {
+            s_cursor++;
+            while (s_cursor < s_n_rows - 1 && s_rows[s_cursor].kind == ROW_HDR)
+                s_cursor++;
+            if (s_rows[s_cursor].kind == ROW_HDR) s_cursor--;
+        }
         if (s_cursor < s_scroll) s_scroll = s_cursor;
         if (s_cursor > s_scroll + 8) s_scroll = s_cursor - 8;
         if (lb_edge) {
@@ -740,13 +755,27 @@ static void draw_outfit(uint16_t *fb) {
             craft_font_draw(fb, buf, 104, y, COL_CRED);
             break;
         }
+        case ROW_HDR: {
+            static const char *k_hdr[3] = { "-YOUR SHIP-", "-YOUR HOLD-",
+                                            "-STATION SHOP-" };
+            craft_font_draw(fb, k_hdr[r->index], 4, y,
+                            RGB565C(90, 140, 190));
+            break;
+        }
         case ROW_SALV: {
             const WeaponInst *m = &g_player.salvage[r->index];
             icon_weapon(fb, 7, y - 1, m->type);
-            snprintf(buf, sizeof buf, "RK %s %s %d%%",
+            snprintf(buf, sizeof buf, "%s %s %d%%",
                      item_name(m->type), k_qtag[m->quality],
                      m->integrity);
             craft_font_draw(fb, buf, 21, y, c);
+            /* What the shop pays (B sells). */
+            int base = (m->type >= WPN_COUNT)
+                           ? equip_price(m->type, m->tier, m->quality)
+                           : weapon_price(m->type, m->quality);
+            snprintf(buf, sizeof buf, "+%d",
+                     (int)(base * (0.35f + 0.30f * m->integrity * 0.01f)));
+            craft_font_draw(fb, buf, 100, y, RGB565C(120, 200, 120));
             break;
         }
         case ROW_SHOP: {

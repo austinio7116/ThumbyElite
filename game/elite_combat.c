@@ -23,6 +23,7 @@
 static float s_regen_hold[MAX_SHIPS];
 static int   s_kills;
 static float s_hitmark, s_killmark;
+static int   s_kill_pay;
 
 void combat_init(void) {
     for (int i = 0; i < MAX_SHIPS; i++) s_regen_hold[i] = 0;
@@ -33,6 +34,12 @@ void combat_init(void) {
 
 int combat_kills(void) { return s_kills; }
 void combat_set_kills(int n) { s_kills = n; }
+
+int combat_take_kill_pay(void) {
+    int p = s_kill_pay;
+    s_kill_pay = 0;
+    return p;
+}
 float combat_hitmarker(void) { return s_hitmark; }
 float combat_killmarker(void) { return s_killmark; }
 
@@ -97,7 +104,14 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
         }
         if (shooter == PLAYER) {
             s_killmark = 0.7f;
-            if (victim != PLAYER) g_player.xp_gunnery++;
+            if (victim != PLAYER) {
+                g_player.xp_gunnery++;
+                /* Lawful kill bounty: dangerous pilots pay big. */
+                static const int k_pay[5] = { 25, 80, 220, 600, 1600 };
+                int t = v->tier > 4 ? 4 : v->tier;
+                s_kill_pay += k_pay[t];
+                g_player.credits += k_pay[t];
+            }
         }
     }
 }
@@ -130,7 +144,11 @@ int combat_fire(int shooter, float spread, int target) {
 
     s->fire_cool = w->cooldown;
     s->heat += w->heat * heat_mult;
-    if (w->ammo_max) s->ammo[s->active_w]--;
+    if (w->ammo_max) {
+        s->ammo[s->active_w]--;
+        if (shooter == PLAYER)
+            player_sync_ammo(s->active_w, s->ammo[s->active_w]);
+    }
 
     {
         float amp = 1.0f;

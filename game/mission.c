@@ -102,16 +102,23 @@ void mission_make_offers(const SystemInfo *si, int station,
             m->reward = (int32_t)(m->count * 320 * rep_bonus);
             snprintf(m->label, sizeof m->label, "CULL %d PIRATES", m->count);
         } else {
-            /* Bounty: an ace waits at a nearby system's beacon. */
+            /* Bounty: a marked pilot waits at a nearby beacon. Tier
+             * varies — EASY marks for starter ships, ACE paydays for
+             * the brave (user spec). */
             SysAddr dest;
             int dst_st;
             if (!find_dest(si->addr, h ^ 0xB011u, &dest, &dst_st)) continue;
             m->type = MIS_BOUNTY;
             m->target = dest;
+            m->tier = (uint8_t)(1 + ((h >> 24) % 4u));
+            static const int k_pay[5] = { 0, 600, 1300, 2800, 6500 };
+            static const char *k_tag[5] = { "", "EASY", "RISKY", "HARD",
+                                            "ACE" };
+            m->reward = (int32_t)(k_pay[m->tier] * rep_bonus);
             char dname[14];
             galaxy_system_name(dest, dname);
-            m->reward = (int32_t)(1500 * rep_bonus);
-            snprintf(m->label, sizeof m->label, "BOUNTY AT %s", dname);
+            snprintf(m->label, sizeof m->label, "%s MARK>%s",
+                     k_tag[m->tier], dname);
         }
     }
 }
@@ -145,11 +152,22 @@ void mission_on_kill(int victim_tier, bool was_bounty_mark) {
     (void)victim_tier;
 }
 
-bool mission_bounty_here(SysAddr a) {
+int mission_bounty_tier_here(SysAddr a) {
     for (int i = 0; i < MAX_MISSIONS; i++)
         if (g_missions[i].type == MIS_BOUNTY && !g_missions[i].done &&
             sysaddr_eq(g_missions[i].target, a))
+            return g_missions[i].tier;
+    return -1;
+}
+
+bool mission_objective_here(SysAddr a) {
+    for (int i = 0; i < MAX_MISSIONS; i++) {
+        const Mission *m = &g_missions[i];
+        if (m->done) continue;
+        if ((m->type == MIS_BOUNTY || m->type == MIS_DELIVERY) &&
+            sysaddr_eq(m->target, a))
             return true;
+    }
     return false;
 }
 

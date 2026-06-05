@@ -10,6 +10,7 @@
  * A engages supercruise.
  */
 #include "ui_map.h"
+#include "mission.h"
 #include "elite_types.h"
 #include "craft_font.h"
 #include <math.h>
@@ -269,6 +270,13 @@ void map_galaxy_draw(uint16_t *fb) {
                     px(fb, dx - 1, dy - 1, dimc);
                 }
                 px(fb, dx, dy, bright ? sc2 : dimc);
+                /* Mission objective: pulsing red diamond. */
+                if (mission_objective_here(a) && (s_twinkle & 8)) {
+                    px(fb, dx - 3, dy, COL_WARN);
+                    px(fb, dx + 3, dy, COL_WARN);
+                    px(fb, dx, dy - 3, COL_WARN);
+                    px(fb, dx, dy + 3, COL_WARN);
+                }
                 if (sysaddr_eq(a, s_cur_sys)) {     /* our marker */
                     px(fb, dx - 2, dy, COL_SELF);
                     px(fb, dx + 2, dy, COL_SELF);

@@ -43,6 +43,7 @@ typedef struct {
     WeaponInst salvage[MAX_SALVAGE];    /* loose components in the hold */
     WeaponInst shield_eq;               /* fitted shield generator */
     WeaponInst armor_eq;                /* fitted armor plating */
+    int16_t ammo[HULL_SLOTS];           /* rounds per mount (-1 energy) */
 
     /* Pilot skills: XP accumulators (levels derived). */
     uint16_t xp_gunnery;    /* kills */
@@ -58,6 +59,10 @@ int  player_cargo_total(void);
 int  player_cargo_cap(void);
 int  player_rack_cap(void);          /* hull-dependent rack slots */
 int  player_free_rack_slot(void);    /* -1 if rack full */
+void player_sync_ammo(int ship_slot, int ammo);  /* combat writeback */
+int  player_rearm_cost(void);        /* full restock price */
+void player_rearm(void);             /* set all mounts to max */
+void player_load_mount_ammo(int mount, float fill01);
 
 /* Quality multipliers. */
 float quality_dmg_mult(int q);       /* 0.8 .. 1.35 */
