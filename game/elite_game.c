@@ -77,6 +77,9 @@ static int   s_loot_target = -1; /* canister lock (no hostiles about) */
 static bool  s_station_lock;     /* station nav lock (nothing else) */
 static float s_rail_charge01;    /* railgun charge for the HUD arc */
 static bool  s_incoming;         /* seeker tracking the player */
+static bool  s_in_settings;      /* SETTINGS submenu over the pause */
+static int   s_settings_cursor;
+static float s_fps;              /* smoothed, for the toggle readout */
 static uint32_t s_boot_seed;
 static int   s_title_cursor;
 static char  s_scoop_toast[28];
@@ -727,6 +730,8 @@ static void tick_hyperjump(float dt) {
 }
 
 void elite_game_tick(const CraftRawButtons *btn, float dt) {
+    if (dt > 1e-4f)
+        s_fps += (1.0f / dt - s_fps) * 0.08f;     /* smoothed FPS */
     bool menu_edge = btn->menu && !s_prev_menu;
     s_prev_menu = btn->menu;
     bool a_edge = btn->a && !s_prev_a;
@@ -840,6 +845,23 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         static const int N_ITEMS = 5;
         bool up = btn->up, down = btn->down;
         static bool pu, pd;
+        if (s_in_settings) {
+            /* SETTINGS submenu: INVERT Y / SHOW FPS. */
+            if (up && !pu && s_settings_cursor > 0) s_settings_cursor--;
+            if (down && !pd && s_settings_cursor < 1) s_settings_cursor++;
+            pu = up; pd = down;
+            if (a_edge) {
+                if (s_settings_cursor == 0)
+                    g_player.invert_y = !g_player.invert_y;
+                else
+                    g_player.show_fps = !g_player.show_fps;
+            }
+            static bool pb;
+            if (menu_edge || (btn->b && !pb))         /* B or MENU back */
+                s_in_settings = false;
+            pb = btn->b;
+            break;
+        }
         if (up && !pu && s_pause_cursor > 0) s_pause_cursor--;
         if (down && !pd && s_pause_cursor < N_ITEMS - 1) s_pause_cursor++;
         pu = up; pd = down;
@@ -858,7 +880,8 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             status_open();
             s_state = ST_STATUS;
         } else if (a_edge && s_pause_cursor == 4) {
-            g_player.invert_y = !g_player.invert_y;   /* stays in menu */
+            s_in_settings = true;
+            s_settings_cursor = 0;
         }
         break;
     }
@@ -1129,10 +1152,24 @@ static void draw_pause_overlay(uint16_t *fb) {
         fb[99 * ELITE_FB_W + x] = RGB565C(95, 110, 140);
     }
     craft_font_draw(fb, "PAUSED", 52, 43, RGB565C(200, 210, 225));
+    if (s_in_settings) {
+        craft_font_draw(fb, "SETTINGS", 41, 44, RGB565C(200, 210, 225));
+        const char *sitems[2] = {
+            g_player.invert_y ? "INVERT Y: ON" : "INVERT Y: OFF",
+            g_player.show_fps ? "SHOW FPS: ON" : "SHOW FPS: OFF",
+        };
+        for (int i = 0; i < 2; i++) {
+            uint16_t c = (i == s_settings_cursor) ? RGB565C(120, 255, 120)
+                                                  : RGB565C(120, 126, 145);
+            if (i == s_settings_cursor)
+                craft_font_draw(fb, ">", 34, 58 + i * 9, c);
+            craft_font_draw(fb, sitems[i], 41, 58 + i * 9, c);
+        }
+        craft_font_draw(fb, "B:BACK", 41, 86, RGB565C(95, 110, 140));
+        return;
+    }
     const char *items[5] = { "RESUME", "GALAXY CHART", "SYSTEM MAP",
-                             "SHIP STATUS",
-                             g_player.invert_y ? "INVERT Y: ON"
-                                               : "INVERT Y: OFF" };
+                             "SHIP STATUS", "SETTINGS" };
     for (int i = 0; i < 5; i++) {
         uint16_t c = (i == s_pause_cursor) ? RGB565C(120, 255, 120)
                                            : RGB565C(120, 126, 145);
@@ -1142,6 +1179,13 @@ static void draw_pause_overlay(uint16_t *fb) {
 }
 
 void elite_game_draw_overlay(uint16_t *fb) {
+    if (g_player.show_fps) {
+        char fbuf[12];
+        snprintf(fbuf, sizeof fbuf, "%d FPS", (int)(s_fps + 0.5f));
+        craft_font_draw(fb, fbuf, 64 - craft_font_width(fbuf) / 2, 1,
+                        RGB565C(110, 255, 110));
+    }
+
     /* s_time advances here (called once per frame, post-render). */
     /* (dt not available; approximate from frame ms readout) */
     s_time += 0.033f;

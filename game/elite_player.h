@@ -48,6 +48,7 @@ typedef struct {
     WeaponInst turret_eq;               /* auto-turret (big hulls, Z1) */
     int8_t chaff_charges;               /* CHAFF ammo (4 max) */
     uint8_t invert_y;                   /* 1 = flight-stick (UP = dive) */
+    uint8_t show_fps;                   /* green FPS readout, top middle */
     int16_t ammo[HULL_SLOTS];           /* rounds per mount (-1 energy) */
 
     /* Pilot skills: XP accumulators (levels derived). */
