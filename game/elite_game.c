@@ -76,6 +76,11 @@ static Vec3    s_hyper_from_mm;   /* departure point: system recedes */
 static int   s_target = -1;      /* combat lock */
 static int   s_loot_target = -1; /* canister lock (no hostiles about) */
 static int   s_rock_target = -1; /* prospector lock (belt finding aid) */
+static int   s_tgt_class = 0;    /* 0 AUTO, 1 SALVAGE, 2 ROCKS — LB
+                                    double-tap demotes the class so you
+                                    can mine through floating salvage or
+                                    loot mid-fight; single-tap still
+                                    cycles WITHIN the class only */
 static bool  s_station_lock;     /* station nav lock (nothing else) */
 static float s_rail_charge01;    /* railgun charge for the HUD arc */
 static bool  s_incoming;         /* seeker tracking the player */
@@ -344,6 +349,7 @@ static void drop_anchor(Vec3 pos_mm, const Poi *poi) {
     loot_init();
     rocks_init();
     s_target = -1;
+    s_tgt_class = 0;                 /* fresh site, AUTO priorities */
 }
 
 static void arrive_in_system(SysAddr addr) {
@@ -365,6 +371,24 @@ static void arrive_in_system(SysAddr addr) {
 static void cycle_target(void) {
     Vec3 pp = g_ships[PLAYER].pos;
     s_loot_target = -1;
+    if (s_tgt_class >= 1) {
+        /* Forced class: skip the hostile scan entirely. */
+        s_target = -1;
+        s_station_lock = false;
+        s_rock_target = -1;
+        if (s_tgt_class == 1) {
+            s_loot_target = loot_nearest(pp, NULL);
+        } else {
+            Vec3 rk[8];
+            int nr = rocks_positions(rk, 8);
+            float bd2 = 1e30f;
+            for (int i = 0; i < nr; i++) {
+                float d2 = v3_len(v3_sub(rk[i], pp));
+                if (d2 < bd2) { bd2 = d2; s_rock_target = i; }
+            }
+        }
+        return;
+    }
     int best = -1, first = -1;
     float cur_d = -1.0f, best_d = 1e30f, first_d = 1e30f;
     if (s_target >= 0 && g_ships[s_target].alive)
@@ -618,6 +642,18 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
             s_scoop_toast_t = 1.5f;
         }
         if (in.cycle_target) {
+            static float last_tap_t = -10.0f;
+            if (s_time - last_tap_t < 0.32f) {
+                /* Double-tap: demote the target class. */
+                s_tgt_class = (s_tgt_class + 1) % 3;
+                static const char *k_tc[3] = { "TGT: AUTO",
+                                               "TGT: SALVAGE",
+                                               "TGT: ROCKS" };
+                snprintf(s_scoop_toast, sizeof s_scoop_toast, "%s",
+                         k_tc[s_tgt_class]);
+                s_scoop_toast_t = 1.4f;
+            }
+            last_tap_t = s_time;
             int before = s_target;
             cycle_target();
             if (s_target >= 0 && s_target != before) sfx_lock_acquire();
