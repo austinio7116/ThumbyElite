@@ -150,6 +150,16 @@ int main(int argc, char **argv) {
         elite_game_poi_intel(&pois[0], &in3);     /* beacon = anchor */
         Vec3 rk[8];
         int nr = rocks_positions(rk, 8);
+        if (getenv("ELITE_INTELSHOT")) {
+            for (int i = 1; i < MAX_SHIPS; i++)
+                g_ships[i].alive = false;     /* clear sky: rocks only */
+            CraftRawButtons b2 = {0}, n2 = {0};
+            b2.lb = true;
+            elite_game_tick(&b2, 1.0f / 30.0f);
+            for (int f = 0; f < 8; f++) elite_game_tick(&n2, 1.0f / 30.0f);
+            render_frame();
+            dump_ppm("/tmp/rock_lock.ppm");
+        }
         printf("[intel] beacon belt=%d rocks_present=%d %s\n",
                in3.belt, nr,
                (in3.belt == (nr > 0)) ? "MATCH" : "MISMATCH");

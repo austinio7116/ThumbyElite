@@ -407,7 +407,8 @@ void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
         float sx, sy;
         uint16_t d;
         Vec3 rel = v3_sub(info->loot_pos, p->pos);
-        if (r3d_scene_project(rel, &sx, &sy, &d)) {
+        if (r3d_scene_project(rel, &sx, &sy, &d) &&
+            sx >= 6.0f && sx < 122.0f && sy >= 6.0f && sy < 116.0f) {
             int bx = (int)sx, by = (int)sy;
             uint16_t gc = RGB565C(255, 210, 70);
             for (int k = 0; k < 3; k++) {
@@ -432,6 +433,43 @@ void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
             px(fb, ex - (int)(ax * 2 + ay * 2), ey - (int)(ay * 2 - ax * 2), gc);
             px(fb, ex - (int)(ax * 2 - ay * 2), ey - (int)(ay * 2 + ax * 2), gc);
             px(fb, ex - (int)(ax * 3), ey - (int)(ay * 3), gc);
+        }
+    }
+    else if (info->rock_valid) {
+        /* Prospector lock: amber corner-ticks + distance + edge arrow —
+         * the BELT! on the map, findable in the sky. */
+        Ship *p = &g_ships[PLAYER];
+        float sx, sy;
+        uint16_t d;
+        Vec3 rel = v3_sub(info->rock_pos, p->pos);
+        uint16_t rc = RGB565C(220, 165, 90);
+        /* project() is true for anything in FRONT — guard the frame
+         * bounds or the brackets draw off-screen and clip silently. */
+        if (r3d_scene_project(rel, &sx, &sy, &d) &&
+            sx >= 6.0f && sx < 122.0f && sy >= 6.0f && sy < 116.0f) {
+            int bx = (int)sx, by = (int)sy;
+            /* corner ticks only (visually distinct from salvage) */
+            for (int k = 1; k <= 2; k++) {
+                px(fb, bx - 5, by - 5 + k, rc); px(fb, bx - 5 + k, by - 5, rc);
+                px(fb, bx + 5, by - 5 + k, rc); px(fb, bx + 5 - k, by - 5, rc);
+                px(fb, bx - 5, by + 5 - k, rc); px(fb, bx - 5 + k, by + 5, rc);
+                px(fb, bx + 5, by + 5 - k, rc); px(fb, bx + 5 - k, by + 5, rc);
+            }
+            char rbuf[16];
+            snprintf(rbuf, sizeof rbuf, "ROCK %dM", (int)v3_len(rel));
+            craft_font_draw(fb, rbuf, bx - 14, by + 8, rc);
+        } else {
+            Vec3 v = m3_mul_v3_t(&p->basis, rel);
+            float ax = v.x, ay = -v.y;
+            float al = sqrtf(ax * ax + ay * ay);
+            if (al < 1e-4f) { ax = 1; ay = 0; al = 1; }
+            ax /= al; ay /= al;
+            int ex = 64 + (int)(ax * 52.0f);
+            int ey = 60 + (int)(ay * 44.0f);
+            px(fb, ex, ey, rc);
+            px(fb, ex - (int)(ax * 2 + ay * 2), ey - (int)(ay * 2 - ax * 2), rc);
+            px(fb, ex - (int)(ax * 2 - ay * 2), ey - (int)(ay * 2 + ax * 2), rc);
+            px(fb, ex - (int)(ax * 3), ey - (int)(ay * 3), rc);
         }
     }
 

@@ -75,6 +75,7 @@ static Vec3    s_hyper_from_mm;   /* departure point: system recedes */
 
 static int   s_target = -1;      /* combat lock */
 static int   s_loot_target = -1; /* canister lock (no hostiles about) */
+static int   s_rock_target = -1; /* prospector lock (belt finding aid) */
 static bool  s_station_lock;     /* station nav lock (nothing else) */
 static float s_rail_charge01;    /* railgun charge for the HUD arc */
 static bool  s_incoming;         /* seeker tracking the player */
@@ -378,10 +379,22 @@ static void cycle_target(void) {
     /* Nothing hostile: lock salvage; failing that, the local station —
      * a compass home when you have drifted off the dock (user req). */
     s_station_lock = false;
+    s_rock_target = -1;
     if (s_target < 0) {
         s_loot_target = loot_nearest(pp, NULL);
-        if (s_loot_target < 0 && s_anchor_has_poi &&
-            s_anchor_poi.kind == POI_STATION)
+        if (s_loot_target < 0) {
+            /* Prospector lock: nearest belt rock (user req: BELT! on
+             * the map needs a way to FIND the rocks). */
+            Vec3 rk[8];
+            int nr = rocks_positions(rk, 8);
+            float bd2 = 1e30f;
+            for (int i = 0; i < nr; i++) {
+                float d2 = v3_len(v3_sub(rk[i], pp));
+                if (d2 < bd2) { bd2 = d2; s_rock_target = i; }
+            }
+        }
+        if (s_loot_target < 0 && s_rock_target < 0 &&
+            s_anchor_has_poi && s_anchor_poi.kind == POI_STATION)
             s_station_lock = true;
     }
 }
@@ -1450,10 +1463,20 @@ void elite_game_draw_overlay(uint16_t *fb) {
         if (s_loot_target >= 0 &&
             loot_nearest(g_ships[PLAYER].pos, &lpos) < 0)
             s_loot_target = -1;          /* scooped/expired */
+        Vec3 rpos = v3(0, 0, 0);
+        if (s_rock_target >= 0) {
+            Vec3 rk[8];
+            int nr = rocks_positions(rk, 8);
+            if (s_rock_target < nr) rpos = rk[s_rock_target];
+            else s_rock_target = -1;     /* cracked it */
+        }
         HudInfo info = {
             .target = s_target,
             .loot_valid = (s_target < 0 && s_loot_target >= 0),
             .loot_pos = lpos,
+            .rock_valid = (s_target < 0 && s_loot_target < 0 &&
+                           s_rock_target >= 0),
+            .rock_pos = rpos,
             .station_valid = (s_target < 0 && s_loot_target < 0 &&
                               s_station_lock),
             .rail_charge01 = s_rail_charge01,
