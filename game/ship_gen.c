@@ -171,6 +171,26 @@ static void nacelle(float x, float y, float z0, float z1, float r,
     }
 }
 
+/* Axis-aligned slab (disc mandibles): front face dark muzzle-ish,
+ * everything else hull colours. */
+static void slab(float cx, float cy, float cz, float hx, float hy,
+                 float hz, uint16_t top, uint16_t side, uint16_t front) {
+    int v000 = vtx(cx - hx, cy - hy, cz - hz);
+    int v100 = vtx(cx + hx, cy - hy, cz - hz);
+    int v010 = vtx(cx - hx, cy + hy, cz - hz);
+    int v110 = vtx(cx + hx, cy + hy, cz - hz);
+    int v001 = vtx(cx - hx, cy - hy, cz + hz);
+    int v101 = vtx(cx + hx, cy - hy, cz + hz);
+    int v011 = vtx(cx - hx, cy + hy, cz + hz);
+    int v111 = vtx(cx + hx, cy + hy, cz + hz);
+    quad(v001, v101, v111, v011, front);   /* +z bow */
+    quad(v100, v000, v010, v110, side);    /* -z stern */
+    quad(v101, v100, v110, v111, side);    /* +x */
+    quad(v000, v001, v011, v010, side);    /* -x */
+    quad(v011, v111, v110, v010, top);     /* +y */
+    quad(v000, v100, v101, v001, top);     /* -y */
+}
+
 /* Slim forward gun barrel (X-wing wingtips, prongs). */
 static void tip_gun(float x, float y, float z, float len, float r,
                     uint16_t col, uint16_t dark) {
@@ -181,6 +201,13 @@ static void tip_gun(float x, float y, float z, float len, float r,
     skin(g0, g1, col, col, col);
     cap_back(g0, col);
     cap_front(g1, dark);
+}
+
+/* Mirrored pair of forward gun barrels. */
+static void gun_pair(float x, float y, float z, float blen, float br,
+                     uint16_t col, uint16_t muz) {
+    tip_gun(x, y, z, blen, br, col, muz);
+    tip_gun(-x, y, z, blen, br, col, muz);
 }
 
 /* class-hint state (set by ship_gen_mesh_class; -1 = free roll) */
@@ -268,9 +295,12 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             arch = (r2 < 60) ? 0 : 3;
             family = 5;
             break;
+        case 99:  /* debug: force saucer (variety audits) */
+            arch = 3; family = 5;
+            break;
         default:  /* dreadnought: long warships of all schools */
-            arch = (r2 < 55) ? 0 : (r2 < 80) ? 1 : 3;
-            family = (r2 < 55) ? 4 : 3;
+            arch = (r2 < 55) ? 0 : (r2 < 80) ? 1 : 0;
+            family = (r2 < 55) ? 4 : 3;     /* cruiser / foil / gunship */
             break;
         }
     }
@@ -425,6 +455,10 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
                 quad(p1, q1, q0, p0, HULL2);
             }
         }
+        /* Chin guns under the cockpit ball. */
+        gun_pair(r * 0.35f, -r * 0.55f, r * 0.5f, r * rndf(0.5f, 0.9f),
+                 r * 0.08f, HULL2, RGB565C(40, 40, 48));
+
         /* Panels: COMPACT, fore-aft SYMMETRIC shapes only. */
         {
             int style = rndi(0, 3);
@@ -490,36 +524,103 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
         goto finish;
     }
     if (arch == 3) {
-        /* --- SAUCER: wide flat hull + mandibles + offset cockpit ------ */
-        float zb2 = -len * 0.5f, zf2 = len * 0.30f;
-        float w = len * rndf(0.34f, 0.46f);
-        float h = w * rndf(0.18f, 0.28f);
-        int a[8], b[8], c[8];
-        ring(zb2, w * 0.55f, h * 0.7f, 0, 0.55f, a);
-        ring(zb2 + len * 0.45f, w, h, 0, 0.6f, b);
-        ring(zf2, w * 0.6f, h * 0.8f, 0, 0.55f, c);
-        skin(a, b, HULL, HULL, HULL2);
-        skin(b, c, HULL, HULL, HULL2);
-        cap_back(a, GLOW);
-        cap_front(c, HULL2);
-        /* twin mandibles forward */
-        float mx = w * rndf(0.3f, 0.45f);
-        tip_gun(mx, 0, zf2 - len * 0.02f, len * rndf(0.2f, 0.3f),
-                w * 0.09f, HULL2, RGB565C(40, 40, 48));
-        tip_gun(-mx, 0, zf2 - len * 0.02f, len * rndf(0.2f, 0.3f),
-                w * 0.09f, HULL2, RGB565C(40, 40, 48));
-        /* offset cockpit tube */
+        /* --- DISC FREIGHTER (Falcon-inspired rethink) -----------------
+         * Built in the TOP-VIEW plane: a convex elliptical outline with
+         * a flattened front edge, extruded into a lens (thin top plate,
+         * vertical rim band, thin bottom plate). Mandibles are slabs
+         * off the flat front edge, flush with the rim by construction.
+         * Cockpit tube embeds INTO the disc so the join is buried. */
+        float az = len * 0.5f;                       /* half-length */
+        float ax = az * rndf(0.7f, 1.05f);           /* half-width */
+        float ry = len * rndf(0.045f, 0.07f);        /* rim half-height */
+        float py = ry * rndf(1.9f, 2.6f);            /* lens half-height */
+        float ml = (rndi(0, 99) < 80) ? len * rndf(0.18f, 0.42f) : 0.0f;
+        float front_k = ml > 0 ? rndf(0.35f, 0.55f) : 0.85f;
+        float frontz = az * front_k;                 /* flat front edge */
+
+        int N = 12;
+        float ox[12], oz[12];
+        for (int i2 = 0; i2 < N; i2++) {
+            float th = (float)i2 * (6.2831853f / (float)N) + 0.2618f;
+            ox[i2] = ax * sinf(th);
+            oz[i2] = az * cosf(th);
+            if (oz[i2] > frontz) oz[i2] = frontz;    /* flatten the bow */
+        }
+        int rimT[12], rimB[12], capT[12], capB[12];
+        for (int i2 = 0; i2 < N; i2++) {
+            rimT[i2] = vtx(ox[i2], ry, oz[i2]);
+            rimB[i2] = vtx(ox[i2], -ry, oz[i2]);
+            capT[i2] = vtx(ox[i2] * 0.70f, py, oz[i2] * 0.70f);
+            capB[i2] = vtx(ox[i2] * 0.70f, -py, oz[i2] * 0.70f);
+        }
+        for (int i2 = 0; i2 < N; i2++) {
+            int j2 = (i2 + 1) % N;
+            /* Rim band — stern arc glows (drive slit). */
+            uint16_t rc = (oz[i2] < -az * 0.62f && oz[j2] < -az * 0.62f)
+                              ? GLOW : HULL2;
+            quad(rimB[i2], rimB[j2], rimT[j2], rimT[i2], rc);
+            /* Plate slopes. */
+            quad(rimT[i2], rimT[j2], capT[j2], capT[i2],
+                 (i2 & 1) ? HULL : HULL2);
+            quad(rimB[j2], rimB[i2], capB[i2], capB[j2], HULL);
+        }
+        for (int i2 = 1; i2 < N - 1; i2++) {         /* lens caps */
+            face(capT[0], capT[i2], capT[i2 + 1], HULL);
+            face(capB[0], capB[i2 + 1], capB[i2], HULL2);
+        }
+
+        /* Mandibles: rectangular slabs off the flat bow, rim-flush. */
+        if (ml > 0) {
+            float gap = ax * rndf(0.14f, 0.3f);
+            float pw = ax * rndf(0.13f, 0.22f);
+            for (int sd2 = 0; sd2 < 2; sd2++) {
+                float sx2 = sd2 ? -1.0f : 1.0f;
+                slab(sx2 * (gap + pw), 0, frontz + ml * 0.5f,
+                     pw, ry * 0.95f, ml * 0.5f,
+                     HULL, HULL2, RGB565C(40, 40, 48));
+            }
+        }
+
+        /* Cockpit: embedded tube emerging at one rim edge. */
         {
-            float cx2 = w * rndf(0.45f, 0.7f);
+            float side = (rnd() & 1) ? 1.0f : -1.0f;
+            float cx2 = side * ax * rndf(0.5f, 0.68f);
+            float tip = frontz + (ml > 0 ? ml * rndf(0.3f, 0.7f)
+                                         : az * 0.18f);
             int e[8], f2[8];
-            ring(zb2 + len * 0.5f, w * 0.12f, w * 0.10f, h * 0.8f, 0.5f, e);
-            ring(zf2 + len * 0.05f, w * 0.09f, w * 0.07f, h * 0.6f, 0.5f, f2);
+            ring(-az * 0.1f, ry * 1.15f, ry * 1.05f, 0, 0.5f, e);
+            ring(tip, ry * 0.85f, ry * 0.8f, 0, 0.5f, f2);
             for (int k = 0; k < 8; k++) {
                 s_fx[e[k]] += cx2; s_fx[f2[k]] += cx2;
             }
             skin(e, f2, HULL2, HULL2, HULL2);
-            cap_back(e, HULL2);
             cap_front(f2, GLASS);
+        }
+
+        /* Chin gun(s) under the bow — mandible ships gun the notch,
+         * pure discs carry a belly turret. */
+        if (ml > 0) {
+            tip_gun(0, -ry * 0.4f, frontz, ml * rndf(0.35f, 0.6f),
+                    ry * 0.5f, HULL2, RGB565C(40, 40, 48));
+        } else {
+            gun_pair(ax * 0.25f, -py * 0.8f, az * 0.4f,
+                     az * rndf(0.15f, 0.25f), ry * 0.45f, HULL2,
+                     RGB565C(40, 40, 48));
+        }
+
+        /* Top dome (sensor bump), often present, sometimes offset. */
+        if (rndi(0, 2)) {
+            float dr = ax * rndf(0.14f, 0.24f);
+            float dx2 = (rndi(0, 2) == 0) ? rndf(-0.3f, 0.3f) * ax : 0.0f;
+            int d0[8], d1[8];
+            ring(-az * 0.05f, dr, dr * 0.8f, py * 0.85f, 0.55f, d0);
+            ring(-az * 0.05f + dr * 0.8f, dr * 0.55f, dr * 0.45f,
+                 py * 0.85f + ry, 0.55f, d1);
+            for (int k = 0; k < 8; k++) {
+                s_fx[d0[k]] += dx2; s_fx[d1[k]] += dx2;
+            }
+            skin(d0, d1, HULL2, HULL2, HULL2);
+            cap_front(d1, (rnd() & 1) ? GLASS : ACC);
         }
         goto finish;
     }
@@ -655,6 +756,38 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
         nacelle(w_mid * 1.15f, 0, z0 + len * 0.1f, z2,
                 w_mid * rndf(0.35f, 0.5f), HULL2, GLOW, 1);
         break;
+    }
+
+    /* Visible armament (user req: ships should show their guns). */
+    {
+        uint16_t MUZ = RGB565C(40, 40, 48);
+        float gl2 = len * rndf(0.10f, 0.18f);
+        switch (family) {
+        case 0:   /* dart: single chin gun */
+            tip_gun(0, -h3 * 0.8f, z3, gl2 * 1.3f, w_mid * 0.07f,
+                    HULL2, MUZ);
+            break;
+        case 1:
+        case 2:   /* fighters: twin chin barrels under the nose */
+            gun_pair(w3 * rndf(0.4f, 0.7f), -h3 * 0.7f, z3,
+                     gl2 * rndf(1.0f, 1.6f), w_mid * 0.06f, HULL2, MUZ);
+            break;
+        case 3:   /* gunship: prongs already; add a top barrel */
+            tip_gun(0, h2 * 0.9f, z2, gl2, w_mid * 0.07f, ACC, MUZ);
+            break;
+        case 4:   /* cruiser: sponson barrels along both flanks */
+            gun_pair(w_mid * 1.0f, 0, z2 + len * 0.05f,
+                     gl2 * 1.2f, w_mid * 0.06f, HULL2, MUZ);
+            gun_pair(w_mid * 0.9f, h2 * 0.5f, z1 + len * 0.08f,
+                     gl2, w_mid * 0.05f, HULL2, MUZ);
+            break;
+        default:  /* hauler: one defensive top turret nub */
+            slab(0, h2 * 0.95f, z2, w_mid * 0.16f, h2 * 0.22f,
+                 w_mid * 0.16f, HULL2, HULL2, HULL2);
+            tip_gun(0, h2 * 1.05f, z2 + w_mid * 0.1f, gl2,
+                    w_mid * 0.05f, HULL2, MUZ);
+            break;
+        }
     }
 
     /* Engine nacelles for fighters/interceptors/cruisers (50%). */
