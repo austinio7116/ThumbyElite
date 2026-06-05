@@ -63,10 +63,24 @@ static void play(Wave w, float f0, float f1, float amp, float attack,
 void sfx_weapon(int t, float amp) {
     if (amp < 0.05f) return;
     switch (t) {
-    case WPN_PULSE_S: play(W_SQUARE, 1700, 500, 0.30f * amp, 0.002f, 0.07f); break;
-    case WPN_PULSE_M: play(W_SQUARE, 1300, 350, 0.36f * amp, 0.002f, 0.09f); break;
-    case WPN_PULSE_L: play(W_SQUARE, 950, 220, 0.42f * amp, 0.003f, 0.13f); break;
-    case WPN_BEAM:    play(W_SAW, 2100, 1900, 0.16f * amp, 0.001f, 0.06f); break;
+    /* Lasers: low square body + noise crack on top — 'pew' with bite
+     * instead of a chirp (user feedback). Sweeps stay >=300 Hz (the
+     * speaker's passband floor). */
+    case WPN_PULSE_S:
+        play(W_SQUARE, 1000, 330, 0.26f * amp, 0.002f, 0.09f);
+        play(W_NOISE, 2600, 900, 0.16f * amp, 0.001f, 0.030f);
+        break;
+    case WPN_PULSE_M:
+        play(W_SQUARE, 780, 310, 0.32f * amp, 0.002f, 0.12f);
+        play(W_NOISE, 2200, 700, 0.20f * amp, 0.001f, 0.040f);
+        break;
+    case WPN_PULSE_L:
+        play(W_SQUARE, 580, 300, 0.38f * amp, 0.003f, 0.16f);
+        play(W_NOISE, 1800, 500, 0.24f * amp, 0.001f, 0.060f);
+        break;
+    case WPN_BEAM:
+        play(W_SAW, 980, 860, 0.15f * amp, 0.001f, 0.07f);
+        break;
     case WPN_PHOTON:  play(W_SINE, 300, 900, 0.40f * amp, 0.010f, 0.18f); break;
     case WPN_GAUSS:
         play(W_NOISE, 4000, 800, 0.35f * amp, 0.001f, 0.10f);
