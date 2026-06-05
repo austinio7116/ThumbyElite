@@ -23,6 +23,7 @@ void r3d_scene_begin(const Mat3 *cam_basis, float fov_deg);
 
 /* Returns triangles added (0 if culled or the list is full). */
 int r3d_scene_add_object(const R3DObject *obj);
+int r3d_scene_add_object_scaled(const R3DObject *obj, float scale);
 
 /* Rasterise rows [y0, y1): clears that band of fb + depth, draws the
  * starfield, then every listed triangle clamped to the band. Safe to call

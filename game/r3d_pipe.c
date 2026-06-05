@@ -51,17 +51,22 @@ const Mat3 *r3d_pipe_camera(void) { return &s_cam; }
 float r3d_pipe_focal(void) { return s_focal; }
 
 int r3d_pipe_draw_object(const R3DObject *obj) {
+    return r3d_pipe_draw_object_scaled(obj, 1.0f);
+}
+
+int r3d_pipe_draw_object_scaled(const R3DObject *obj, float os) {
     const Mesh *mesh = obj->mesh;
     if (!mesh || mesh->nverts > R3D_MAX_VERTS) return 0;
+    float br = mesh->bound_r * os;
 
     /* Whole-object cull: bounding sphere entirely behind the near plane,
      * or outside the view cone (cheap conservative test). */
     Vec3 c_view = m3_mul_v3_t(&s_cam, obj->pos);
-    if (c_view.z + mesh->bound_r < R3D_NEAR) return 0;
+    if (c_view.z + br < R3D_NEAR) return 0;
     /* Conservative FOV cull: against a 45deg-widened cone via |x|,|y| <= z. */
-    float lim = c_view.z + mesh->bound_r * 2.0f;
-    if (c_view.x - mesh->bound_r > lim || -c_view.x - mesh->bound_r > lim ||
-        c_view.y - mesh->bound_r > lim || -c_view.y - mesh->bound_r > lim)
+    float lim = c_view.z + br * 2.0f;
+    if (c_view.x - br > lim || -c_view.x - br > lim ||
+        c_view.y - br > lim || -c_view.y - br > lim)
         return 0;
 
     /* Compose model->view: M = camT o obj.basis, t = camT * obj.pos. */
@@ -72,7 +77,7 @@ int r3d_pipe_draw_object(const R3DObject *obj) {
     Vec3 t = c_view;
 
     /* Transform all verts; cache projection for those in front of NEAR. */
-    float vscale = mesh->scale * (1.0f / 127.0f);
+    float vscale = mesh->scale * os * (1.0f / 127.0f);
     for (int i = 0; i < mesh->nverts; i++) {
         Vec3 mv = v3(mesh->verts[i].x * vscale,
                      mesh->verts[i].y * vscale,

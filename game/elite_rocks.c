@@ -103,7 +103,9 @@ static void rock_mesh_build(int variant) {
     s_rm[variant].faces = f;
     s_rm[variant].nverts = (uint16_t)nv;
     s_rm[variant].nfaces = (uint16_t)nf;
-    s_rm[variant].scale = 0.01f;       /* verts are x100 */
+    s_rm[variant].scale = 1.27f;       /* pipe: scale = metres at vert 127;
+                                          verts span ~±100 -> unit radius,
+                                          per-instance os = world radius */
     s_rm[variant].bound_r = 1.25f;
     s_rm[variant].lod_lo = 0;
 }
@@ -118,16 +120,26 @@ void rocks_init(void) {
 }
 
 void rocks_spawn_field(uint32_t seed, int n) {
+    /* The belt is a visible CLUMP, not a scatter (user req): one
+     * cluster centre 400-700m out, rocks packed within ~220m of it —
+     * you can SEE the belt hanging in one part of the sky. One or two
+     * rocks are proper boulders (up to 42m); the rest medium. */
     s_rng = seed | 1u;
     if (n > MAX_ROCKS) n = MAX_ROCKS;
+    float ca = rndf(0, 6.2831853f);
+    float cd = rndf(400, 700);
+    Vec3 centre = v3(cosf(ca) * cd, rndf(-120, 120), sinf(ca) * cd);
     for (int i = 0; i < n; i++) {
         Rock *r = &s_rocks[i];
-        float a = rndf(0, 6.2831853f);
-        float d = rndf(300, 900);
-        r->pos = v3(cosf(a) * d, rndf(-220, 220), sinf(a) * d);
-        r->vel = v3(rndf(-1.5f, 1.5f), rndf(-1, 1), rndf(-1.5f, 1.5f));
-        r->spin = rndf(0.1f, 0.5f);
-        r->radius = rndf(7, 16);
+        float oa = rndf(0, 6.2831853f);
+        float od = rndf(20, 220);
+        r->pos = v3_add(centre, v3(cosf(oa) * od, rndf(-90, 90),
+                                   sinf(oa) * od));
+        r->vel = v3(rndf(-1.2f, 1.2f), rndf(-0.8f, 0.8f),
+                    rndf(-1.2f, 1.2f));
+        r->spin = rndf(0.08f, 0.4f);
+        r->radius = (i < 2) ? rndf(26, 42)       /* the boulders */
+                            : rndf(10, 22);
         r->hp = 40.0f + r->radius * 3.0f;
         r->chip = 0;
         r->variant = (uint8_t)(rnd() & 1);
@@ -152,11 +164,8 @@ void rocks_render(Vec3 cam_pos, float t) {
         obj.basis = m3_identity();
         m3_rotate_local(&obj.basis, 1, t * r->spin);
         m3_rotate_local(&obj.basis, 0, t * r->spin * 0.6f + (float)i);
-        /* per-rock scale via basis row scaling */
-        for (int k = 0; k < 3; k++)
-            obj.basis.r[k] = v3_scale(obj.basis.r[k], r->radius);
         obj.pos = v3_sub(r->pos, cam_pos);
-        r3d_scene_add_object(&obj);
+        r3d_scene_add_object_scaled(&obj, r->radius);
     }
 }
 

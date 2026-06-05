@@ -83,6 +83,10 @@ int r3d_scene_add_object(const R3DObject *obj) {
     return r3d_pipe_draw_object(obj);
 }
 
+int r3d_scene_add_object_scaled(const R3DObject *obj, float scale) {
+    return r3d_pipe_draw_object_scaled(obj, scale);
+}
+
 int r3d_scene_tri_count(void) { return s_ntris; }
 
 void r3d_emit_tri(float ax, float ay, uint16_t az,

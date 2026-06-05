@@ -157,6 +157,25 @@ int main(int argc, char **argv) {
             b2.lb = true;
             elite_game_tick(&b2, 1.0f / 30.0f);
             for (int f = 0; f < 8; f++) elite_game_tick(&n2, 1.0f / 30.0f);
+            /* face the belt and fly halfway in for the beauty shot */
+            Vec3 rk2[8];
+            int nr2 = rocks_positions(rk2, 8);
+            if (nr2 > 0) {
+                Vec3 c2 = v3(0, 0, 0);
+                for (int i = 0; i < nr2; i++) c2 = v3_add(c2, rk2[i]);
+                c2 = v3_scale(c2, 1.0f / (float)nr2);
+                Ship *pl2 = &g_ships[0];
+                Vec3 fwd2 = v3_norm(v3_sub(c2, pl2->pos));
+                Vec3 up3 = (fwd2.y > -0.9f && fwd2.y < 0.9f)
+                               ? v3(0, 1, 0) : v3(1, 0, 0);
+                Vec3 rt2 = v3_norm(v3_cross(up3, fwd2));
+                pl2->basis.r[0] = rt2;
+                pl2->basis.r[1] = v3_cross(fwd2, rt2);
+                pl2->basis.r[2] = fwd2;
+                pl2->pos = v3_sub(c2, v3_scale(fwd2, 320.0f));
+                for (int f = 0; f < 4; f++)
+                    elite_game_tick(&n2, 1.0f / 30.0f);
+            }
             render_frame();
             dump_ppm("/tmp/rock_lock.ppm");
         }

@@ -36,6 +36,9 @@ void r3d_pipe_set_sun(Vec3 dir_toward_light_world);
  * triangles via r3d_emit_tri (implemented by r3d_scene — appends to the
  * frame draw-list). Returns the number of triangles emitted. */
 int r3d_pipe_draw_object(const R3DObject *obj);
+/* Per-instance uniform scale (rocks): verts and bound scale by s; the
+ * basis stays orthonormal so lighting and culling stay correct. */
+int r3d_pipe_draw_object_scaled(const R3DObject *obj, float s);
 
 /* Implemented by r3d_scene.c. */
 void r3d_emit_tri(float ax, float ay, uint16_t az,
