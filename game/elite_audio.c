@@ -112,6 +112,14 @@ void sfx_ui_move(void)   { play(W_SQUARE, 880, 880, 0.10f, 0.001f, 0.025f); }
 void sfx_ui_select(void) { play(W_SQUARE, 1320, 1760, 0.14f, 0.001f, 0.05f); }
 void sfx_ui_deny(void)   { play(W_SQUARE, 320, 250, 0.16f, 0.001f, 0.09f); }
 void sfx_scoop(void)     { play(W_SINE, 620, 1240, 0.22f, 0.004f, 0.14f); }
+void sfx_sc_engage(void) {
+    /* Supercruise spool: the hyperspace whoosh's little sibling —
+     * lower, quieter, shorter. */
+    play(W_NOISE, 300, 1500, 0.16f, 0.25f, 1.3f);
+    play(W_SAW, 230, 430, 0.12f, 0.30f, 1.5f);
+    play(W_SINE, 330, 300, 0.13f, 0.15f, 0.7f);
+}
+
 void sfx_jump(void) {
     play(W_NOISE, 400, 3600, 0.30f, 0.40f, 1.8f);
     play(W_SAW, 250, 620, 0.18f, 0.50f, 2.2f);

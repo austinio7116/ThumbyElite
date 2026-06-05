@@ -27,6 +27,7 @@ void sfx_ui_select(void);
 void sfx_ui_deny(void);
 void sfx_scoop(void);
 void sfx_jump(void);
+void sfx_sc_engage(void);
 void sfx_dock(void);
 void sfx_klaxon(void);
 

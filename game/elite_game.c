@@ -514,6 +514,12 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
 }
 
 static void tick_supercruise(const CraftRawButtons *btn, float dt) {
+    {
+        /* Drive drone follows cruise speed (lower band than flight). */
+        float k = s_sc_speed * (1.0f / 3000.0f);
+        if (k > 1.0f) k = 1.0f;
+        audio_engine_set(k * 0.55f, k);
+    }
     FlightInput in;
     elite_input_update(btn, dt, &in);
     Ship *p = &g_ships[PLAYER];
@@ -789,6 +795,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             p->pos = v3(0, 0, 0);
             p->vel = v3(0, 0, 0);
             elite_input_reset();
+            sfx_sc_engage();
             s_state = ST_SUPERCRUISE;
         }
         break;
