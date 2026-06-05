@@ -53,6 +53,52 @@ void ships_despawn_npcs(void) {
     for (int i = 1; i < MAX_SHIPS; i++) g_ships[i].alive = false;
 }
 
+const char *k_tier_names[5] = {
+    "HARMLESS", "NOVICE", "CAPABLE", "DEADLY", "ELITE",
+};
+
+void ship_fit_weapon(int idx, int mount, WeaponType w) {
+    Ship *s = &g_ships[idx];
+    if (mount >= MAX_HARDPOINTS) return;
+    s->weapons[mount] = (uint8_t)w;
+    s->ammo[mount] = k_weapons[w].ammo_max ? (int16_t)k_weapons[w].ammo_max
+                                           : -1;
+    if (mount >= s->n_weapons) s->n_weapons = (uint8_t)(mount + 1);
+}
+
+void ship_set_tier(int idx, int tier) {
+    Ship *s = &g_ships[idx];
+    if (tier < 0) tier = 0;
+    if (tier > 4) tier = 4;
+    s->tier = (uint8_t)tier;
+    /* Power scales with skill: faster, tighter, tougher. */
+    float k = 1.0f + 0.13f * (float)tier;
+    s->max_speed *= 0.82f + 0.10f * (float)tier;
+    s->turn_rate *= 0.80f + 0.13f * (float)tier;
+    s->hull_max *= k;
+    s->hull = s->hull_max;
+    s->shield_max *= k;
+    s->shield = s->shield_max;
+    /* Loadout by tier. */
+    s->n_weapons = 0;
+    s->active_w = 0;
+    switch (tier) {
+    case 0:
+    case 1: ship_fit_weapon(idx, 0, WPN_PULSE_S); break;
+    case 2:
+        ship_fit_weapon(idx, 0, (idx & 1) ? WPN_AUTOCANNON : WPN_PULSE_M);
+        break;
+    case 3:
+        ship_fit_weapon(idx, 0, WPN_PULSE_M);
+        ship_fit_weapon(idx, 1, WPN_GAUSS);
+        break;
+    default:
+        ship_fit_weapon(idx, 0, WPN_PULSE_L);
+        ship_fit_weapon(idx, 1, (idx & 1) ? WPN_PHOTON : WPN_HOMING);
+        break;
+    }
+}
+
 int ships_alive_hostile(void) {
     int n = 0;
     for (int i = 1; i < MAX_SHIPS; i++)

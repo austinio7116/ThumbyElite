@@ -16,6 +16,7 @@
 #include "elite_game.h"
 #include "elite_entity.h"
 #include "elite_player.h"
+#include "elite_combat.h"
 #include "meshes_gen.h"
 #include "craft_buttons.h"
 
@@ -105,7 +106,15 @@ int main(int argc, char **argv) {
      * then advance n more frames and render (explosion stages). */
     if (getenv("ELITE_FIRETEST") || getenv("ELITE_KILLTEST")) {
         for (int i = 1; i < 16; i++) g_ships[i].alive = false;
-        int e = ship_spawn(&mesh_viper, v3(0, 0, 120.0f), TEAM_HOSTILE);
+        if (getenv("ELITE_FITWPN")) {
+            ship_fit_weapon(0, 0, (WeaponType)atoi(getenv("ELITE_FITWPN")));
+            g_ships[0].active_w = 0;
+        }
+        Ship *pl = &g_ships[0];
+        pl->vel = v3(0, 0, 0);
+        pl->throttle = 0;
+        Vec3 ahead = v3_add(pl->pos, v3_scale(pl->basis.r[2], 120.0f));
+        int e = ship_spawn(&mesh_viper, ahead, TEAM_HOSTILE);
         if (getenv("ELITE_KILLTEST")) {
             /* One-shot kill, parked target (neutral = no AI movement). */
             g_ships[e].team = TEAM_NEUTRAL;
@@ -123,6 +132,8 @@ int main(int argc, char **argv) {
         }
         render_frame();
         dump_ppm(shot_path ? shot_path : "firetest.ppm");
+        printf("[fire] target alive=%d hull=%.0f kills=%d\n",
+               g_ships[e].alive, g_ships[e].hull, combat_kills());
         return 0;
     }
 

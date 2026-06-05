@@ -1,21 +1,24 @@
 /*
  * ThumbyElite — enemy AI.
  *
- * Phase 3 brain: ATTACK turns toward the player, closes to gun range,
- * fires inside a tight cone; BREAK peels off for a couple of seconds
- * when it overshoots (gets too close) so hostiles orbit rather than
- * ram. Skill tiers + subsystem smarts arrive in Phase 6.
+ * ATTACK turns toward the player and fires inside a skill-sized cone;
+ * BREAK peels off after an overshoot. Tier (0 HARMLESS .. 4 ELITE)
+ * drives reaction: aim spread, trigger rate, gun range — and, for
+ * multi-mount ships, weapon choice by engagement distance (snipe with
+ * the long gun, switch to lasers up close).
  */
 #include "elite_ai.h"
 #include "elite_entity.h"
 #include "elite_combat.h"
+#include "elite_weapons.h"
 
-#define AI_FIRE_RANGE  420.0f
-#define AI_FIRE_COS    0.985f
 #define AI_BREAK_DIST  28.0f
 #define AI_BREAK_TIME  2.2f
-#define AI_SPREAD      0.035f
-#define AI_REFIRE      0.55f
+
+/* Per-tier trigger discipline. */
+static const float k_refire[5] = { 1.05f, 0.85f, 0.65f, 0.48f, 0.34f };
+static const float k_spread[5] = { 0.075f, 0.055f, 0.038f, 0.025f, 0.014f };
+static const float k_cone[5]   = { 0.970f, 0.978f, 0.984f, 0.988f, 0.992f };
 
 /* Steer s so its nose tips toward world-space dir (unit). */
 static void turn_toward(Ship *s, Vec3 dir, float dt) {
@@ -23,7 +26,7 @@ static void turn_toward(Ship *s, Vec3 dir, float dt) {
     Vec3 axis = v3_cross(fwd, dir);
     float sin_a = v3_len(axis);
     if (sin_a < 1e-4f) {
-        if (v3_dot(fwd, dir) < 0.0f)   /* dead astern: kick over the up axis */
+        if (v3_dot(fwd, dir) < 0.0f)
             m3_rotate_world(&s->basis, s->basis.r[1], s->turn_rate * dt);
         return;
     }
@@ -35,6 +38,22 @@ static void turn_toward(Ship *s, Vec3 dir, float dt) {
     m3_orthonormalize(&s->basis);
 }
 
+/* Pick the mount that suits the range (longest-reach gun that's in
+ * range and still has ammo; fall back to mount 0). */
+static void choose_weapon(Ship *s, float dist) {
+    int best = 0;
+    float best_score = -1.0f;
+    for (int i = 0; i < s->n_weapons; i++) {
+        const WeaponDef *w = &k_weapons[s->weapons[i]];
+        if (w->ammo_max && s->ammo[i] <= 0) continue;
+        if (dist > w->range) continue;
+        /* Prefer the tightest range fit: big guns far, fast guns close. */
+        float score = (dist > 320.0f) ? w->range : (2000.0f - w->range);
+        if (score > best_score) { best_score = score; best = i; }
+    }
+    s->active_w = (uint8_t)best;
+}
+
 static void ai_ship(int idx, float dt) {
     Ship *s = &g_ships[idx];
     Ship *t = &g_ships[PLAYER];
@@ -43,6 +62,7 @@ static void ai_ship(int idx, float dt) {
     Vec3 rel = v3_sub(t->pos, s->pos);
     float dist = v3_len(rel);
     Vec3 dir = (dist > 1e-3f) ? v3_scale(rel, 1.0f / dist) : s->basis.r[2];
+    int tier = s->tier > 4 ? 4 : s->tier;
 
     switch (s->ai_state) {
     default:
@@ -50,9 +70,6 @@ static void ai_ship(int idx, float dt) {
         s->ai_state = AI_ATTACK;
         /* fallthrough */
     case AI_ATTACK: {
-        /* Lead pursuit: aim at where the player will be when the laser
-         * arrives (hitscan -> tiny lead, but it keeps the nose honest
-         * against a strafing target). */
         turn_toward(s, dir, dt);
         s->throttle = (dist > 220.0f) ? 1.0f : (dist > 90.0f ? 0.7f : 0.45f);
         if (dist < AI_BREAK_DIST) {
@@ -60,16 +77,17 @@ static void ai_ship(int idx, float dt) {
             s->ai_timer = AI_BREAK_TIME;
             break;
         }
-        if (dist < AI_FIRE_RANGE &&
-            v3_dot(s->basis.r[2], dir) > AI_FIRE_COS &&
+        choose_weapon(s, dist);
+        const WeaponDef *w = &k_weapons[s->weapons[s->active_w]];
+        if (dist < w->range &&
+            v3_dot(s->basis.r[2], dir) > k_cone[tier] &&
             combat_can_fire(s)) {
-            combat_fire_laser(idx, AI_SPREAD);
-            s->fire_cool = AI_REFIRE;       /* slower trigger than the player */
+            combat_fire(idx, k_spread[tier], PLAYER);
+            s->fire_cool = k_refire[tier];
         }
         break;
     }
     case AI_BREAK:
-        /* Climb away relative to the target to set up another pass. */
         turn_toward(s, v3_norm(v3_add(v3_scale(dir, -1.0f),
                                       v3_scale(s->basis.r[1], 0.8f))), dt);
         s->throttle = 1.0f;

@@ -87,6 +87,8 @@ add_executable(thumbyelite
     ${GAME}/elite_input.c
     ${GAME}/elite_flight.c
     ${GAME}/elite_combat.c
+    ${GAME}/elite_weapons.c
+    ${GAME}/elite_proj.c
     ${GAME}/elite_ai.c
     ${GAME}/ui_hud.c
     ${GAME}/ui_map.c

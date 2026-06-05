@@ -20,6 +20,7 @@
 #include "elite_input.h"
 #include "elite_flight.h"
 #include "elite_combat.h"
+#include "elite_proj.h"
 #include "elite_ai.h"
 #include "ui_hud.h"
 #include "ui_map.h"
@@ -87,7 +88,9 @@ void elite_game_debug_spawn(int n) {
         float a = frand(0, 6.2831f);
         float r = frand(500, 800);
         Vec3 pos = v3(cosf(a) * r, frand(-150, 150), sinf(a) * r);
-        ship_spawn((i & 1) ? &mesh_viper : &mesh_fighter, pos, TEAM_HOSTILE);
+        int idx = ship_spawn((i & 1) ? &mesh_viper : &mesh_fighter, pos,
+                             TEAM_HOSTILE);
+        if (idx > 0) ship_set_tier(idx, i % 5);
     }
 }
 
@@ -118,6 +121,12 @@ static void spawn_player(void) {
     p->heat = 0;
     p->fire_cool = 0;
     p->team = TEAM_PLAYER;
+    /* Starter mounts (full outfitting arrives in Phase 7). */
+    p->n_weapons = 0;
+    p->active_w = 0;
+    ship_fit_weapon(PLAYER, 0, WPN_PULSE_M);
+    ship_fit_weapon(PLAYER, 1, WPN_AUTOCANNON);
+    ship_fit_weapon(PLAYER, 2, WPN_HOMING);
 }
 
 /* --- POI content ---------------------------------------------------------
@@ -138,7 +147,11 @@ static void spawn_poi_content(void) {
         float r = frand(600, 1000);
         Vec3 pos = v3(cosf(a) * r, frand(-200, 200), sinf(a) * r);
         const Mesh *m = (i & 1) ? &mesh_viper : &mesh_fighter;
-        ship_spawn(m, pos, TEAM_HOSTILE);
+        int idx = ship_spawn(m, pos, TEAM_HOSTILE);
+        if (idx > 0) {
+            int tier = (int)si->threat - 1 + (int)(xorshift32() % 3u) - 1;
+            ship_set_tier(idx, tier);
+        }
     }
 }
 
@@ -242,7 +255,9 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
         }
 
         flight_apply_input(&in, dt);
-        if (in.fire) combat_fire_laser(PLAYER, 0.0f);
+        if (in.fire) combat_fire(PLAYER, 0.0f, s_target);
+        if (in.secondary && p->n_weapons > 1)       /* B = next weapon */
+            p->active_w = (uint8_t)((p->active_w + 1) % p->n_weapons);
         if (in.cycle_target) cycle_target();
     } else {
         if (!dead_latch) { dead_latch = true; respawn_t = 2.5f; }
@@ -532,6 +547,7 @@ void elite_game_render_begin(void) {
             r3d_scene_add_object(&obj);
         }
         fx_emit_all(p->pos, p->vel);
+        proj_emit(p->pos);
         break;
     }
     }

@@ -10,11 +10,13 @@
 
 #include "vec.h"
 #include "r3d_mesh.h"
+#include "elite_weapons.h"
 #include <stdint.h>
 #include <stdbool.h>
 
 #define MAX_SHIPS 16
 #define PLAYER 0
+#define MAX_HARDPOINTS 3
 
 typedef enum { TEAM_PLAYER = 0, TEAM_HOSTILE = 1, TEAM_NEUTRAL = 2 } Team;
 typedef enum { AI_NONE = 0, AI_ATTACK, AI_BREAK } AiState;
@@ -38,7 +40,16 @@ typedef struct {
     float heat;           /* 0..100, >100 blocks weapons */
     float fire_cool;      /* s until next shot */
 
+    /* Hardpoints: fitted weapons + per-mount ammo; A fires the active
+     * mount, B cycles it. Slot counts/sizes come from the hull (full
+     * shipyard gating lands with Phase 7 outfitting). */
+    uint8_t weapons[MAX_HARDPOINTS];   /* WeaponType per mount */
+    int16_t ammo[MAX_HARDPOINTS];      /* -1 = energy weapon */
+    uint8_t n_weapons;
+    uint8_t active_w;
+
     uint8_t team;
+    uint8_t tier;         /* AI skill 0..4 (HARMLESS..ELITE) */
     uint8_t ai_state;
     float   ai_timer;
     int8_t  target;       /* entity index, -1 none */
@@ -52,5 +63,12 @@ int ship_spawn(const Mesh *mesh, Vec3 pos, uint8_t team);
 int ships_alive_hostile(void);
 /* Remove every NPC (anchor change: they live in the old local frame). */
 void ships_despawn_npcs(void);
+
+/* Fit a tier-appropriate loadout + stat scaling (AI "power"). */
+void ship_set_tier(int idx, int tier);
+/* Fit one mount. */
+void ship_fit_weapon(int idx, int mount, WeaponType w);
+
+extern const char *k_tier_names[5];
 
 #endif

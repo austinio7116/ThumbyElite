@@ -189,6 +189,8 @@ static void target_box(uint16_t *fb, int target) {
         COL_SHIELD);
     bar(fb, 100, 24, 22, t->hull / (t->hull_max > 0 ? t->hull_max : 1),
         COL_HULL);
+    craft_font_draw(fb, k_tier_names[t->tier > 4 ? 4 : t->tier], 98, 28,
+                    COL_TARGET);
 }
 
 void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
@@ -215,8 +217,21 @@ void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
     if (combat_killmarker() > 0.0f)
         craft_font_draw(fb, "KILL", 57, 74, COL_TARGET);
 
-    /* Left panel: speed / throttle / status lights. */
+    /* Active weapon + ammo, top-centre under the perf line. */
     char buf[24];
+    if (p->n_weapons > 0) {
+        const WeaponDef *w = &k_weapons[p->weapons[p->active_w]];
+        if (w->ammo_max)
+            snprintf(buf, sizeof buf, "%s %d", w->name,
+                     (int)p->ammo[p->active_w]);
+        else
+            snprintf(buf, sizeof buf, "%s", w->name);
+        craft_font_draw(fb, buf, 64 - craft_font_width(buf) / 2, 10,
+                        (w->ammo_max && p->ammo[p->active_w] <= 0)
+                            ? COL_HULL : COL_NUM);
+    }
+
+    /* Left panel: speed / throttle / status lights. */
     craft_font_draw(fb, "SP", 2, 102, COL_TEXT);
     bar(fb, 13, 105, 20, v3_len(p->vel) / (p->max_speed * 1.8f), COL_TEXT);
     craft_font_draw(fb, "TH", 2, 109, COL_NUM);

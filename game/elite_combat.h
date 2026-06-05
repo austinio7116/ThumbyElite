@@ -1,27 +1,30 @@
 /*
- * ThumbyElite — weapons, damage, death (Phase 3: hitscan pulse laser).
+ * ThumbyElite — weapons fire, damage, death.
  */
 #ifndef ELITE_COMBAT_H
 #define ELITE_COMBAT_H
 
 #include "elite_entity.h"
+#include "vec.h"
 #include <stdbool.h>
 
 void combat_init(void);
 void combat_tick(float dt);
 
-/* Fire shooter's laser along its nose (with optional aim error in
- * radians). Returns the entity hit, or -1. */
-int combat_fire_laser(int shooter, float spread);
+/* Fire the shooter's ACTIVE weapon along its nose (+- spread radians).
+ * target feeds homing seekers (-1 = none -> dumbfire). Returns the
+ * entity hit for hitscan weapons, else -1. */
+int combat_fire(int shooter, float spread, int target);
 
-/* Heat / cooldown housekeeping is in combat_tick; this just asks. */
 bool combat_can_fire(const Ship *s);
 
-/* Stats for HUD/scoring. */
-int combat_kills(void);
+/* Damage entry points (also used by the projectile pool). */
+void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos);
+void combat_explosion_damage(int shooter, Vec3 centre, float radius,
+                             float dmg);
 
-/* HUD hit feedback: seconds remaining on the hit / kill markers
- * (set when a PLAYER shot connects / destroys). */
+/* Stats / HUD feedback. */
+int   combat_kills(void);
 float combat_hitmarker(void);
 float combat_killmarker(void);
 
