@@ -40,11 +40,23 @@ static uint32_t rnd(void) {
     return s_rng;
 }
 
+void loot_seed(uint32_t seed) {
+    s_rng = seed * 2654435761u;
+    s_rng ^= s_rng >> 15;
+    if (!s_rng) s_rng = 0x10075EEDu;
+}
+
 void loot_init(void) {
     for (int i = 0; i < MAX_CANS; i++) s_cans[i].alive = false;
 }
 
 void loot_on_kill(Vec3 pos, Vec3 vel, int tier) {
+    /* Mix kill-site bits into the stream: without this the sequence is
+     * identical every boot and the first salvage is ALWAYS the same
+     * weapon (user-reported: eternal PULSE-M). */
+    union { float f; uint32_t u; } px = { pos.x }, pz = { pos.z };
+    s_rng ^= px.u * 0x9E3779B9u ^ (pz.u >> 3);
+    if (!s_rng) s_rng = 1;
     if ((rnd() % 100u) >= 60) return;          /* 60% drop chance */
     for (int i = 0; i < MAX_CANS; i++) {
         if (s_cans[i].alive) continue;

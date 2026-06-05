@@ -291,7 +291,10 @@ static void arrive_docked(const SaveMeta *meta) {
 static void start_new_game(uint32_t seed);
 
 void elite_game_init(uint32_t seed) {
-    s_rng = seed | 1u;
+    s_rng = seed * 2654435761u;
+    s_rng ^= s_rng >> 15;
+    if (!s_rng) s_rng = 1;
+    loot_seed(seed ^ 0x100Du);
     s_boot_seed = seed;
     galaxy_set_seed(seed);
     ships_init();
