@@ -297,6 +297,39 @@ void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
 
     if (info->target >= 0 && g_ships[info->target].alive)
         target_box(fb, info->target);
+    else if (info->loot_valid) {
+        /* Salvage lock: gold brackets + distance, same edge-arrow cue. */
+        Ship *p = &g_ships[PLAYER];
+        float sx, sy;
+        uint16_t d;
+        Vec3 rel = v3_sub(info->loot_pos, p->pos);
+        if (r3d_scene_project(rel, &sx, &sy, &d)) {
+            int bx = (int)sx, by = (int)sy;
+            uint16_t gc = RGB565C(255, 210, 70);
+            for (int k = 0; k < 3; k++) {
+                px(fb, bx - 5 + k, by - 5, gc); px(fb, bx + 5 - k, by - 5, gc);
+                px(fb, bx - 5 + k, by + 5, gc); px(fb, bx + 5 - k, by + 5, gc);
+                px(fb, bx - 5, by - 5 + k, gc); px(fb, bx - 5, by + 5 - k, gc);
+                px(fb, bx + 5, by - 5 + k, gc); px(fb, bx + 5, by + 5 - k, gc);
+            }
+            char buf[16];
+            snprintf(buf, sizeof buf, "%dM", (int)v3_len(rel));
+            craft_font_draw(fb, buf, bx - 8, by + 8, gc);
+        } else {
+            Vec3 v = m3_mul_v3_t(&p->basis, rel);
+            float ax = v.x, ay = -v.y;
+            float al = sqrtf(ax * ax + ay * ay);
+            if (al < 1e-4f) { ax = 1; ay = 0; al = 1; }
+            ax /= al; ay /= al;
+            int ex = 64 + (int)(ax * 52.0f);
+            int ey = 60 + (int)(ay * 44.0f);
+            uint16_t gc = RGB565C(255, 210, 70);
+            px(fb, ex, ey, gc);
+            px(fb, ex - (int)(ax * 2 + ay * 2), ey - (int)(ay * 2 - ax * 2), gc);
+            px(fb, ex - (int)(ax * 2 - ay * 2), ey - (int)(ay * 2 + ax * 2), gc);
+            px(fb, ex - (int)(ax * 3), ey - (int)(ay * 3), gc);
+        }
+    }
 
     if (info->show_perf) {
         snprintf(buf, sizeof buf, "%d.%dMS %dT",

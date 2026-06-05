@@ -140,7 +140,14 @@ void proj_tick(float dt) {
             continue;
         }
 
-        p->pos = v3_add(p->pos, seg);
+        {
+            Vec3 old = p->pos;
+            p->pos = v3_add(p->pos, seg);
+            if (p->type == WPN_GAUSS) {
+                float traveled = (w->range / w->speed - p->life) * w->speed;
+                fx_gauss_helix(old, p->pos, v3_norm(p->vel), traveled);
+            }
+        }
 
         /* Missile exhaust trail. */
         if (w->aoe > 0) {

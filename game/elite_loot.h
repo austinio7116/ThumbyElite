@@ -18,5 +18,7 @@ void loot_render(Vec3 cam_pos);
 /* Scanner support: fill out[] with live canister positions (and
  * whether each holds a component). Returns the count. */
 int loot_positions(Vec3 *out, int *is_component, int max);
+/* Nearest live canister (LB lock fallback). -1 if none. */
+int loot_nearest(Vec3 from, Vec3 *out_pos);
 
 #endif

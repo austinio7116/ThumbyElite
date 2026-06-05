@@ -11,6 +11,8 @@
 #include "elite_player.h"
 #include "r3d_scene.h"
 #include "r3d_fx.h"
+#include "elite_types.h"
+#include <math.h>
 #include "econ.h"
 #include "elite_audio.h"
 #include "meshes_gen.h"
@@ -143,7 +145,39 @@ void loot_render(Vec3 cam_pos) {
         m3_rotate_local(&obj.basis, 0, t * c->spin * 0.7f);
         obj.pos = v3_sub(c->pos, cam_pos);
         r3d_scene_add_object(&obj);
+
+        /* Pulsing beacon so drops read at combat ranges: bright core
+         * point + a short light-mast above, gold for cargo, cyan for
+         * components (matches the scanner blips). */
+        float pulse = 0.5f + 0.5f * sinf(t * 6.0f + (float)i * 1.7f);
+        uint16_t bc = c->is_component
+                          ? RGB565C(120, 230, 255)
+                          : RGB565C(255, 210, 70);
+        float sx, sy;
+        uint16_t d;
+        Vec3 rel = v3_sub(c->pos, cam_pos);
+        if (r3d_scene_project(rel, &sx, &sy, &d)) {
+            r3d_scene_add_point(sx, sy, d, bc, pulse > 0.5f ? 2 : 1);
+            float mx, my;
+            uint16_t md;
+            Vec3 mast = v3_add(rel, v3(0, 6.0f + 3.0f * pulse, 0));
+            if (r3d_scene_project(mast, &mx, &my, &md))
+                r3d_scene_add_line(sx, sy, d, mx, my, md, bc);
+        }
     }
+}
+
+/* Nearest live canister to a point (target lock), -1 if none. */
+int loot_nearest(Vec3 from, Vec3 *out_pos) {
+    int best = -1;
+    float bd = 1e30f;
+    for (int i = 0; i < MAX_CANS; i++) {
+        if (!s_cans[i].alive) continue;
+        float d = v3_len2(v3_sub(s_cans[i].pos, from));
+        if (d < bd) { bd = d; best = i; }
+    }
+    if (best >= 0 && out_pos) *out_pos = s_cans[best].pos;
+    return best;
 }
 
 int loot_positions(Vec3 *out, int *is_component, int max) {

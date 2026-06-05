@@ -145,6 +145,7 @@ typedef struct {
     float r_px;
     uint16_t d;            /* depth value at centre */
     int8_t planet;         /* index, or -1 for the sun */
+    float dist;            /* view z, metres — painter's ordering */
     float lx, ly, lz;      /* light dir in screen-normal space */
 } Impostor;
 
@@ -189,6 +190,7 @@ void r3d_planet_emit(Vec3 cam_pos_mm) {
         float dd = R3D_DEPTH_K / v.z;
         im->d = (dd >= 65535.0f) ? 65535u : (dd < 1.0f ? 1u : (uint16_t)dd);
         im->planet = (int8_t)i;
+        im->dist = v.z;
 
         if (i >= 0) {
             /* Light: from the body toward the star (system origin), in
@@ -199,6 +201,19 @@ void r3d_planet_emit(Vec3 cam_pos_mm) {
             im->ly = -lv.y;       /* screen y is down */
             im->lz = -lv.z;       /* screen-normal z is toward the camera */
         }
+    }
+
+    /* Painter's sort, far -> near: at Mm distances every disc quantises
+     * to the same u16 depth, so draw order IS the z-order (the sun was
+     * winning ties and floating in front of planets). */
+    for (int a = 1; a < s_nimp; a++) {
+        Impostor tmp = s_imp[a];
+        int b = a - 1;
+        while (b >= 0 && s_imp[b].dist < tmp.dist) {
+            s_imp[b + 1] = s_imp[b];
+            b--;
+        }
+        s_imp[b + 1] = tmp;
     }
 }
 
@@ -242,7 +257,7 @@ void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
                     float nx = (px - im->sx) * inv_r;
                     float rr = sqrtf(nx * nx + ny * ny);
                     if (rr <= 1.0f) {
-                        if (im->d <= dr[px]) continue;
+                        if (im->d < dr[px]) continue;   /* ties: painter order wins */
                         dr[px] = im->d;
                         /* Dithered white->star colour from 0.45 out. */
                         float f = (rr - 0.45f) * (1.0f / 0.55f);
@@ -304,7 +319,7 @@ void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
             int tv = (int)((ny * 0.5f + 0.5f) * (TEX_N - 1));
             const uint8_t *trow = &art->tex[tv * TEX_N];
             for (int px = x0; px <= x1; px++) {
-                if (im->d <= dr[px]) continue;
+                if (im->d < dr[px]) continue;   /* ties: painter order wins */
                 float nx = (px - im->sx) * inv_r;
                 float nz2 = 1.0f - nx * nx - ny * ny;
                 if (nz2 < 0.0f) nz2 = 0.0f;

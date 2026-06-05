@@ -71,6 +71,7 @@ static float   s_hyper_t;
 static uint32_t s_hyper_seed;
 
 static int   s_target = -1;      /* combat lock */
+static int   s_loot_target = -1; /* canister lock (no hostiles about) */
 static uint32_t s_boot_seed;
 static int   s_title_cursor;
 static char  s_scoop_toast[28];
@@ -221,6 +222,7 @@ static void arrive_in_system(SysAddr addr) {
 /* --- target cycling (unchanged from Phase 3) ----------------------------*/
 static void cycle_target(void) {
     Vec3 pp = g_ships[PLAYER].pos;
+    s_loot_target = -1;
     int best = -1, first = -1;
     float cur_d = -1.0f, best_d = 1e30f, first_d = 1e30f;
     if (s_target >= 0 && g_ships[s_target].alive)
@@ -232,6 +234,9 @@ static void cycle_target(void) {
         if (cur_d >= 0.0f && d > cur_d && d < best_d) { best_d = d; best = i; }
     }
     s_target = (best >= 0) ? best : first;
+    /* Nothing hostile to lock: lock the nearest salvage instead. */
+    if (s_target < 0)
+        s_loot_target = loot_nearest(pp, NULL);
 }
 
 /* Resume docked at a saved station. */
@@ -960,8 +965,14 @@ void elite_game_draw_overlay(uint16_t *fb) {
     }
 
     if (p->alive) {
+        Vec3 lpos = v3(0, 0, 0);
+        if (s_loot_target >= 0 &&
+            loot_nearest(g_ships[PLAYER].pos, &lpos) < 0)
+            s_loot_target = -1;          /* scooped/expired */
         HudInfo info = {
             .target = s_target,
+            .loot_valid = (s_target < 0 && s_loot_target >= 0),
+            .loot_pos = lpos,
             .kills = combat_kills(),
             .fuel01 = g_player.fuel / g_player.fuel_max,
             .render_ms = s_frame_ms,

@@ -10,6 +10,8 @@
 
 typedef struct {
     int   target;        /* locked entity index, -1 none */
+    int   loot_valid;    /* salvage lock (when no hostiles) */
+    Vec3  loot_pos;      /* locked canister, local metres */
     int   kills;
     float fuel01;        /* fuel fraction for the gauge */
     float render_ms;     /* pure render time (perf readout) */
