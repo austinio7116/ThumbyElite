@@ -183,11 +183,14 @@ static void ring_core(float R, float tube, uint16_t mtl, uint16_t mtl2,
 
     /* Hub + spokes. */
     drum(R * 0.32f, tube * 1.4f, mtl, face_col);
+    /* Axis-aligned spokes: at 45 deg the |cos|x|sin| extents both went
+     * large and each spoke became a square plate over the hole (user
+     * report). On-axis they collapse to thin radial arms. */
     for (int k = 0; k < 4; k++) {
-        float a = (float)k * 1.5707963f + 0.7854f;
+        float a = (float)k * 1.5707963f;
         float mx = cosf(a) * R * 0.62f, my = sinf(a) * R * 0.62f;
-        box(mx, my, 0, fabsf(cosf(a)) * R * 0.34f + tube * 0.4f,
-            fabsf(sinf(a)) * R * 0.34f + tube * 0.4f, tube * 0.35f,
+        box(mx, my, 0, fabsf(cosf(a)) * R * 0.34f + tube * 0.35f,
+            fabsf(sinf(a)) * R * 0.34f + tube * 0.35f, tube * 0.30f,
             mtl2, NULL);
     }
 }
