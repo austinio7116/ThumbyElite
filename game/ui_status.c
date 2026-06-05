@@ -98,7 +98,12 @@ static void build_rows(void) {
             row(RK_TEXT, 0, COL_WARN, -1, "%s ----",
                 item_name(WPN_COUNT + i));
     }
-    row(RK_TEXT, 0, COL_HDR, -1, "RACK:");
+    {
+        int used = 0;
+        for (int i = 0; i < MAX_SALVAGE; i++)
+            if (g_player.salvage[i].in_use) used++;
+        row(RK_TEXT, 0, COL_HDR, -1, "RACK %d/%d:", used, player_rack_cap());
+    }
     int any = 0;
     for (int i = 0; i < MAX_SALVAGE; i++) {
         const WeaponInst *m = &g_player.salvage[i];

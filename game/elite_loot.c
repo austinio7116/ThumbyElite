@@ -100,9 +100,7 @@ const char *loot_tick(float dt) {
 
         if (c->is_component) {
             /* Into the salvage rack (takes a cargo slot). */
-            int slot = -1;
-            for (int s = 0; s < MAX_SALVAGE; s++)
-                if (!g_player.salvage[s].in_use) { slot = s; break; }
+            int slot = player_free_rack_slot();
             if (slot < 0 || player_cargo_total() >= player_cargo_cap()) {
                 snprintf(s_toast, sizeof s_toast, "HOLD FULL");
                 toast = s_toast;

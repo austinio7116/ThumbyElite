@@ -89,6 +89,19 @@ static const struct {
     /* B blue-white */ { 0xA61Fu /*160,195,255*/, 1900.0f, 8.0f  },
 };
 
+int galaxy_star_class(SysAddr a) {
+    /* Mirrors the first roll in galaxy_generate. */
+    SRng r = { galaxy_system_seed(a) };
+    int sc = srng_i(&r, 0, 99);
+    return (sc < 40) ? STAR_M : (sc < 62) ? STAR_K
+         : (sc < 78) ? STAR_G : (sc < 88) ? STAR_F
+         : (sc < 96) ? STAR_A : STAR_B;
+}
+
+uint16_t galaxy_star_color(SysAddr a) {
+    return star_table[galaxy_star_class(a)].color;
+}
+
 void galaxy_generate(SysAddr a, SystemInfo *out) {
     memset(out, 0, sizeof *out);
     out->addr = a;

@@ -160,8 +160,54 @@ MapAction map_galaxy_tick(const CraftRawButtons *btn, float dt,
     return act;
 }
 
+/* Cheap 2D value-noise for the chart's nebula wash. */
+static uint32_t nhash(int x, int y) {
+    uint32_t h = (uint32_t)x * 374761393u + (uint32_t)y * 668265263u;
+    h = (h ^ (h >> 13)) * 1274126177u;
+    return h ^ (h >> 16);
+}
+static float nnoise(float x, float y) {
+    int xi = (int)x, yi = (int)y;
+    if (x < 0) xi--;
+    if (y < 0) yi--;
+    float fx = x - xi, fy = y - yi;
+    float sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+    float v00 = (nhash(xi, yi) & 0xFFFF) * (1.0f / 65535.0f);
+    float v10 = (nhash(xi + 1, yi) & 0xFFFF) * (1.0f / 65535.0f);
+    float v01 = (nhash(xi, yi + 1) & 0xFFFF) * (1.0f / 65535.0f);
+    float v11 = (nhash(xi + 1, yi + 1) & 0xFFFF) * (1.0f / 65535.0f);
+    float a = v00 + (v10 - v00) * sx, b = v01 + (v11 - v01) * sx;
+    return a + (b - a) * sy;
+}
+
 void map_galaxy_draw(uint16_t *fb) {
     fill(fb, COL_BG);
+
+    /* Nebula wash: two-octave noise in galaxy space (pans with the
+     * view), blue-violet with a warmer second field. 4x4 blocks. */
+    {
+        float wx0 = s_cx_ly - 64.0f / GMAP_SCALE;
+        float wy0 = s_cy_ly - 64.0f / GMAP_SCALE;
+        for (int by = 10; by < 118; by += 4) {
+            for (int bx = 0; bx < 128; bx += 4) {
+                float gx = wx0 + bx / GMAP_SCALE, gy = wy0 + by / GMAP_SCALE;
+                float n = nnoise(gx * 0.055f, gy * 0.055f) * 0.7f +
+                          nnoise(gx * 0.13f + 31.7f, gy * 0.13f) * 0.3f;
+                if (n < 0.52f) continue;
+                float k = (n - 0.52f) * 2.1f;
+                if (k > 1.0f) k = 1.0f;
+                float w = nnoise(gx * 0.08f + 77.0f, gy * 0.08f - 19.0f);
+                int r = (int)(k * (w > 0.55f ? 13 : 6));
+                int g = (int)(k * 5);
+                int b = (int)(k * (w > 0.55f ? 12 : 18));
+                uint16_t c = (uint16_t)(((r & 31) << 11) | ((g & 63) << 5) |
+                                        (b & 31));
+                for (int yy = by; yy < by + 4 && yy < 118; yy++)
+                    for (int xx = bx; xx < bx + 4 && xx < 128; xx++)
+                        fb[yy * ELITE_FB_W + xx] = c;
+            }
+        }
+    }
 
     /* Sector grid lines. */
     float x0_ly = s_cx_ly - 64.0f / GMAP_SCALE;
@@ -195,6 +241,8 @@ void map_galaxy_draw(uint16_t *fb) {
     int sx1 = (int)floorf((x0_ly + 128 / GMAP_SCALE) / SECTOR_LY) + 1;
     int sy0 = (int)floorf(y0_ly / SECTOR_LY) - 1;
     int sy1 = (int)floorf((y0_ly + 128 / GMAP_SCALE) / SECTOR_LY) + 1;
+    static uint8_t s_twinkle;
+    s_twinkle++;
     for (int sy = sy0; sy <= sy1; sy++)
         for (int sx = sx0; sx <= sx1; sx++) {
             int n = galaxy_sector_stars(sx, sy);
@@ -204,7 +252,23 @@ void map_galaxy_draw(uint16_t *fb) {
                 galaxy_star_pos(a, &x, &y);
                 int dx = (int)((x - x0_ly) * GMAP_SCALE);
                 int dy = (int)((y - y0_ly) * GMAP_SCALE);
-                px(fb, dx, dy, COL_STAR);
+                int cls = galaxy_star_class(a);
+                uint16_t sc2 = galaxy_star_color(a);
+                /* Dim halo for big stars, twinkle phase per star. */
+                uint32_t tw = nhash(sx * 31 + i, sy * 17);
+                int bright = ((s_twinkle + (tw & 31)) & 31) < 28;
+                uint16_t dimc = (uint16_t)((sc2 >> 1) & 0x7BEF);
+                if (cls >= STAR_F) {              /* hot stars glow */
+                    px(fb, dx - 1, dy, dimc);
+                    px(fb, dx + 1, dy, dimc);
+                    px(fb, dx, dy - 1, dimc);
+                    px(fb, dx, dy + 1, dimc);
+                }
+                if (cls >= STAR_A) {              /* giants: bigger core */
+                    px(fb, dx + 1, dy + 1, dimc);
+                    px(fb, dx - 1, dy - 1, dimc);
+                }
+                px(fb, dx, dy, bright ? sc2 : dimc);
                 if (sysaddr_eq(a, s_cur_sys)) {     /* our marker */
                     px(fb, dx - 2, dy, COL_SELF);
                     px(fb, dx + 2, dy, COL_SELF);
@@ -214,7 +278,7 @@ void map_galaxy_draw(uint16_t *fb) {
             }
         }
 
-    /* Highlight + cursor. */
+    /* Highlight + cursor + floating name tag. */
     if (s_hl_valid) {
         float hx, hy;
         galaxy_star_pos(s_hl, &hx, &hy);
@@ -226,6 +290,14 @@ void map_galaxy_draw(uint16_t *fb) {
             px(fb, dx - k, dy - k, c); px(fb, dx + k, dy - k, c);
             px(fb, dx - k, dy + k, c); px(fb, dx + k, dy + k, c);
         }
+        char name[14];
+        galaxy_system_name(s_hl, name);
+        int tw2 = craft_font_width(name);
+        int lx = dx + 5;
+        if (lx + tw2 > 126) lx = dx - 5 - tw2;
+        int ly = dy - 7;
+        if (ly < 11) ly = dy + 5;
+        craft_font_draw(fb, name, lx, ly, c);
     }
 
     /* Header + footer info. */

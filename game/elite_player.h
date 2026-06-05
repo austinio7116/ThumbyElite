@@ -28,7 +28,7 @@ typedef struct {
     uint8_t pad[3];
 } WeaponInst;
 
-#define MAX_SALVAGE 4
+#define MAX_SALVAGE 8   /* array size; per-hull limit = HullDef.rack */
 
 typedef struct {
     int32_t credits;
@@ -56,6 +56,8 @@ extern PlayerState g_player;
 void player_init(void);
 int  player_cargo_total(void);
 int  player_cargo_cap(void);
+int  player_rack_cap(void);          /* hull-dependent rack slots */
+int  player_free_rack_slot(void);    /* -1 if rack full */
 
 /* Quality multipliers. */
 float quality_dmg_mult(int q);       /* 0.8 .. 1.35 */

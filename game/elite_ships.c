@@ -5,17 +5,17 @@
 #include "meshes_gen.h"
 
 const HullDef k_hulls[N_HULLS] = {
-    /* name        mesh              price  ns slots      cargo sT hT  speed accel turn  hull shld */
-    { "SKIFF",     &mesh_shuttle,      900, 1, {1, 0, 0},   8,  1, 1,   85,  40, 1.5f,   70,  50 },
-    { "DART",      &mesh_courier,     3200, 1, {2, 0, 0},   3,  1, 1,  150,  85, 2.3f,   60,  55 },
-    { "SPARROW",   &mesh_fighter,     8500, 2, {2, 1, 0},  10,  2, 2,  120,  60, 2.1f,  100,  80 },
-    { "VIPER",     &mesh_viper,      16000, 2, {2, 2, 0},   6,  2, 2,  135,  70, 2.4f,  110,  95 },
-    { "REAVER",    &mesh_cutter,     24000, 3, {2, 2, 1},  16,  2, 3,  125,  62, 2.2f,  130, 100 },
-    { "MAULER",    &mesh_mauler,     42000, 3, {3, 2, 2},  12,  3, 3,  110,  55, 1.9f,  170, 140 },
-    { "PACK MULE", &mesh_lighthauler, 7000, 1, {1, 0, 0},  32,  1, 2,   80,  35, 1.2f,  110,  70 },
-    { "MULE",      &mesh_freighter,  21000, 2, {2, 1, 0},  64,  2, 2,   70,  30, 1.0f,  150, 100 },
-    { "ATLAS",     &mesh_hauler,     58000, 2, {2, 2, 0}, 140,  2, 3,   60,  25, 0.8f,  210, 130 },
-    { "BASILISK",  &mesh_dread,     130000, 3, {3, 3, 2},  40,  3, 3,   95,  45, 1.4f,  280, 220 },
+    /* name        mesh              price  ns slots      cargo sT hT  speed accel turn  hull shld  jump */
+    { "SKIFF",     &mesh_shuttle,      900, 1, {1, 0, 0},   8,  1, 1,   85,  40, 1.5f,   70,  50,  7.0f, 2 },
+    { "DART",      &mesh_courier,     3200, 1, {2, 0, 0},   3,  1, 1,  150,  85, 2.3f,   60,  55, 12.0f, 1 },
+    { "SPARROW",   &mesh_fighter,     8500, 2, {2, 1, 0},  10,  2, 2,  120,  60, 2.1f,  100,  80,  8.0f, 3 },
+    { "VIPER",     &mesh_viper,      16000, 2, {2, 2, 0},   6,  2, 2,  135,  70, 2.4f,  110,  95,  7.5f, 2 },
+    { "REAVER",    &mesh_cutter,     24000, 3, {2, 2, 1},  16,  2, 3,  125,  62, 2.2f,  130, 100,  9.0f, 5 },
+    { "MAULER",    &mesh_mauler,     42000, 3, {3, 2, 2},  12,  3, 3,  110,  55, 1.9f,  170, 140,  7.0f, 4 },
+    { "PACK MULE", &mesh_lighthauler, 7000, 1, {1, 0, 0},  32,  1, 2,   80,  35, 1.2f,  110,  70,  9.5f, 4 },
+    { "MULE",      &mesh_freighter,  21000, 2, {2, 1, 0},  64,  2, 2,   70,  30, 1.0f,  150, 100,  8.5f, 6 },
+    { "ATLAS",     &mesh_hauler,     58000, 2, {2, 2, 0}, 140,  2, 3,   60,  25, 0.8f,  210, 130,  7.5f, 8 },
+    { "BASILISK",  &mesh_dread,     130000, 3, {3, 3, 2},  40,  3, 3,   95,  45, 1.4f,  280, 220,  9.5f, 6 },
 };
 
 const float k_tier_mult[4] = { 1.0f, 1.3f, 1.6f, 2.0f };

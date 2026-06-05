@@ -94,6 +94,10 @@ void galaxy_system_name(SysAddr a, char out[14]);
 /* Full deterministic expansion of one system. */
 void galaxy_generate(SysAddr a, SystemInfo *out);
 
+/* Cheap star class/colour (chart rendering — no full expansion). */
+int galaxy_star_class(SysAddr a);          /* StarClass */
+uint16_t galaxy_star_color(SysAddr a);
+
 bool sysaddr_eq(SysAddr a, SysAddr b);
 
 #endif

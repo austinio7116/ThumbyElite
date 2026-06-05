@@ -640,7 +640,8 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             s_state = ST_FLIGHT;
         }
         else if (a_edge && s_pause_cursor == 1) {
-            map_galaxy_open(s_addr, g_player.fuel, JUMP_RANGE);
+            map_galaxy_open(s_addr, g_player.fuel,
+                            k_hulls[g_player.hull_id].jump_range);
             s_state = ST_GALAXY_MAP;
         } else if (a_edge && s_pause_cursor == 2) {
             map_system_open(cam_pos_mm());

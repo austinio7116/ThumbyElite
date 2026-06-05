@@ -197,7 +197,7 @@ static void shipyard_buy(int offer) {
                     k_weapons[m->type].size <= h->slot_size[i];
         if (fits) continue;
         int sl = -1;
-        for (int t = 0; t < MAX_SALVAGE; t++)
+        for (int t = 0; t < h->rack && t < MAX_SALVAGE; t++)
             if (!g_player.salvage[t].in_use) { sl = t; break; }
         if (sl >= 0 && player_cargo_total() < h->cargo) {
             g_player.salvage[sl] = *m;
@@ -358,9 +358,7 @@ static void outfit_action_b(int row) {
     case ROW_EQUIP: {
         WeaponInst *e = equip_slot(r->index);
         if (!e->in_use) return;
-        int sl = -1;
-        for (int t = 0; t < MAX_SALVAGE; t++)
-            if (!g_player.salvage[t].in_use) { sl = t; break; }
+        int sl = player_free_rack_slot();
         if (sl < 0 || player_cargo_total() >= player_cargo_cap()) {
             toast("NO RACK SPACE");
             return;
@@ -375,9 +373,7 @@ static void outfit_action_b(int row) {
         /* Unmount into the salvage rack. */
         WeaponInst *m = &g_player.mounts[r->index];
         if (!m->in_use) return;
-        int sl = -1;
-        for (int t = 0; t < MAX_SALVAGE; t++)
-            if (!g_player.salvage[t].in_use) { sl = t; break; }
+        int sl = player_free_rack_slot();
         if (sl < 0 || player_cargo_total() >= player_cargo_cap()) {
             toast("NO RACK SPACE");
             return;

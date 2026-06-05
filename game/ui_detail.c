@@ -153,6 +153,8 @@ void detail_draw_hull(uint16_t *fb, int hull_id, int cost,
     HSTAT("TRN", "%d.%d", (int)h->turn_rate,
           ((int)(h->turn_rate * 10)) % 10);
     HSTAT("CRG", "%dT", h->cargo);
+    HSTAT("JMP", "%d.%dLY", (int)h->jump_range,
+          ((int)(h->jump_range * 10)) % 10);
     HSTAT("HUL", "%d", (int)h->hull_base);
     HSTAT("SHD", "%d", (int)h->shield_base);
     HSTAT("TIER", "S%d H%d", h->max_shield_tier, h->max_hull_tier);

@@ -25,6 +25,8 @@ typedef struct {
     uint8_t max_hull_tier;          /* 0..3 */
     float max_speed, accel, turn_rate;
     float hull_base, shield_base;
+    float jump_range;               /* light-years per hop */
+    uint8_t rack;                   /* salvage workbench slots (<=8) */
 } HullDef;
 
 extern const HullDef k_hulls[N_HULLS];   /* class STAT templates; the

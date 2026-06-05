@@ -40,6 +40,15 @@ int player_cargo_total(void) {
 
 int player_cargo_cap(void) { return k_hulls[g_player.hull_id].cargo; }
 
+int player_rack_cap(void) { return k_hulls[g_player.hull_id].rack; }
+
+int player_free_rack_slot(void) {
+    int cap = player_rack_cap();
+    for (int i = 0; i < cap && i < MAX_SALVAGE; i++)
+        if (!g_player.salvage[i].in_use) return i;
+    return -1;
+}
+
 float quality_dmg_mult(int q) { return k_qual_mult[q > 4 ? 4 : q]; }
 
 int weapon_price(int type, int q) {
