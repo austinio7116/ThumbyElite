@@ -559,8 +559,8 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
 
     case SCR_SHIPYARD:
         if (s_detail) {
-            if (rb_edge && s_cursor < YARD_OFFERS - 1) s_cursor++;
-            if (lb_edge && s_cursor > 0) s_cursor--;
+            if (rb_edge) s_cursor = (s_cursor + 1) % YARD_OFFERS;
+            if (lb_edge) s_cursor = (s_cursor + YARD_OFFERS - 1) % YARD_OFFERS;
             if (a_edge) { shipyard_buy(s_cursor); s_detail = 0; }
             if (b_edge || back) s_detail = 0;
             break;
@@ -575,16 +575,35 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
     case SCR_OUTFIT:
         outfit_build_rows();
         if (s_detail) {
-            if (rb_edge) {
+            /* LB/RB loop through every row WITH a sheet, wrapping at
+             * the ends (user req) — headers, empty mounts and bare
+             * equipment slots are skipped, never exit the view. */
+            if (rb_edge || lb_edge) {
+                int dir = rb_edge ? 1 : -1;
                 int n = s_cursor;
-                do { n++; } while (n < s_n_rows &&
-                                   s_rows[n].kind == ROW_HDR);
-                if (n < s_n_rows) s_cursor = n;
-            }
-            if (lb_edge) {
-                int n = s_cursor;
-                do { n--; } while (n > 0 && s_rows[n].kind == ROW_HDR);
-                if (n >= 0 && s_rows[n].kind != ROW_HDR) s_cursor = n;
+                for (int tries = 0; tries < s_n_rows; tries++) {
+                    n = (n + dir + s_n_rows) % s_n_rows;
+                    const OutfitRow *rr = &s_rows[n];
+                    bool ok = false;
+                    switch (rr->kind) {
+                    case ROW_MOUNT:
+                        ok = g_player.mounts[rr->index].in_use;
+                        break;
+                    case ROW_EQUIP: {
+                        const WeaponInst *e = equip_slot(rr->index);
+                        ok = e->in_use;
+                        break;
+                    }
+                    case ROW_SALV:
+                    case ROW_SHOP:
+                    case ROW_EQSHOP:
+                        ok = true;
+                        break;
+                    default:
+                        break;
+                    }
+                    if (ok) { s_cursor = n; break; }
+                }
             }
             if (a_edge) { outfit_action_a(s_cursor); s_detail = 0; }
             if (b_edge || back) s_detail = 0;
@@ -1061,7 +1080,29 @@ void station_draw(uint16_t *fb) {
         int price = -1;
         const char *plabel = "COST";
         const char *foot = "LB/RB:NEXT A:ACT B:BACK";
-        if (r->kind == ROW_MOUNT && g_player.mounts[r->index].in_use) {
+        if (r->kind == ROW_EQUIP) {
+            const WeaponInst *e = equip_slot(r->index);
+            if (e->in_use) {
+                wi = e;
+                if (e->integrity < 100) {
+                    price = (int)((100 - e->integrity) *
+                                  equip_price(e->type, e->tier, e->quality) /
+                                  100 * 0.6f * skill_repair_mult()) + 1;
+                    plabel = "REPAIR";
+                    foot = "LB/RB:NEXT A:RPR B:BACK";
+                } else foot = "LB/RB:NEXT B:BACK";
+            }
+        } else if (r->kind == ROW_EQSHOP) {
+            const SystemInfo *sie = system_info();
+            tmp = (WeaponInst){ (uint8_t)(WPN_COUNT + r->index), Q_STANDARD,
+                                100, 1, r->tier, {0} };
+            wi = &tmp;
+            price = (int)(equip_price(WPN_COUNT + r->index, r->tier,
+                                      Q_STANDARD) *
+                          econ_weapon_mult(sie->stations[s_station].econ) *
+                          skill_price_mult());
+            foot = "LB/RB:NEXT A:BUY B:BACK";
+        } else if (r->kind == ROW_MOUNT && g_player.mounts[r->index].in_use) {
             wi = &g_player.mounts[r->index];
             if (wi->integrity < 100) {
                 price = repair_cost(wi);
