@@ -197,9 +197,11 @@ static void target_box(uint16_t *fb, int target) {
         hline(fb, x1 - l, x1, y1, COL_TARGET);
         vline(fb, x1, y1 - l, y1, COL_TARGET);
     } else {
+        /* Edge arrow = the way to TURN: the view-space lateral direction
+         * already encodes the shortest rotation, in front OR behind —
+         * no rear-hemisphere flip (that sent players the long way). */
         Vec3 v = m3_mul_v3_t(&p->basis, v3_sub(t->pos, p->pos));
         float ax = v.x, ay = -v.y;
-        if (v.z < 0) { ax = -ax; ay = -ay; }
         float al = sqrtf(ax * ax + ay * ay);
         if (al < 1e-4f) { ax = 1; ay = 0; al = 1; }
         ax /= al; ay /= al;
@@ -332,7 +334,6 @@ void ui_hud_draw_sc(uint16_t *fb, const HudScInfo *info) {
         } else {
             Vec3 v = m3_mul_v3_t(&p->basis, rel_m);
             float ax = v.x, ay = -v.y;
-            if (v.z < 0) { ax = -ax; ay = -ay; }
             float al = sqrtf(ax * ax + ay * ay);
             if (al < 1e-4f) { ax = 1; ay = 0; al = 1; }
             ax /= al; ay /= al;
