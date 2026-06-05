@@ -854,7 +854,35 @@ void elite_game_render_begin(void) {
         uint32_t pv_seed;
         int pv_cls;
         int pv = station_preview2(&pv_seed, &pv_cls);
-        if (pv != 0) {
+        if (pv == 3) {
+            /* Hangar bay: your ship parked over a deck grid, dimmed by
+             * the status sheet into a backdrop (user req). */
+            R3DObject obj;
+            obj.mesh = hull_mesh(g_player.hull_seed, g_player.hull_id);
+            obj.basis = m3_identity();
+            m3_rotate_local(&obj.basis, 1, s_time * 0.25f);
+            m3_rotate_local(&obj.basis, 0, 0.22f);
+            float dist = obj.mesh->bound_r * 2.4f;
+            obj.pos = v3(0, 0, dist);
+            r3d_scene_add_object(&obj);
+            /* Deck grid under the ship. */
+            float fy = -obj.mesh->bound_r * 1.05f;
+            uint16_t gc = RGB565C(50, 70, 100);
+            for (int k = -2; k <= 2; k++) {
+                float sx0, sy0, sx1, sy1;
+                uint16_t d0, d1;
+                Vec3 a = v3(k * dist * 0.30f, fy, dist * 0.45f);
+                Vec3 b = v3(k * dist * 0.30f, fy, dist * 1.8f);
+                if (r3d_scene_project(a, &sx0, &sy0, &d0) &&
+                    r3d_scene_project(b, &sx1, &sy1, &d1))
+                    r3d_scene_add_line(sx0, sy0, 1, sx1, sy1, 1, gc);
+                Vec3 c2 = v3(-dist * 0.62f, fy, dist * (0.6f + 0.3f * (k + 2)));
+                Vec3 e2 = v3(dist * 0.62f, fy, dist * (0.6f + 0.3f * (k + 2)));
+                if (r3d_scene_project(c2, &sx0, &sy0, &d0) &&
+                    r3d_scene_project(e2, &sx1, &sy1, &d1))
+                    r3d_scene_add_line(sx0, sy0, 1, sx1, sy1, 1, gc);
+            }
+        } else if (pv != 0) {
             const Mesh *m = (pv == 1)
                 ? (s_station_mesh ? s_station_mesh : &mesh_station)
                 : hull_mesh(pv_seed, pv_cls);

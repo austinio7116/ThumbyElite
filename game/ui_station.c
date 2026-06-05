@@ -116,6 +116,7 @@ int station_preview2(uint32_t *mesh_seed, int *class_hint) {
         *class_hint = s_yard[s_cursor].cls;
         return 2;
     }
+    if (s_screen == SCR_STATUS) return 3;   /* own ship in the bay */
     return 0;
 }
 
@@ -1066,6 +1067,13 @@ static void draw_bar(uint16_t *fb) {
 }
 
 void station_draw(uint16_t *fb) {
+    /* Status renders over the live hangar-bay scene: route it BEFORE
+     * the fill chain below (which was wiping the 3D backdrop). */
+    if (s_screen == SCR_STATUS) {
+        status_draw(fb);
+        return;
+    }
+
     /* Detail sheets replace the list view. */
     if (s_detail && s_screen == SCR_SHIPYARD) {
         int cls = s_yard[s_cursor].cls;

@@ -377,7 +377,8 @@ int main(int argc, char **argv) {
                g_player.credits);
         render_frame(); dump_ppm("/tmp/shop_2_upgrade.ppm");
         TAPS(menu, 3);
-        TAPS(down, 2); TAPS(a, 4);                    /* STATUS */
+        TAPS(down, 2); TAPS(down, 2); TAPS(down, 2);  /* -> STATUS (idx 5) */
+        TAPS(a, 4);
         render_frame(); dump_ppm("/tmp/shop_3_status.ppm");
         return 0;
         #undef TAPS
