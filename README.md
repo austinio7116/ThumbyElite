@@ -86,7 +86,12 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
   1.40, 1.65}) — HIGH-TECH +40% cap, PROTOTYPE +65%; quality upgrades
   were +12% and read as worthless
 - Galaxy chart: hold-to-scroll autorepeat snapping (star to star, same
-  cadence as the lists) replaces the smooth pan
+  cadence as the lists) replaces the smooth pan; the system map's POI
+  list scrolls on hold too
+- The galaxy is 40% closer together: SECTOR_LY 8→4.8 with the chart
+  pinned pixel-identical — same map, smaller LY numbers, range circles
+  sweep much wider, typically 2–3 systems inside a starter jump (was
+  1–2). Delivery pay per LY rebalanced so mission income is unchanged
 
 **QoL & fixes**
 - SETTINGS submenu in the pause menu: INVERT Y + SHOW FPS (smoothed

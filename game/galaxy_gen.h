@@ -14,7 +14,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define SECTOR_LY 8.0f          /* sector edge, light-years */
+#define SECTOR_LY 4.8f          /* sector edge, light-years — was 8.0;
+                                    shrunk 40% so jump ranges cover more
+                                    systems (user req: wider exploring).
+                                    The chart stays pixel-identical via
+                                    GMAP_SCALE; only the LY numbers and
+                                    range circles change meaning. */
 #define GAL_MAX_PLANETS 7
 #define GAL_MAX_STATIONS 3
 

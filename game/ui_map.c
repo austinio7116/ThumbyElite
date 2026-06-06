@@ -56,7 +56,10 @@ static void edges_reset(void) {
 #define JUST(btn, field) ((btn)->field && !s_edge.prev.field)
 
 /* ====================== GALAXY MAP ===================================== */
-#define GMAP_SCALE 4.0f          /* px per ly */
+#define GMAP_SCALE (32.0f / SECTOR_LY)  /* px per ly — pinned to px per
+                                            SECTOR so the chart layout
+                                            never moves when SECTOR_LY
+                                            is retuned */
 
 static SysAddr s_cur_sys;
 static float s_fuel, s_range;
@@ -112,10 +115,10 @@ static void gmap_highlight(void) {
 
 /* Snap the cursor to the nearest star in a +-60deg wedge along (dx,dy). */
 static void gmap_snap(float dx, float dy) {
-    int sx0 = (int)floorf((s_cx_ly - 30) / SECTOR_LY);
-    int sx1 = (int)floorf((s_cx_ly + 30) / SECTOR_LY);
-    int sy0 = (int)floorf((s_cy_ly - 30) / SECTOR_LY);
-    int sy1 = (int)floorf((s_cy_ly + 30) / SECTOR_LY);
+    int sx0 = (int)floorf((s_cx_ly - 18) / SECTOR_LY);
+    int sx1 = (int)floorf((s_cx_ly + 18) / SECTOR_LY);
+    int sy0 = (int)floorf((s_cy_ly - 18) / SECTOR_LY);
+    int sy1 = (int)floorf((s_cy_ly + 18) / SECTOR_LY);
     float best = 1e9f, bx = s_cx_ly, by = s_cy_ly;
     for (int sy = sy0; sy <= sy1; sy++)
         for (int sx = sx0; sx <= sx1; sx++) {

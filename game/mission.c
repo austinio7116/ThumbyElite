@@ -93,7 +93,7 @@ void mission_make_offers(const SystemInfo *si, int station,
             galaxy_star_pos(si->addr, &px, &py);
             float dist = sqrtf((dx - px) * (dx - px) + (dy - py) * (dy - py));
             m->reward = (int32_t)((120 + m->count * k_goods[m->good].base / 2 +
-                                   (int)(dist * 30)) * rep_bonus);
+                                   (int)(dist * 50)) * rep_bonus);
             snprintf(m->label, sizeof m->label, "%dX %s>%s",
                      m->count, k_goods[m->good].name, dname);
         } else if (roll < 75) {
