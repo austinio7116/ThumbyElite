@@ -1364,6 +1364,16 @@ int main(int argc, char **argv) {
         b = none; b.a = true; elite_game_tick(&b, 1.0f / 30.0f);   /* galaxy map */
         for (int k = 0; k < 4; k++) elite_game_tick(&none, 1.0f / 30.0f);
         render_frame(); dump_ppm("/tmp/jump_0_map.ppm");
+        if (getenv("ELITE_LAYERSHOT")) {
+            b = none; b.rb = true; elite_game_tick(&b, 1.0f / 30.0f);
+            b = none; elite_game_tick(&b, 1.0f / 30.0f);
+            render_frame(); dump_ppm("/tmp/chart_threat.ppm");
+            b = none; b.rb = true; elite_game_tick(&b, 1.0f / 30.0f);
+            b = none; elite_game_tick(&b, 1.0f / 30.0f);
+            render_frame(); dump_ppm("/tmp/chart_faction.ppm");
+            b = none; b.rb = true; elite_game_tick(&b, 1.0f / 30.0f);
+            b = none; elite_game_tick(&b, 1.0f / 30.0f);
+        }
         /* Deterministic aim: find the nearest in-range neighbour and tap
          * its dominant axis (the snap wedge is +-60deg, so one tap lands
          * on it), then engage. */

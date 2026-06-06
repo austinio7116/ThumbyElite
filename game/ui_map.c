@@ -12,6 +12,35 @@
 #include "ui_map.h"
 #include "elite_game.h"
 #include "mission.h"
+
+/* --- chart data layers (RB cycles SPECTRAL / THREAT / FACTION) -------- */
+static int s_chart_layer;
+
+/* Per-star gov/threat/faction, direct-mapped cache so panning never
+ * regenerates a system twice (full gen is cheap but not 40x/frame). */
+typedef struct {
+    SysAddr a;
+    int8_t gov, threat, fac;
+    uint8_t valid;
+} StarBrief;
+static StarBrief s_brief[96];
+
+static const StarBrief *star_brief(SysAddr a) {
+    uint32_t h = (uint32_t)(a.sx * 73856093) ^ (uint32_t)(a.sy * 19349663)
+                 ^ (uint32_t)(a.idx * 83492791u);
+    StarBrief *b = &s_brief[h % 96u];
+    if (!b->valid || !sysaddr_eq(b->a, a)) {
+        SystemInfo si;
+        galaxy_generate(a, &si);
+        b->a = a;
+        b->gov = (int8_t)si.gov;
+        b->threat = (int8_t)si.threat;
+        b->fac = (int8_t)system_faction(a);
+        b->valid = 1;
+    }
+    return b;
+}
+
 #include "craft_font.h"
 #include "econ.h"
 #include "elite_types.h"
@@ -147,6 +176,10 @@ MapAction map_galaxy_tick(const CraftRawButtons *btn, float dt,
     bool any = btn->left || btn->right || btn->up || btn->down;
     if (any) s_hold += dt; else { s_hold = 0; s_rep = 0; }
 
+    if (JUST(btn, rb)) {
+        s_chart_layer = (s_chart_layer + 1) % 3;   /* data layers */
+        sfx_ui_move();
+    }
     if (JUST(btn, left))  gmap_snap(-1, 0);
     if (JUST(btn, right)) gmap_snap(1, 0);
     if (JUST(btn, up))    gmap_snap(0, -1);
@@ -360,18 +393,37 @@ void map_galaxy_draw(uint16_t *fb) {
                 int dy = (int)((y - y0_ly) * GMAP_SCALE);
                 int cls = galaxy_star_class(a);
                 uint16_t sc2 = galaxy_star_color(a);
+                if (s_chart_layer == 1) {
+                    /* THREAT heat-map: green..red, steady (no twinkle
+                     * on data — it reads as flicker, not stars). */
+                    static const uint16_t tcol[5] = {
+                        RGB565C(70, 150, 110), RGB565C(110, 190, 90),
+                        RGB565C(220, 190, 70), RGB565C(240, 130, 50),
+                        RGB565C(255, 70, 50) };
+                    const StarBrief *br = star_brief(a);
+                    sc2 = tcol[br->threat < 0 ? 0
+                              : br->threat > 4 ? 4 : br->threat];
+                } else if (s_chart_layer == 2) {
+                    /* FACTION territory: one hue per empire. */
+                    static const uint16_t fcol[3] = {
+                        RGB565C(90, 160, 255), RGB565C(255, 95, 120),
+                        RGB565C(245, 200, 80) };
+                    const StarBrief *br = star_brief(a);
+                    sc2 = fcol[br->fac % 3];
+                }
                 /* Dim halo for big stars, twinkle phase per star. */
                 uint32_t tw = nhash(sx * 31 + i, sy * 17);
-                int bright = ((s_twinkle + (tw & 31)) & 31) < 28;
+                int bright = (s_chart_layer != 0) ||
+                             ((s_twinkle + (tw & 31)) & 31) < 28;
                 uint16_t dimc = (uint16_t)((sc2 >> 1) & 0x7BEF);
-                if (cls >= STAR_F) {              /* hot stars glow */
+                if (cls >= STAR_F && s_chart_layer == 0) { /* hot glow */
                     px(fb, dx - 1, dy, dimc);
                     px(fb, dx + 1, dy, dimc);
                     px(fb, dx, dy - 1, dimc);
                     px(fb, dx, dy + 1, dimc);
                 }
-                if (cls >= STAR_A) {              /* giants: bigger core */
-                    px(fb, dx + 1, dy + 1, dimc);
+                if (cls >= STAR_A && s_chart_layer == 0) {
+                    px(fb, dx + 1, dy + 1, dimc);  /* giants: big core */
                     px(fb, dx - 1, dy - 1, dimc);
                 }
                 px(fb, dx, dy, bright ? sc2 : dimc);
@@ -419,7 +471,15 @@ void map_galaxy_draw(uint16_t *fb) {
     }
 
     /* Header + footer info. */
-    craft_font_draw(fb, "GALAXY CHART", 2, 2, COL_TITLE);
+    if (s_chart_layer == 0) {
+        craft_font_draw(fb, "GALAXY CHART", 2, 2, COL_TITLE);
+    } else if (s_chart_layer == 1) {
+        craft_font_draw(fb, "CHART: THREAT", 2, 2,
+                        RGB565C(240, 140, 60));
+    } else {
+        craft_font_draw(fb, "CHART: FACTION", 2, 2,
+                        RGB565C(120, 170, 255));
+    }
     char buf[32];
     snprintf(buf, sizeof buf, "FUEL %d.%d LY", (int)s_fuel,
              ((int)(s_fuel * 10)) % 10);
@@ -439,6 +499,15 @@ void map_galaxy_draw(uint16_t *fb) {
         craft_font_draw(fb, buf, 2, 121, COL_TXT);
     } else {
         craft_font_draw(fb, "B:BACK", 2, 121, COL_DIM);
+    }
+    /* Layer legends, bottom-right of the map area. */
+    if (s_chart_layer == 1) {
+        craft_font_draw(fb, "SAFE", 70, 110, RGB565C(110, 190, 90));
+        craft_font_draw(fb, "DEADLY", 98, 110, RGB565C(255, 70, 50));
+    } else if (s_chart_layer == 2) {
+        craft_font_draw(fb, "COA", 70, 110, RGB565C(90, 160, 255));
+        craft_font_draw(fb, "DOM", 90, 110, RGB565C(255, 95, 120));
+        craft_font_draw(fb, "FRE", 110, 110, RGB565C(245, 200, 80));
     }
 }
 
