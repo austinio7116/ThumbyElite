@@ -409,7 +409,11 @@ void combat_tick(float dt) {
             if (s->turret_cool > 0.0f) s->turret_cool -= dt;
             int tgt = (i == PLAYER) ? s_player_target : PLAYER;
             if (s->turret_cool <= 0.0f && tgt >= 0 &&
-                g_ships[tgt].alive) {
+                g_ships[tgt].alive &&
+                /* turrets fire on HOSTILES only — neutral ships are
+                   lockable now (find-the-civilian), and an auto-turret
+                   must not commit crimes on the pilot's behalf */
+                g_ships[tgt].team == TEAM_HOSTILE) {
                 int wt = s->turret_type - 1;
                 const WeaponDef *tw = &k_weapons[wt];
                 Vec3 rel = v3_sub(g_ships[tgt].pos, s->pos);
