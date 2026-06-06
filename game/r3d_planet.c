@@ -45,63 +45,108 @@ static float fbm(float x, float y, uint32_t seed) {
 
 /* Palettes: PAL_N ramp per planet type (index by height/band value). */
 static void make_palette(PlanetType t, uint32_t seed, uint16_t pal[PAL_N]) {
+    /* Each type carries several REALISTIC colourways (user req: more
+     * variety, nothing garish); the seed picks one, the patterns are
+     * unchanged. */
+    uint32_t pick = (seed >> 3);
     switch (t) {
     case PT_ROCK: {
-        static const uint16_t p[8] = {
-            RGB565C(58, 48, 40), RGB565C(84, 70, 56), RGB565C(105, 88, 70),
-            RGB565C(126, 106, 84), RGB565C(142, 122, 100), RGB565C(158, 138, 116),
-            RGB565C(172, 152, 130), RGB565C(188, 168, 146) };
-        memcpy(pal, p, sizeof p);
+        static const uint16_t p[4][8] = {
+            { RGB565C(58, 48, 40), RGB565C(84, 70, 56), RGB565C(105, 88, 70),
+              RGB565C(126, 106, 84), RGB565C(142, 122, 100), RGB565C(158, 138, 116),
+              RGB565C(172, 152, 130), RGB565C(188, 168, 146) },   /* tan */
+            { RGB565C(46, 46, 50), RGB565C(64, 64, 68), RGB565C(82, 82, 86),
+              RGB565C(100, 100, 104), RGB565C(118, 118, 122), RGB565C(136, 136, 140),
+              RGB565C(154, 154, 158), RGB565C(172, 172, 176) },   /* mercury grey */
+            { RGB565C(72, 38, 26), RGB565C(96, 50, 32), RGB565C(120, 62, 38),
+              RGB565C(142, 76, 46), RGB565C(162, 92, 56), RGB565C(180, 110, 70),
+              RGB565C(196, 130, 88), RGB565C(210, 150, 108) },    /* mars rust */
+            { RGB565C(52, 50, 36), RGB565C(72, 68, 48), RGB565C(92, 86, 60),
+              RGB565C(112, 104, 72), RGB565C(130, 122, 86), RGB565C(148, 138, 100),
+              RGB565C(164, 154, 116), RGB565C(180, 170, 132) },   /* olive dust */
+        };
+        memcpy(pal, p[pick % 4u], sizeof p[0]);
         break;
     }
     case PT_ICE: {
-        static const uint16_t p[8] = {
-            RGB565C(122, 138, 160), RGB565C(150, 165, 188), RGB565C(176, 190, 210),
-            RGB565C(198, 210, 226), RGB565C(214, 224, 238), RGB565C(228, 236, 246),
-            RGB565C(238, 244, 252), RGB565C(248, 252, 255) };
-        memcpy(pal, p, sizeof p);
+        static const uint16_t p[3][8] = {
+            { RGB565C(122, 138, 160), RGB565C(150, 165, 188), RGB565C(176, 190, 210),
+              RGB565C(198, 210, 226), RGB565C(214, 224, 238), RGB565C(228, 236, 246),
+              RGB565C(238, 244, 252), RGB565C(248, 252, 255) },   /* blue-white */
+            { RGB565C(150, 134, 122), RGB565C(176, 158, 142), RGB565C(198, 180, 162),
+              RGB565C(216, 200, 182), RGB565C(230, 216, 200), RGB565C(240, 230, 216),
+              RGB565C(248, 240, 230), RGB565C(255, 250, 242) },   /* pluto cream */
+            { RGB565C(96, 120, 124), RGB565C(122, 146, 150), RGB565C(146, 170, 172),
+              RGB565C(168, 190, 192), RGB565C(188, 208, 210), RGB565C(206, 222, 224),
+              RGB565C(222, 234, 236), RGB565C(238, 246, 247) },   /* europa teal */
+        };
+        memcpy(pal, p[pick % 3u], sizeof p[0]);
         break;
     }
     case PT_LAVA: {
-        static const uint16_t p[8] = {
-            RGB565C(28, 16, 14), RGB565C(48, 24, 18), RGB565C(70, 30, 20),
-            RGB565C(96, 38, 22), RGB565C(140, 52, 22), RGB565C(196, 84, 26),
-            RGB565C(240, 130, 32), RGB565C(255, 196, 70) };
-        memcpy(pal, p, sizeof p);
+        static const uint16_t p[3][8] = {
+            { RGB565C(28, 16, 14), RGB565C(48, 24, 18), RGB565C(70, 30, 20),
+              RGB565C(96, 38, 22), RGB565C(140, 52, 22), RGB565C(196, 84, 26),
+              RGB565C(240, 130, 32), RGB565C(255, 196, 70) },     /* orange */
+            { RGB565C(20, 10, 12), RGB565C(38, 14, 16), RGB565C(60, 18, 20),
+              RGB565C(86, 22, 22), RGB565C(122, 28, 24), RGB565C(164, 40, 28),
+              RGB565C(206, 60, 34), RGB565C(240, 96, 48) },       /* crimson */
+            { RGB565C(56, 42, 22), RGB565C(82, 62, 28), RGB565C(110, 84, 34),
+              RGB565C(138, 106, 40), RGB565C(166, 130, 46), RGB565C(192, 154, 54),
+              RGB565C(216, 180, 66), RGB565C(238, 208, 84) },     /* io sulfur */
+        };
+        memcpy(pal, p[pick % 3u], sizeof p[0]);
         break;
     }
     case PT_OCEAN: {
-        static const uint16_t p[8] = {
-            RGB565C(12, 36, 84), RGB565C(16, 48, 108), RGB565C(20, 62, 130),
-            RGB565C(26, 78, 150), RGB565C(34, 96, 168), RGB565C(60, 124, 186),
-            RGB565C(120, 168, 200), RGB565C(225, 235, 240) };
-        memcpy(pal, p, sizeof p);
+        static const uint16_t p[3][8] = {
+            { RGB565C(12, 36, 84), RGB565C(16, 48, 108), RGB565C(20, 62, 130),
+              RGB565C(26, 78, 150), RGB565C(34, 96, 168), RGB565C(60, 124, 186),
+              RGB565C(120, 168, 200), RGB565C(225, 235, 240) },   /* deep blue */
+            { RGB565C(10, 56, 64), RGB565C(14, 74, 84), RGB565C(18, 94, 104),
+              RGB565C(24, 114, 124), RGB565C(34, 134, 142), RGB565C(58, 156, 160),
+              RGB565C(110, 186, 186), RGB565C(220, 240, 238) },   /* tropic teal */
+            { RGB565C(16, 24, 48), RGB565C(22, 32, 64), RGB565C(28, 42, 80),
+              RGB565C(36, 54, 96), RGB565C(46, 68, 112), RGB565C(64, 88, 130),
+              RGB565C(100, 118, 152), RGB565C(200, 210, 224) },   /* storm navy */
+        };
+        memcpy(pal, p[pick % 3u], sizeof p[0]);
         break;
     }
     case PT_EARTHLIKE: {
-        static const uint16_t p[8] = {
-            RGB565C(16, 44, 104), RGB565C(22, 60, 130), RGB565C(30, 80, 150),
-            RGB565C(46, 110, 90), RGB565C(64, 130, 70), RGB565C(96, 144, 76),
-            RGB565C(140, 150, 110), RGB565C(235, 240, 245) };
-        memcpy(pal, p, sizeof p);
+        static const uint16_t p[3][8] = {
+            { RGB565C(16, 44, 104), RGB565C(22, 60, 130), RGB565C(30, 80, 150),
+              RGB565C(46, 110, 90), RGB565C(64, 130, 70), RGB565C(96, 144, 76),
+              RGB565C(140, 150, 110), RGB565C(235, 240, 245) },   /* temperate */
+            { RGB565C(18, 48, 96), RGB565C(26, 64, 118), RGB565C(36, 84, 138),
+              RGB565C(96, 110, 64), RGB565C(128, 124, 64), RGB565C(156, 138, 72),
+              RGB565C(180, 158, 96), RGB565C(238, 242, 244) },    /* savanna */
+            { RGB565C(12, 40, 92), RGB565C(18, 54, 116), RGB565C(24, 72, 138),
+              RGB565C(30, 96, 72), RGB565C(40, 116, 54), RGB565C(58, 132, 56),
+              RGB565C(96, 142, 82), RGB565C(232, 238, 242) },     /* jungle */
+        };
+        memcpy(pal, p[pick % 3u], sizeof p[0]);
         break;
     }
     default:
     case PT_GAS: {
-        /* Two gas families: tan/orange jovian or blue ice giant. */
-        if (seed & 1) {
-            static const uint16_t p[8] = {
-                RGB565C(118, 92, 64), RGB565C(140, 110, 76), RGB565C(164, 130, 90),
-                RGB565C(186, 150, 104), RGB565C(204, 168, 120), RGB565C(218, 184, 138),
-                RGB565C(230, 200, 158), RGB565C(240, 216, 180) };
-            memcpy(pal, p, sizeof p);
-        } else {
-            static const uint16_t p[8] = {
-                RGB565C(36, 60, 120), RGB565C(48, 78, 142), RGB565C(62, 96, 160),
-                RGB565C(78, 116, 178), RGB565C(96, 136, 194), RGB565C(118, 156, 208),
-                RGB565C(142, 176, 220), RGB565C(168, 196, 232) };
-            memcpy(pal, p, sizeof p);
-        }
+        /* Four gas families: jovian tan, neptune blue, saturn
+         * butterscotch, uranus pale teal. */
+        static const uint16_t p[4][8] = {
+            { RGB565C(118, 92, 64), RGB565C(140, 110, 76), RGB565C(164, 130, 90),
+              RGB565C(186, 150, 104), RGB565C(204, 168, 120), RGB565C(218, 184, 138),
+              RGB565C(230, 200, 158), RGB565C(240, 216, 180) },
+            { RGB565C(36, 60, 120), RGB565C(48, 78, 142), RGB565C(62, 96, 160),
+              RGB565C(78, 116, 178), RGB565C(96, 136, 194), RGB565C(118, 156, 208),
+              RGB565C(142, 176, 220), RGB565C(168, 196, 232) },
+            { RGB565C(150, 122, 82), RGB565C(172, 142, 96), RGB565C(192, 162, 112),
+              RGB565C(208, 180, 130), RGB565C(222, 196, 148), RGB565C(234, 212, 168),
+              RGB565C(244, 226, 188), RGB565C(252, 238, 208) },
+            { RGB565C(96, 142, 150), RGB565C(116, 160, 168), RGB565C(136, 178, 184),
+              RGB565C(156, 194, 200), RGB565C(176, 208, 214), RGB565C(196, 222, 226),
+              RGB565C(214, 234, 238), RGB565C(230, 244, 246) },
+        };
+        memcpy(pal, p[(seed >> 3) % 4u], sizeof p[0]);
         break;
     }
     }
