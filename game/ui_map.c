@@ -452,10 +452,21 @@ void map_system_open(Vec3 player_pos_mm) {
 }
 
 MapAction map_system_tick(const CraftRawButtons *btn, float dt, Poi *out_poi) {
-    (void)dt;
     MapAction act = MAP_NONE;
-    if (JUST(btn, down) && s_cursor < s_npois - 1) s_cursor++;
-    if (JUST(btn, up) && s_cursor > 0) s_cursor--;
+    /* Hold-to-scroll, same cadence as every station list (the original
+     * 'sector map' request — taps only was the miss). */
+    static float s_rep_up, s_rep_dn;
+    bool step_dn = JUST(btn, down), step_up = JUST(btn, up);
+    if (btn->down) {
+        s_rep_dn += dt;
+        if (s_rep_dn > 0.35f) { step_dn = true; s_rep_dn = 0.23f; }
+    } else s_rep_dn = 0;
+    if (btn->up) {
+        s_rep_up += dt;
+        if (s_rep_up > 0.35f) { step_up = true; s_rep_up = 0.23f; }
+    } else s_rep_up = 0;
+    if (step_dn && s_cursor < s_npois - 1) s_cursor++;
+    if (step_up && s_cursor > 0) s_cursor--;
     if (JUST(btn, a) && s_npois > 0) {
         *out_poi = s_pois[s_cursor];
         act = MAP_ENGAGE_SC;
