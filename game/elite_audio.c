@@ -219,6 +219,12 @@ static inline int16_t wave_sample(uint8_t w, uint32_t phase) {
     }
 }
 
+static float s_master = 0.5f;        /* 0..1, settings-controlled */
+void audio_set_master(float v) {
+    s_master = v < 0 ? 0 : (v > 1 ? 1 : v);
+}
+float audio_get_master(void) { return s_master; }
+
 int audio_render(int16_t *out, int n) {
     const float dt = 1.0f / (float)ELITE_AUDIO_RATE;
     for (int s = 0; s < n; s++) {
@@ -248,6 +254,7 @@ int audio_render(int16_t *out, int n) {
             mix += (int32_t)((float)wave_sample(v->wave, v->phase) *
                              v->amp * env);
         }
+        mix = (int32_t)((float)mix * s_master);
 
         if (mix > 32767) mix = 32767;
         if (mix < -32768) mix = -32768;

@@ -37,6 +37,16 @@
 static uint16_t g_fb[ELITE_FB_W * ELITE_FB_H];
 
 /* --- platform hooks ----------------------------------------------------*/
+static int s_host_settings[2] = { 10, 255 };   /* volume, brightness */
+int plat_setting_get(int which) {
+    return s_host_settings[which & 1];
+}
+void plat_setting_set(int which, int value) {
+    s_host_settings[which & 1] = value;
+    if (which == 0) audio_set_master((float)value / 20.0f);
+    /* brightness: no-op on host */
+}
+
 void plat_rumble(float intensity, float seconds) {
     (void)intensity; (void)seconds;     /* no motor on the desk */
 }
@@ -306,6 +316,17 @@ int main(int argc, char **argv) {
         b = none; elite_game_tick(&b, 1.0f/30.0f);
         b = none; b.a = true; elite_game_tick(&b, 1.0f/30.0f);
         b = none; elite_game_tick(&b, 1.0f/30.0f);
+        /* volume slider: cursor down x2, left x3 -> 70% */
+        for (int k = 0; k < 2; k++) {
+            b = none; b.down = true; elite_game_tick(&b, 1.0f/30.0f);
+            b = none; elite_game_tick(&b, 1.0f/30.0f);
+        }
+        for (int k = 0; k < 3; k++) {
+            b = none; b.left = true; elite_game_tick(&b, 1.0f/30.0f);
+            b = none; elite_game_tick(&b, 1.0f/30.0f);
+        }
+        printf("[dash] volume after 3x left: %d/20 master=%.2f\n",
+               plat_setting_get(0), audio_get_master());
         render_frame(); dump_ppm("/tmp/dash_settings.ppm");
         b = none; b.b = true; elite_game_tick(&b, 1.0f/30.0f);
         b = none; elite_game_tick(&b, 1.0f/30.0f);

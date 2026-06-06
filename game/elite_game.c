@@ -1351,17 +1351,35 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             if (s_dash_anim > 1.0f) s_dash_anim = 1.0f;
         }
         if (s_in_settings) {
-            static bool pu2, pd2, pb2;
+            static bool pu2, pd2, pb2, pl3, pr3;
             if (btn->up && !pu2 && s_settings_cursor > 0)
                 s_settings_cursor--;
-            if (btn->down && !pd2 && s_settings_cursor < 1)
+            if (btn->down && !pd2 && s_settings_cursor < 3)
                 s_settings_cursor++;
             pu2 = btn->up; pd2 = btn->down;
+            int dir = 0;
+            if (btn->right && !pr3) dir = 1;
+            if (btn->left && !pl3) dir = -1;
+            pl3 = btn->left; pr3 = btn->right;
             if (a_edge) {
                 if (s_settings_cursor == 0)
                     g_player.invert_y = !g_player.invert_y;
-                else
+                else if (s_settings_cursor == 1)
                     g_player.show_fps = !g_player.show_fps;
+                else
+                    dir = 1;                 /* A nudges sliders up */
+            }
+            if (dir && s_settings_cursor == 2) {
+                int v = plat_setting_get(0) + dir * 2;     /* 0..20 */
+                if (v < 0) v = 0;
+                if (v > 20) v = 20;
+                plat_setting_set(0, v);
+                sfx_ui_move();
+            } else if (dir && s_settings_cursor == 3) {
+                int b2 = plat_setting_get(1) + dir * 32;   /* 0..255 */
+                if (b2 < 31) b2 = 31;        /* never fully dark */
+                if (b2 > 255) b2 = 255;
+                plat_setting_set(1, b2);
             }
             if ((btn->b && !pb2) || menu_edge) s_in_settings = false;
             pb2 = btn->b;
@@ -1878,22 +1896,29 @@ static void dash_draw_panels(uint16_t *fb, int y0) {
 }
 
 static void dash_settings_overlay(uint16_t *fb) {
-    for (int y = 44; y < 96; y++)
-        for (int x = 20; x < 108; x++)
+    for (int y = 38; y < 112; y++)
+        for (int x = 14; x < 114; x++)
             fb[y * ELITE_FB_W + x] = RGB565C(8, 11, 20);
-    craft_font_draw(fb, "SETTINGS", 33, 48, RGB565C(200, 210, 225));
-    const char *si2[2] = {
+    craft_font_draw(fb, "SETTINGS", 33, 42, RGB565C(200, 210, 225));
+    char vrow[20], brow[20];
+    snprintf(vrow, sizeof vrow, "VOLUME    %3d%%",
+             plat_setting_get(0) * 5);
+    snprintf(brow, sizeof brow, "BRIGHT    %3d%%",
+             (plat_setting_get(1) * 100) / 255);
+    const char *si2[4] = {
         g_player.invert_y ? "INVERT Y: ON" : "INVERT Y: OFF",
         g_player.show_fps ? "SHOW FPS: ON" : "SHOW FPS: OFF",
+        vrow, brow,
     };
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 4; i++) {
         uint16_t c = (i == s_settings_cursor) ? RGB565C(120, 255, 120)
                                               : RGB565C(120, 126, 145);
         if (i == s_settings_cursor)
-            craft_font_draw(fb, ">", 26, 62 + i * 9, c);
-        craft_font_draw(fb, si2[i], 33, 62 + i * 9, c);
+            craft_font_draw(fb, ">", 20, 56 + i * 9, c);
+        craft_font_draw(fb, si2[i], 27, 56 + i * 9, c);
     }
-    craft_font_draw(fb, "B:BACK", 33, 86, RGB565C(95, 110, 140));
+    craft_font_draw(fb, "</>:ADJUST B:BACK", 20, 100,
+                    RGB565C(95, 110, 140));
 }
 
 static void draw_pause_overlay(uint16_t *fb) {

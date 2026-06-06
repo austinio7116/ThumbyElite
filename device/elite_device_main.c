@@ -25,6 +25,10 @@ static FATFS   g_fs;
 static uint8_t g_fs_work[FF_MAX_SS] __attribute__((aligned(4)));
 #endif
 #include "elite_audio.h"
+#ifdef THUMBYONE_SLOT_MODE
+#include "thumbyone_settings.h"
+#include "thumbyone_backlight.h"
+#endif
 #include "elite_types.h"
 #include "elite_game.h"
 
@@ -43,6 +47,33 @@ static void core1_entry(void) {
     }
 }
 
+/* Settings bridge: slot mode reads/writes the ThumbyOne shared store
+ * (/.volume 0-20, /.brightness 0-255 on the shared FAT) so the lobby
+ * and every other slot see the same values; standalone keeps volume
+ * session-only and has no brightness control. */
+int plat_setting_get(int which) {
+#ifdef THUMBYONE_SLOT_MODE
+    return which == 0 ? (int)thumbyone_settings_load_volume()
+                      : (int)thumbyone_settings_load_brightness();
+#else
+    return which == 0 ? (int)(audio_get_master() * 20.0f) : 255;
+#endif
+}
+
+void plat_setting_set(int which, int value) {
+    if (which == 0) {
+        audio_set_master((float)value / 20.0f);
+#ifdef THUMBYONE_SLOT_MODE
+        thumbyone_settings_save_volume((uint8_t)value);
+#endif
+    } else {
+#ifdef THUMBYONE_SLOT_MODE
+        thumbyone_backlight_set((uint8_t)value);
+        thumbyone_settings_save_brightness((uint8_t)value);
+#endif
+    }
+}
+
 int main(void) {
     set_sys_clock_khz(280000, true);
     craft_lcd_init();
@@ -58,6 +89,8 @@ int main(void) {
      * elite_game_init, whose title screen checks save_exists(). */
     thumbyone_slot_init_brightness_and_led(true);
     (void)thumbyone_fs_mount_or_format(&g_fs, g_fs_work, sizeof g_fs_work);
+    /* The lobby's volume, honoured from the first sound. */
+    audio_set_master((float)thumbyone_settings_load_volume() / 20.0f);
 #endif
     elite_game_init(get_rand_32());
 
