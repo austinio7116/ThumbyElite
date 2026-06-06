@@ -208,7 +208,7 @@ void proj_tick(float dt) {
         if (rock_hit >= 0 && rock_t < best_t) {
             p->pos = v3_add(p->pos, v3_scale(seg, rock_t));
             if (w->aoe > 0) detonate(p);
-            rocks_damage(rock_hit, w->dmg * p->dmg_mult, p->pos);
+            rocks_damage(rock_hit, w->dmg * p->dmg_mult, 0.45f, p->pos);
             p->alive = false;
             continue;
         }

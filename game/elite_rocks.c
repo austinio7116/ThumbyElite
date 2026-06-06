@@ -190,13 +190,16 @@ int rocks_ray(Vec3 o, Vec3 dir, float max_t, float *t_out) {
     return best;
 }
 
-/* Chip a rock: ore spills every 20 damage; destruction spills more.
- * Returns true if the rock died. */
-bool rocks_damage(int idx, float dmg, Vec3 hit_pos) {
+/* Chip a rock: ore spills as chip damage accumulates; destruction
+ * spills a bonus. yield_mult is the tool economics (user req: lasers
+ * mined nearly as well as the mining laser): crude blasting VAPORIZES
+ * ore — standard weapons recover ~45% per chip, the MINING laser 100%.
+ * Rocks are finite, so yield is income. Returns true if it died. */
+bool rocks_damage(int idx, float dmg, float yield_mult, Vec3 hit_pos) {
     Rock *r = &s_rocks[idx];
     if (!r->alive) return false;
     r->hp -= dmg;
-    r->chip += dmg;
+    r->chip += dmg * yield_mult;
     fx_spawn_spark(hit_pos, r->vel);
     while (r->chip >= 24.0f) {
         r->chip -= 24.0f;

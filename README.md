@@ -73,6 +73,10 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
   gems 8%→6%) — still the best broke-pilot bootstrap; trade overtakes
   with the first hauler (~50k/hr in a MULE), missions pay ~15–20k/hr
   mid-game
+- The MINING laser is now a real investment: crude blasting vaporizes
+  ore (standard weapons recover ~45% per chip; the tool recovers 100%,
+  4× faster) — rocks are finite, so the tool roughly doubles a belt's
+  value (lasers used to mine nearly as well)
 - Every hull now has at least two weapon mounts (SKIFF/DART/PACK MULE
   gain a Z1) — laser + autocannon is the natural early pairing instead
   of being forced into a laser build by dry-tank risk
