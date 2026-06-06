@@ -109,7 +109,7 @@
 </header>
 
 <nav>
-  <a href="#start">Start</a><a href="#controls">Controls</a><a href="#hud">HUD</a><a href="#flight">Flight</a><a href="#combat">Combat</a><a href="#weapons">Weapons</a><a href="#equipment">Equipment</a><a href="#salvage">Salvage</a><a href="#travel">Travel</a><a href="#galaxy">Galaxy</a><a href="#trading">Trading</a><a href="#stations">Stations</a><a href="#ships">Ships</a><a href="#missions">Missions</a><a href="#skills">Skills</a><a href="#law">The Law</a><a href="#dash">Dashboard</a><a href="#traffic">Traffic</a><a href="#mining">Mining</a><a href="#rank">Rank</a><a href="#death">Death &amp; Saves</a><a href="#field">Flying Your Ship</a>
+  <a href="#start">Start</a><a href="#controls">Controls</a><a href="#hud">HUD</a><a href="#flight">Flight</a><a href="#combat">Combat</a><a href="#weapons">Weapons</a><a href="#equipment">Equipment</a><a href="#salvage">Salvage</a><a href="#travel">Travel</a><a href="#galaxy">Galaxy</a><a href="#trading">Trading</a><a href="#stations">Stations</a><a href="#ships">Ships</a><a href="#missions">Missions</a><a href="#skills">Skills</a><a href="#crits">Crits</a><a href="#law">The Law</a><a href="#dash">Dashboard</a><a href="#traffic">Traffic</a><a href="#mining">Mining</a><a href="#rank">Rank</a><a href="#death">Death &amp; Saves</a><a href="#field">Flying Your Ship</a>
 </nav>
 
 <main>
@@ -635,7 +635,7 @@ computer takes over and glides you in. On arrival, the station:</p>
 <ul>
 <li><b>repairs and rearms nothing automatically</b> — REPAIR (outfitting), REARM and REFUEL are paid services you choose,</li>
 <li>pays out any completed missions,</li>
-<li><b>saves your game</b> (this is the checkpoint system — see <a href="#law">The Law</a><a href="#dash">Dashboard</a><a href="#traffic">Traffic</a><a href="#mining">Mining</a><a href="#rank">Rank</a><a href="#death">Death &amp; Saves</a><a href="#field">Flying Your Ship</a>).</li>
+<li><b>saves your game</b> (this is the checkpoint system — see <a href="#crits">Crits</a><a href="#law">The Law</a><a href="#dash">Dashboard</a><a href="#traffic">Traffic</a><a href="#mining">Mining</a><a href="#rank">Rank</a><a href="#death">Death &amp; Saves</a><a href="#field">Flying Your Ship</a>).</li>
 </ul>
 <p>Services: <b>MARKET</b> (trade), <b>SHIPYARD</b> (hulls), <b>OUTFITTING</b>
 (the armoury — stock varies per terminal — plus equipment, repairs, salvage), <b>MISSIONS</b> (the board),
@@ -822,6 +822,22 @@ with a fanfare on promotion):</p>
 </table>
 
 <!-- ============================================================ -->
+<h2 id="crits">Critical Hits</h2>
+<p>Once a ship's shields are down, hull hits can <b>smash systems</b> —
+rare and heavy, with big blows (gauss, photon) far likelier to crit
+than pulse ticks. Your systems take <b>−40 integrity</b> a crit; at
+zero they're <span class="tag r">OFFLINE</span> until repaired at a
+dock: a dead mount won't fire, a smashed shield generator stops
+regenerating entirely, a wrecked targeting computer loses its lead
+pip, a jammed chaff launcher won't answer. Engine crits cut your speed
+and turning 40% for the rest of the fight — dock technicians fix
+engines on arrival; everything else costs credits.</p>
+<p>It cuts both ways: <span class="tag">THEIR WEAPON HIT!</span> means
+a pirate mount is dead, their shield regen can be silenced, their
+targeting scrambled, their engines crippled — and a <b>fully disarmed
+pirate turns and runs</b>. Chase it for a free kill, or let it carry
+the story home. Fights now end in more states than "dead".</p>
+
 <h2 id="death">Death &amp; Saves</h2>
 <ul>
 <li><b>Docking saves</b> — automatically, every time. The save keeps your galaxy seed, ship, gear (with exact quality/wear/ammo), cargo, credits, reputation and mission log.</li>

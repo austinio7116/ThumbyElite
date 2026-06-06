@@ -19,6 +19,17 @@
 #define MAX_HARDPOINTS 3
 
 typedef enum { TEAM_PLAYER = 0, TEAM_HOSTILE = 1, TEAM_NEUTRAL = 2 } Team;
+
+/* Critical-hit flags (Ship.crits). NPC crits last the fight; player
+ * crits route through item integrity and persist until repaired —
+ * except engines, which dock technicians fix on arrival. */
+#define CRIT_WPN0    0x01
+#define CRIT_WPN1    0x02
+#define CRIT_WPN2    0x04
+#define CRIT_TURRET  0x08
+#define CRIT_REGEN   0x10
+#define CRIT_ENGINE  0x20
+#define CRIT_AIM     0x40
 typedef enum { AI_NONE = 0, AI_ATTACK, AI_BREAK } AiState;
 
 typedef struct {
@@ -49,6 +60,7 @@ typedef struct {
     uint8_t is_civilian;     /* miner/cargo traffic — attacking is crime */
     uint8_t ai_target;       /* entity this ship's AI fights (0=player) */
     uint8_t civ_kind;        /* 0 miner, 1 cargo (flavour + behaviour) */
+    uint8_t crits;           /* fight-scoped critical damage (CRIT_*) */
     uint8_t turret_type;     /* weapon type + 1; 0 = no turret */
     float   turret_cool;      /* s until next shot */
 

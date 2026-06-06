@@ -27,6 +27,7 @@ static float s_hitmark, s_killmark;
 static int   s_kill_pay;
 static int   s_shot_type = -1;   /* weapon type of the shot being resolved */
 static int   s_player_target = -1;   /* for the player's auto-turret */
+static float s_crit_cd[MAX_SHIPS];   /* min spacing between criticals */
 void combat_set_player_target(int t) { s_player_target = t; }
 
 void combat_init(void) {
@@ -68,6 +69,79 @@ static float ray_sphere(Vec3 o, Vec3 dir, Vec3 c, float r) {
     return (t >= 0.0f) ? t : tca + thc;
 }
 
+/* Roll one critical hit on `victim`. Player systems take -40 item
+ * integrity (0 = OFFLINE until repaired); NPC systems flip fight-
+ * scoped flags. */
+static void combat_roll_crit(int victim, Vec3 hit_pos) {
+    Ship *v = &g_ships[victim];
+    fx_spawn_spark(hit_pos, v->vel);
+    fx_spawn_spark(hit_pos, v->vel);
+    if (victim == PLAYER) {
+        /* candidate table: fitted items + engines + blanks */
+        WeaponInst *items[8];
+        const char *names[8];
+        int n = 0;
+        for (int i = 0; i < HULL_SLOTS; i++)
+            if (g_player.mounts[i].in_use) {
+                static char wn[3][12];
+                snprintf(wn[i], sizeof wn[i], "WPN %d", i + 1);
+                items[n] = &g_player.mounts[i];
+                names[n++] = wn[i];
+            }
+        if (g_player.shield_eq.in_use) {
+            items[n] = &g_player.shield_eq; names[n++] = "SHIELD GEN";
+        }
+        for (int i = 0; i < 2; i++)
+            if (g_player.util_eq[i].in_use) {
+                items[n] = &g_player.util_eq[i]; names[n++] = "GADGET";
+            }
+        if (g_player.turret_eq.in_use) {
+            items[n] = &g_player.turret_eq; names[n++] = "TURRET";
+        }
+        /* slots n..n+1: engines; beyond: armour deflects */
+        int roll = (int)(frnd_pub() % (uint32_t)(n + 4));
+        if (roll < n) {
+            WeaponInst *it = items[roll];
+            int left = (int)it->integrity - 40;
+            it->integrity = (uint8_t)(left < 0 ? 0 : left);
+            char msg[24];
+            snprintf(msg, sizeof msg, "%s %s", names[roll],
+                     it->integrity == 0 ? "OFFLINE!" : "DAMAGED!");
+            elite_game_crit_toast(msg, true);
+        } else if (roll < n + 2 && !(v->crits & CRIT_ENGINE)) {
+            v->crits |= CRIT_ENGINE;
+            v->max_speed *= 0.6f;
+            v->turn_rate *= 0.6f;
+            elite_game_crit_toast("ENGINES HIT!", true);
+        }
+        /* else: armour deflects — sparks only */
+        return;
+    }
+    /* NPC: weighted fight-scoped table */
+    int roll = (int)(frnd_pub() % 10u);
+    if (roll < 3 && v->n_weapons > 0) {
+        int w2 = (int)(frnd_pub() % (uint32_t)v->n_weapons);
+        v->crits |= (uint8_t)(CRIT_WPN0 << w2);
+        elite_game_crit_toast("THEIR WEAPON HIT!", false);
+    } else if (roll < 4 && v->turret_type) {
+        v->turret_type = 0;
+        elite_game_crit_toast("THEIR TURRET HIT!", false);
+    } else if (roll < 6 && v->shield_regen > 0) {
+        v->shield_regen = 0;
+        v->crits |= CRIT_REGEN;
+        elite_game_crit_toast("THEIR SHIELDS HIT!", false);
+    } else if (roll < 8 && !(v->crits & CRIT_ENGINE)) {
+        v->crits |= CRIT_ENGINE;
+        v->max_speed *= 0.55f;
+        v->turn_rate *= 0.55f;
+        elite_game_crit_toast("THEIR ENGINES HIT!", false);
+    } else if (roll < 9 && !(v->crits & CRIT_AIM)) {
+        v->crits |= CRIT_AIM;
+        elite_game_crit_toast("THEIR TARGETING HIT!", false);
+    }
+    /* else: deflected */
+}
+
 void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
     Ship *v = &g_ships[victim];
     if (!v->alive) return;
@@ -98,6 +172,18 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
         if (v->shield < 0.0f) { v->hull += v->shield; v->shield = 0.0f; }
     } else {
         v->hull -= dmg;
+        /* MechWarrior-style criticals: rare and heavy (user-tuned).
+         * Hull hits can smash systems — chance scales with the blow,
+         * one crit per ~2s per ship, and a slice of the table is
+         * armour-deflects-nothing on purpose. */
+        if (v->hull > 0.0f && s_crit_cd[victim] <= 0.0f) {
+            int chance = 3 + (int)(dmg * 0.6f);
+            if (chance > 30) chance = 30;
+            if ((int)(frnd_pub() % 100u) < chance) {
+                s_crit_cd[victim] = 2.0f;
+                combat_roll_crit(victim, hit_pos);
+            }
+        }
     }
     /* Shield impacts flash BLUE (visible strip feedback); hull sparks. */
     if (had_shield)
@@ -211,11 +297,23 @@ void combat_explosion_damage(int shooter, Vec3 centre, float radius,
     }
 }
 
+void combat_crit_cooldown_tick(float dt) {
+    for (int i = 0; i < MAX_SHIPS; i++)
+        if (s_crit_cd[i] > 0.0f) s_crit_cd[i] -= dt;
+}
+
 void combat_set_shot_type(int wt) { s_shot_type = wt; }
 
 int combat_fire(int shooter, float spread, int target) {
     Ship *s = &g_ships[shooter];
     if (!combat_can_fire(s)) return -1;
+    /* Critted mounts are OFFLINE: player at 0 integrity, NPC by flag. */
+    if (shooter == PLAYER) {
+        const WeaponInst *wi0 = player_mount_for_ship_slot(s->active_w);
+        if (wi0 && wi0->integrity == 0) return -1;
+    } else if (s->crits & (CRIT_WPN0 << s->active_w)) {
+        return -1;
+    }
     const WeaponDef *w = &k_weapons[s->weapons[s->active_w]];
 
     /* Player: component quality/integrity + affix + gunnery skill. */
@@ -428,8 +526,10 @@ void combat_tick(float dt) {
                     s->turret_cool = tw->cooldown * (npc ? 3.2f : 1.6f);
                     s->heat += tw->heat * 0.6f;
                     float mult = 0.6f;
-                    if (i == PLAYER)
+                    if (i == PLAYER) {
+                        if (g_player.turret_eq.integrity == 0) continue;
                         mult *= mount_dmg_mult(&g_player.turret_eq);
+                    }
                     else {
                         static const float k_td[5] = { 0.60f, 0.62f,
                                                        0.80f, 0.80f,
@@ -496,6 +596,9 @@ void combat_tick(float dt) {
         if (s_regen_hold[i] > 0.0f) {
             s_regen_hold[i] -= dt;
         } else if (s->shield < s->shield_max) {
+            if (i == PLAYER && g_player.shield_eq.in_use &&
+                g_player.shield_eq.integrity == 0)
+                continue;            /* generator smashed: no regen */
             s->shield += (s->shield_regen > 0 ? s->shield_regen
                                               : SHIELD_REGEN) * dt;
             if (s->shield > s->shield_max) s->shield = s->shield_max;

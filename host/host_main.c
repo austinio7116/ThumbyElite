@@ -105,6 +105,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_TAPTEST") ||
         getenv("ELITE_DISTRESS") ||
         getenv("ELITE_DASHTEST") ||
+        getenv("ELITE_CRITTEST") ||
         getenv("ELITE_SHOT")) {
         /* Harnesses start in-game: skip the title via NEW GAME. */
         remove("thumbyelite.sav");
@@ -143,6 +144,55 @@ int main(int argc, char **argv) {
             }
         printf("[startcheck] %s nearest=%.1f in6=%d in8=%d stations=%d\n",
                si->name, best, in6, in8, si->n_stations);
+        return 0;
+    }
+
+    /* Critical-hit chain test. */
+    if (getenv("ELITE_CRITTEST")) {
+        CraftRawButtons none = {0};
+        Ship *pl = &g_ships[0];
+        pl->shield = 0;                       /* shields down: crit land */
+        pl->hull = pl->hull_max = 10000.0f;   /* survive the barrage */
+        int crits = 0;
+        int w0_integ0 = (int)g_player.mounts[0].integrity;
+        for (int k = 0; k < 60; k++) {
+            combat_set_shot_type(WPN_PULSE_S);
+            combat_direct_damage(1, 0, 30.0f, pl->pos);
+            for (int f = 0; f < 70; f++)      /* ride out the cooldown */
+                elite_game_tick(&none, 1.0f / 30.0f);
+            pl->shield = 0;
+        }
+        int w0_integ1 = (int)g_player.mounts[0].integrity;
+        printf("[crit] wpn0 integrity %d -> %d engine_crit=%d\n",
+               w0_integ0, w0_integ1,
+               (pl->crits & CRIT_ENGINE) ? 1 : 0);
+        /* offline weapon must refuse to fire */
+        g_player.mounts[0].integrity = 0;
+        pl->active_w = 0;
+        pl->fire_cool = 0;
+        pl->heat = 0;
+        int r = combat_fire(0, 0, -1);
+        printf("[crit] offline mount fire -> %d (want -1)\n", r);
+        /* smashed generator: shield must not regen */
+        g_player.shield_eq.integrity = 0;
+        pl->shield = 0;
+        for (int f = 0; f < 90; f++) elite_game_tick(&none, 1.0f/30.0f);
+        printf("[crit] regen w/ dead gen: shield=%.1f (want 0)\n",
+               pl->shield);
+        /* NPC: crit all weapons -> it should flee (distance grows) */
+        extern const Mesh *hull_mesh(uint32_t, int);
+        int e = ship_spawn(hull_mesh(0xACE1u, 2),
+                           v3_add(pl->pos, v3(0, 0, 200)), TEAM_HOSTILE);
+        if (e > 0) {
+            ship_set_tier(e, 2, 2);
+            g_ships[e].crits |= CRIT_WPN0 | CRIT_WPN1 | CRIT_WPN2;
+            float d0 = 200;
+            for (int f = 0; f < 150; f++)
+                elite_game_tick(&none, 1.0f / 30.0f);
+            float d1 = v3_len(v3_sub(g_ships[e].pos, pl->pos));
+            printf("[crit] disarmed pirate: %0.f -> %.0fm (%s)\n", d0,
+                   d1, d1 > d0 + 50 ? "FLEES" : "stays");
+        }
         return 0;
     }
 

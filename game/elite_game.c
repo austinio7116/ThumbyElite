@@ -151,6 +151,12 @@ void elite_game_debug_goto_poi(int n) {
     spawn_poi_content();
 }
 
+void elite_game_crit_toast(const char *msg, bool mine) {
+    snprintf(s_scoop_toast, sizeof s_scoop_toast, "%s", msg);
+    s_scoop_toast_t = mine ? 2.6f : 1.8f;
+    if (mine) sfx_lock_warn();
+}
+
 /* The player damaged a hostile: any distress wing drops the civilian
  * and turns on the player (user spec: they fight us once engaged). */
 void elite_game_player_engaged(void) {
@@ -961,6 +967,7 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
     flight_tick(dt);
     ai_tick(dt);
     combat_tick(dt);
+    combat_crit_cooldown_tick(dt);
     fx_tick(dt);
     rocks_tick(dt);
 

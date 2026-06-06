@@ -52,6 +52,7 @@ static void choose_weapon(Ship *s, float dist) {
     float best_score = -1.0f;
     for (int i = 0; i < s->n_weapons; i++) {
         const WeaponDef *w = &k_weapons[s->weapons[i]];
+        if (s->crits & (uint8_t)(CRIT_WPN0 << i)) continue;  /* smashed */
         if (w->ammo_max && s->ammo[i] <= 0) continue;
         if (dist > w->range) continue;
         /* Prefer the tightest range fit: big guns far, fast guns close. */
@@ -77,6 +78,19 @@ static void ai_ship(int idx, float dt) {
     Vec3 dir = (dist > 1e-3f) ? v3_scale(rel, 1.0f / dist) : s->basis.r[2];
     int tier = s->tier > 4 ? 4 : s->tier;
 
+    /* Fully disarmed (all mounts critted): break and RUN — a fleeing
+     * cripple is a story, and a free kill if you chase it down. */
+    if (s->team == TEAM_HOSTILE && s->n_weapons > 0) {
+        int usable = 0;
+        for (int i = 0; i < s->n_weapons; i++)
+            if (!(s->crits & (uint8_t)(CRIT_WPN0 << i))) usable++;
+        if (usable == 0) {
+            turn_toward(s, v3_scale(dir, -1.0f), dt);
+            s->throttle = 1.0f;
+            return;
+        }
+    }
+
     switch (s->ai_state) {
     default:
     case AI_NONE:
@@ -100,6 +114,7 @@ static void ai_ship(int idx, float dt) {
              * dodges; sitting still gets you hit (and killed). */
             Vec3 latv = v3_sub(t->vel, v3_scale(dir, v3_dot(t->vel, dir)));
             float sp = k_spread[tier] * (1.0f + v3_len(latv) / 90.0f);
+            if (s->crits & CRIT_AIM) sp *= 2.2f;   /* targeting smashed */
             combat_fire(idx, sp, ti);
             s->fire_cool = k_refire[tier];
         }

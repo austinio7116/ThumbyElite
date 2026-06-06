@@ -242,7 +242,8 @@ bool player_has_util(int eq_type) {
     int n = player_util_slots();
     for (int i = 0; i < n && i < 2; i++)
         if (g_player.util_eq[i].in_use &&
-            g_player.util_eq[i].type == eq_type)
+            g_player.util_eq[i].type == eq_type &&
+            g_player.util_eq[i].integrity > 0)   /* critted = dead */
             return true;
     return false;
 }

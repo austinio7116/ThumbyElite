@@ -13,6 +13,15 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 
 ### 1.22 (in development)
 
+**Critical hits** — MechWarrior-style: hull hits (shields down) can
+smash systems, rare and heavy, scaled by the blow. Player systems take
+−40 integrity per crit and go OFFLINE at zero (dead mounts won't fire,
+smashed generators stop regenerating, wrecked targetcomps lose the
+pip); engines −40% speed/turn for the fight, fixed free on docking,
+everything else repaired for credits. NPCs lose weapons, turrets,
+regen, engines and targeting the same way — a fully disarmed pirate
+turns and flees. Fights end in more states than "dead".
+
 **The flight dashboard** — MENU no longer pauses: a dashboard slides up
 over the live game (top strip = mini scanner + bars, so you can watch
 trouble close in) with d-pad regions for GALAXY / SYSTEM / STATUS /
