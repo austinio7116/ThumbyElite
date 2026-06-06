@@ -49,5 +49,7 @@ void elite_game_player_engaged(void);
 /* Combat callback: a critical hit landed (mine = it happened to me). */
 void elite_game_crit_toast(const char *msg, bool mine);
 void elite_game_debug_goto_poi(int n);
+void elite_game_debug_jump(SysAddr addr);
+void elite_game_debug_view_planet(int n);
 
 #endif

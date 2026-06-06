@@ -106,6 +106,8 @@ int main(int argc, char **argv) {
         getenv("ELITE_DISTRESS") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
+        getenv("ELITE_PLANETSHEET") ||
+        getenv("ELITE_STOLENTEST") ||
         getenv("ELITE_SHOT")) {
         /* Harnesses start in-game: skip the title via NEW GAME. */
         remove("thumbyelite.sav");
@@ -144,6 +146,73 @@ int main(int argc, char **argv) {
             }
         printf("[startcheck] %s nearest=%.1f in6=%d in8=%d stations=%d\n",
                si->name, best, in6, in8, si->n_stations);
+        return 0;
+    }
+
+    /* Planet variety sheet: render planet 0 of N systems up close. */
+    if (getenv("ELITE_PLANETSHEET")) {
+        int count = atoi(getenv("ELITE_PLANETSHEET"));
+        if (count < 1) count = 100;
+        uint32_t rs = 0x91A7u;
+        int made = 0;
+        CraftRawButtons none = {0};
+        for (int t = 0; made < count && t < count * 8; t++) {
+            rs ^= rs << 13; rs ^= rs >> 17; rs ^= rs << 5;
+            SysAddr a2 = { (int16_t)((rs % 200u) - 100),
+                           (int16_t)(((rs >> 9) % 200u) - 100), 0 };
+            int n2 = galaxy_sector_stars(a2.sx, a2.sy);
+            if (n2 <= 0) continue;
+            a2.idx = (uint8_t)((rs >> 18) % (uint32_t)n2);
+            elite_game_debug_jump(a2);
+            const SystemInfo *si = system_info();
+            if (si->n_planets <= 0) continue;
+            /* anchor at a random planet POI: list pois, find planets */
+            Poi pois[MAX_POIS];
+            int np = system_pois(pois, MAX_POIS);
+            int planets[12], npl = 0;
+            for (int i = 0; i < np; i++)
+                if (pois[i].kind == POI_PLANET) planets[npl++] = i;
+            if (npl <= 0) continue;
+            elite_game_debug_view_planet(planets[(rs >> 22) % npl]);
+            render_frame();
+            char pp[64];
+            snprintf(pp, sizeof pp, "/tmp/planets/p_%03d.ppm", made);
+            dump_ppm(pp);
+            made++;
+        }
+        printf("[planets] wrote %d\n", made);
+        return 0;
+    }
+
+    /* Stolen-goods chain: black-market-only sale + criminal status. */
+    if (getenv("ELITE_STOLENTEST")) {
+        g_player.cargo[19] = 4;                 /* hot contraband */
+        const SystemInfo *si = system_info();
+        int lawful = econ_has_black_market(si) ? 0 : 1;
+        int sell = econ_price(si, 0, 19, false);
+        printf("[stolen] system lawful=%d sell_price=%d (%s)\n",
+               lawful, sell,
+               (lawful && sell == 0) ? "BLOCKED" :
+               (!lawful && sell > 0) ? "BLACK MARKET OK" : "CHECK");
+        /* police scan: park a patrol next to us and wait */
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Ship *pl = &g_ships[0];
+        int e = ship_spawn(hull_mesh(0x70110CEu, 3),
+                           v3_add(pl->pos, v3(60, 0, 60)), TEAM_NEUTRAL);
+        if (e > 0) {
+            ship_set_tier(e, 3, 3);
+            g_ships[e].is_police = 1;
+            g_ships[e].vel = v3(0, 0, 0);
+            CraftRawButtons none = {0};
+            pl->vel = v3(0, 0, 0);
+            for (int f = 0; f < 120 && g_player.legal == 0; f++) {
+                g_ships[e].pos = v3_add(pl->pos, v3(60, 0, 60));
+                elite_game_tick(&none, 1.0f / 30.0f);
+            }
+            printf("[stolen] after scan: legal=%d fine=%d "
+                   "police_team=%d\n", g_player.legal, g_player.fine,
+                   g_ships[e].alive ? g_ships[e].team : -1);
+        }
         return 0;
     }
 

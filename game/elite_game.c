@@ -138,6 +138,12 @@ int elite_game_state(void) { return (int)s_state; }
 
 static void drop_anchor(Vec3 pos_mm, const Poi *poi);
 static void spawn_poi_content(void);
+static void arrive_in_system(SysAddr addr);
+
+/* Debug: hard-jump to a system (harness only). */
+void elite_game_debug_jump(SysAddr addr) {
+    arrive_in_system(addr);
+}
 
 int elite_game_debug_target(void) { return s_target; }
 
@@ -155,6 +161,25 @@ void elite_game_crit_toast(const char *msg, bool mine) {
     snprintf(s_scoop_toast, sizeof s_scoop_toast, "%s", msg);
     s_scoop_toast_t = mine ? 2.6f : 1.8f;
     if (mine) sfx_lock_warn();
+}
+
+/* Debug: frame planet POI n from 2.6 radii out, sunward side, facing
+ * it (planet-variety sheets). */
+void elite_game_debug_view_planet(int n) {
+    Poi pois[MAX_POIS];
+    int np = system_pois(pois, MAX_POIS);
+    if (n < 0 || n >= np || pois[n].kind != POI_PLANET) return;
+    const SystemInfo *si = system_info();
+    float r = si->planets[pois[n].index].radius_mm;
+    Vec3 ppos = pois[n].pos_mm;
+    float pd = v3_len(ppos);
+    if (pd < 1.0f) return;
+    float k = 1.0f - (r * 2.6f) / pd;     /* sunward of the planet */
+    Vec3 anchor = v3_scale(ppos, k);
+    drop_anchor(anchor, &pois[n]);
+    g_ships[PLAYER].pos = v3(0, 0, 0);
+    elite_game_debug_face_away_from_sun();   /* away from sun = at it */
+    s_scoop_toast_t = 0;                     /* clean frame */
 }
 
 /* The player damaged a hostile: any distress wing drops the civilian
