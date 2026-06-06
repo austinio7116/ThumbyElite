@@ -93,6 +93,7 @@ static bool  s_incoming;         /* seeker tracking the player */
 static bool  s_in_settings;      /* SETTINGS submenu over the pause */
 static int   s_dash_sel;         /* dashboard region 0..3 */
 static float s_dash_anim;        /* 0 closed .. 1 fully risen */
+static bool  s_dash_closing;     /* sliding back down before resume */
 static uint8_t s_dash_from;      /* state to resume (flight/SC) */
 static bool  s_menus_live;       /* chart/map/status keep the sim running */
 static int   s_settings_cursor;
@@ -1170,6 +1171,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             s_dash_from = ST_FLIGHT;
             s_dash_sel = 0;
             s_dash_anim = 0;
+            s_dash_closing = false;
             s_in_settings = false;
             break;
         }
@@ -1182,6 +1184,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             s_dash_from = ST_SUPERCRUISE;
             s_dash_sel = 0;
             s_dash_anim = 1.0f;          /* SC: no slide, straight in */
+            s_dash_closing = false;
             s_in_settings = false;
             break;
         }
@@ -1279,6 +1282,19 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             s_state = (uint8_t)s_dash_from;
             break;
         }
+        if (s_dash_closing) {
+            /* Slide back down, then hand the stick back (user req: no
+             * teleporting console). MENU mid-close reopens. */
+            if (menu_edge) { s_dash_closing = false; break; }
+            s_dash_anim -= dt * 4.0f;
+            if (s_dash_anim <= 0.0f) {
+                s_dash_anim = 0;
+                s_dash_closing = false;
+                elite_input_reset();
+                s_state = (uint8_t)s_dash_from;
+            }
+            break;
+        }
         if (s_dash_anim < 1.0f) {
             s_dash_anim += dt * 4.0f;
             if (s_dash_anim > 1.0f) s_dash_anim = 1.0f;
@@ -1325,10 +1341,8 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
                     s_settings_cursor = 0;
                 }
             }
-            if ((btn->b && !pb3) || menu_edge) {
-                elite_input_reset();
-                s_state = (uint8_t)s_dash_from;
-            }
+            if ((btn->b && !pb3) || menu_edge)
+                s_dash_closing = true;       /* animated exit */
             pb3 = btn->b;
         }
         break;

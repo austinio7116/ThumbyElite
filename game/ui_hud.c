@@ -320,20 +320,24 @@ void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
         icon_weapon(fb, wx - 15, 9, p->weapons[p->active_w]);
     }
 
-    /* Left panel: speed / throttle / status lights. */
+    /* Left panel: THREE clean rows, nothing below y123 (the old loose
+     * cluster put kills + chaff at y124 where the glyph bottoms clip
+     * off-screen — 'K0' read as KO; user report). Flags ride the bar
+     * rows; chaff lives by the weapon readout top-centre. */
     if (player_has_util(EQ_CHAFF)) {
         char cb[6];
         snprintf(cb, sizeof cb, "C%d", g_player.chaff_charges);
-        craft_font_draw(fb, cb, 30, 124, RGB565C(200, 200, 215));
+        craft_font_draw(fb, cb, 2, 10, RGB565C(200, 200, 215));
     }
     craft_font_draw(fb, "SP", 2, 102, COL_TEXT);
     bar(fb, 13, 105, 20, v3_len(p->vel) / (p->max_speed * 1.8f), COL_TEXT);
+    if (!p->assist) craft_font_draw(fb, "DR", 35, 102, COL_HEAT);
     craft_font_draw(fb, "TH", 2, 109, COL_NUM);
     bar(fb, 13, 112, 20, p->throttle, COL_NUM);
+    if (p->boost_t > 0) craft_font_draw(fb, "BS", 35, 109, COL_SHIELD);
     snprintf(buf, sizeof buf, "%3d", (int)v3_len(p->vel));
-    craft_font_draw(fb, buf, 2, 118, COL_NUM);
-    if (!p->assist) craft_font_draw(fb, "DR", 18, 118, COL_HEAT);
-    if (p->boost_t > 0) craft_font_draw(fb, "BS", 27, 118, COL_SHIELD);
+    craft_font_draw(fb, buf, 2, 117, COL_NUM);
+
 
     /* Right panel: shield / hull / heat + wave/kills. */
     craft_font_draw(fb, "S", 94, 102, COL_SHIELD);
@@ -345,7 +349,7 @@ void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
     craft_font_draw(fb, "F", 94, 122, COL_NUM);
     bar(fb, 101, 124, 22, info->fuel01, COL_NUM);
     snprintf(buf, sizeof buf, "K%d", info->kills);
-    craft_font_draw(fb, buf, 2, 124, COL_TEXT);
+    craft_font_draw(fb, buf, 22, 117, COL_TEXT);
 
     scanner(fb);
 
@@ -552,7 +556,7 @@ void ui_hud_draw_sc(uint16_t *fb, const HudScInfo *info) {
     if (player_has_util(EQ_CHAFF)) {
         char cb[6];
         snprintf(cb, sizeof cb, "C%d", g_player.chaff_charges);
-        craft_font_draw(fb, cb, 30, 124, RGB565C(200, 200, 215));
+        craft_font_draw(fb, cb, 94, 115, RGB565C(200, 200, 215));
     }
     craft_font_draw(fb, "SP", 2, 102, COL_TEXT);
     bar(fb, 13, 105, 20, info->speed_mms / 50.0f, COL_TEXT);

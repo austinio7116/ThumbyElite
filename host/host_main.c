@@ -201,7 +201,10 @@ int main(int argc, char **argv) {
         b = none; elite_game_tick(&b, 1.0f/30.0f);
         printf("[dash] back: state=%d (12=DASH)\n", elite_game_state());
         b = none; b.menu = true; elite_game_tick(&b, 1.0f/30.0f);
-        b = none; elite_game_tick(&b, 1.0f/30.0f);
+        b = none;
+        elite_game_tick(&b, 1.0f/30.0f);
+        render_frame(); dump_ppm("/tmp/dash_closing.ppm");
+        for (int f = 0; f < 12; f++) elite_game_tick(&none, 1.0f/30.0f);
         printf("[dash] resume: state=%d (0=FLIGHT)\n",
                elite_game_state());
         return 0;
