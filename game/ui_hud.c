@@ -112,6 +112,10 @@ static void dashboard(uint16_t *fb) {
 #define SC_RANGE_BASE 400.0f
 #define SC_RANGE (player_has_util(EQ_SCANNER) ? 700.0f : SC_RANGE_BASE)
 
+static uint16_t shade565_dim(uint16_t c) {
+    return (uint16_t)(((c >> 1) & 0x7BEF));   /* ~half brightness */
+}
+
 static void scanner(uint16_t *fb) {
     /* Dim grid cross first, then the rim. */
     hline(fb, SC_CX - SC_RX + 2, SC_CX + SC_RX - 2, SC_CY, COL_GRID);
@@ -131,18 +135,27 @@ static void scanner(uint16_t *fb) {
         float dx = local.x * (SC_RX / SC_RANGE);
         float dz = -local.z * (SC_RY / SC_RANGE);
         float e = (dx * dx) / (SC_RX * SC_RX) + (dz * dz) / (SC_RY * SC_RY);
-        if (e > 1.0f) {
+        bool beyond = (e > 1.0f);
+        if (beyond) {
             float k = 1.0f / sqrtf(e);
             dx *= k; dz *= k;
         }
         int fx = SC_CX + (int)dx, fy = SC_CY + (int)dz;
-        int stalk = (int)(-local.y * (40.0f / SC_RANGE));
-        if (stalk > 9) stalk = 9;
-        if (stalk < -9) stalk = -9;
         uint16_t c = s->is_police ? RGB565C(90, 180, 255)
                    : (s->team == TEAM_HOSTILE) ? COL_BLIP_H
                    : s->is_civilian ? RGB565C(110, 230, 110)
                                     : COL_BLIP_N;
+        if (beyond) {
+            /* Out of scanner range: a dim rim tick, direction only.
+             * The old full blip + pegged stalk flipped top-to-bottom
+             * on tiny pitch changes near alignment (user report) —
+             * altitude data is meaningless out here. */
+            px(fb, fx, fy, shade565_dim(c));
+            continue;
+        }
+        int stalk = (int)(-local.y * (40.0f / SC_RANGE));
+        if (stalk > 9) stalk = 9;
+        if (stalk < -9) stalk = -9;
         px(fb, fx, fy, COL_FRAME);
         if (stalk != 0)
             vline(fb, fx, fy < fy + stalk ? fy : fy + stalk,

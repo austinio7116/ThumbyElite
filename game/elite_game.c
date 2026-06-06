@@ -139,6 +139,8 @@ int elite_game_state(void) { return (int)s_state; }
 static void drop_anchor(Vec3 pos_mm, const Poi *poi);
 static void spawn_poi_content(void);
 
+int elite_game_debug_target(void) { return s_target; }
+
 /* Debug: jump the anchor straight to POI n (harness only). */
 void elite_game_debug_goto_poi(int n) {
     Poi pois[MAX_POIS];
@@ -530,10 +532,27 @@ static void cycle_target(void) {
         if (cur_d >= 0.0f && d > cur_d && d < best_d) { best_d = d; best = i; }
     }
     s_target = (best >= 0) ? best : first;
-    /* Nothing hostile: lock salvage; failing that, the local station —
-     * a compass home when you have drifted off the dock (user req). */
+    /* Nothing hostile: NEUTRAL ships first (find the rescued civilian
+     * — user report: the green ship was untargetable), then salvage,
+     * rocks, station compass. */
     s_station_lock = false;
     s_rock_target = -1;
+    if (s_target < 0) {
+        int nbest = -1, nfirst = -1;
+        float nbest_d = 1e30f, nfirst_d = 1e30f;
+        for (int i = 1; i < MAX_SHIPS; i++) {
+            if (!g_ships[i].alive || g_ships[i].team == TEAM_HOSTILE)
+                continue;
+            if (!g_ships[i].is_civilian && !g_ships[i].is_police)
+                continue;
+            float d = v3_len(v3_sub(g_ships[i].pos, pp));
+            if (d < nfirst_d) { nfirst_d = d; nfirst = i; }
+            if (cur_d >= 0.0f && d > cur_d && d < nbest_d) {
+                nbest_d = d; nbest = i;
+            }
+        }
+        s_target = (nbest >= 0) ? nbest : nfirst;
+    }
     if (s_target < 0) {
         s_loot_target = loot_nearest(pp, NULL);
         if (s_loot_target < 0) {

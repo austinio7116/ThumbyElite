@@ -271,6 +271,35 @@ int main(int argc, char **argv) {
                g_ships[civ].alive, g_player.credits - cr0,
                ships_alive_hostile(), elite_game_state(),
                g_player.legal);
+        /* post-rescue: LB must lock the surviving civilian */
+        {
+            CraftRawButtons lb2 = {0};
+            lb2.lb = true;
+            elite_game_tick(&lb2, 1.0f / 30.0f);
+            CraftRawButtons n4 = {0};
+            for (int f = 0; f < 8; f++)
+                elite_game_tick(&n4, 1.0f / 30.0f);
+            extern int elite_game_debug_target(void);
+            printf("[post] LB lock -> %d (civ=%d) %s\n",
+                   elite_game_debug_target(), civ,
+                   elite_game_debug_target() == civ ? "LOCKED"
+                                                    : "MISS");
+        }
+        /* post-rescue: watch the survivor for pathological motion */
+        for (int f = 0; f < 300; f++) {
+            elite_game_tick(&none, 1.0f / 30.0f);
+            if (f % 60 == 0 && g_ships[civ].alive) {
+                Ship *cv = &g_ships[civ];
+                Ship *pl = &g_ships[0];
+                Vec3 local = m3_mul_v3_t(&pl->basis,
+                                         v3_sub(cv->pos, pl->pos));
+                printf("[post] t=%2.0fs dist=%6.0f local.y=%7.1f "
+                       "vel=%5.1f pos=(%.0f %.0f %.0f)\n",
+                       f / 30.0f, v3_len(local), local.y,
+                       v3_len(cv->vel), cv->pos.x, cv->pos.y,
+                       cv->pos.z);
+            }
+        }
         return 0;
     }
 
