@@ -24,6 +24,8 @@ typedef struct {
 } HudInfo;
 
 void ui_hud_draw(uint16_t *fb, const HudInfo *info);
+/* Top row of the console graphic (the dash screen shifts these rows). */
+int ui_hud_dash_top(void);
 
 /* Supercruise variant: dashboard + destination marker + travel readouts. */
 typedef struct {

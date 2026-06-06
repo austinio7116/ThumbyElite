@@ -77,6 +77,8 @@ static void bar(uint16_t *fb, int x, int y, int w, float frac, uint16_t c) {
     if (fill > 0) hline(fb, x, x + fill, y, c);
 }
 
+int ui_hud_dash_top(void) { return BULGE_TOP; }
+
 /* --- Dashboard ---------------------------------------------------------*/
 static void dashboard(uint16_t *fb) {
     /* Console fill: bulge rows then the full-width slab. */

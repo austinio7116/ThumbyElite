@@ -1138,7 +1138,8 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
 
     /* Engine hum only exists in flight states; everything else mutes
      * it (prevents any residual tone on title/menus). */
-    if (s_state != ST_FLIGHT && s_state != ST_SUPERCRUISE)
+    if (s_state != ST_FLIGHT && s_state != ST_SUPERCRUISE &&
+        !(s_state == ST_DASH && s_dash_anim < 1.0f))
         audio_engine_set(0, 0);
 
     switch (s_state) {
@@ -1655,139 +1656,160 @@ static void draw_hyperjump_overlay(uint16_t *fb) {
     craft_font_draw(fb, buf, 30, 100, RGB565C(150, 170, 255));
 }
 
-/* The flight dashboard: the game plays on behind this — the top strip
- * is a live mini-HUD (scanner + bars) so you keep situational
- * awareness while you pick your escape. */
-static void dash_mini_strip(uint16_t *fb) {
-    for (int y = 0; y < 27; y++)
-        for (int x = 0; x < 128; x++)
-            fb[y * ELITE_FB_W + x] = RGB565C(7, 10, 18);
-    for (int x = 0; x < 128; x++)
-        fb[27 * ELITE_FB_W + x] = RGB565C(45, 60, 85);
-    Ship *p = &g_ships[PLAYER];
-    char b2[16];
-    snprintf(b2, sizeof b2, "%d", (int)v3_len(p->vel));
-    craft_font_draw(fb, "SP", 2, 3, RGB565C(95, 200, 120));
-    craft_font_draw(fb, b2, 18, 3, RGB565C(160, 170, 190));
-    snprintf(b2, sizeof b2, "TH %d%%", (int)(p->throttle * 100));
-    craft_font_draw(fb, b2, 2, 12, RGB565C(95, 130, 160));
-    /* mini scanner disc, centred */
-    const int cx = 64, cy = 13, rx = 22, ry = 11;
-    for (int a2 = 0; a2 < 40; a2++) {
-        float th = (float)a2 * (6.2831853f / 40.0f);
-        int x = cx + (int)(cosf(th) * rx);
-        int y = cy + (int)(sinf(th) * ry);
-        fb[y * ELITE_FB_W + x] = RGB565C(40, 70, 100);
+/* The flight dashboard instruments. The real console rows are blitted
+ * to the top of the screen; below them: two live MFD screens (mini
+ * galaxy chart + mini system schematic) and two small buttons,
+ * cockpit-bezel styled (user req: instruments, not grey rectangles). */
+static void dash_bezel(uint16_t *fb, int x0, int y0, int x1, int y1,
+                       bool sel, int cut) {
+    /* chamfered MFD bezel: corners cut by `cut` px */
+    uint16_t bc = sel ? RGB565C(120, 255, 120) : RGB565C(70, 86, 115);
+    uint16_t fill = RGB565C(6, 9, 16);
+    for (int y = y0; y <= y1; y++) {
+        int inset = 0;
+        if (y - y0 < cut) inset = cut - (y - y0);
+        if (y1 - y < cut) inset = cut - (y1 - y);
+        for (int x = x0 + inset; x <= x1 - inset; x++)
+            fb[y * ELITE_FB_W + x] = fill;
+        fb[y * ELITE_FB_W + x0 + inset] = bc;
+        fb[y * ELITE_FB_W + x1 - inset] = bc;
     }
-    for (int i = 1; i < MAX_SHIPS; i++) {
-        Ship *sh = &g_ships[i];
-        if (!sh->alive) continue;
-        Vec3 local = m3_mul_v3_t(&p->basis, v3_sub(sh->pos, p->pos));
-        float dx = local.x * (rx / 900.0f);
-        float dz = -local.z * (ry / 900.0f);
-        if ((dx * dx) / (rx * rx) + (dz * dz) / (ry * ry) > 1.0f)
-            continue;
-        uint16_t c = sh->is_police ? RGB565C(90, 180, 255)
-                   : (sh->team == TEAM_HOSTILE) ? RGB565C(255, 80, 60)
-                   : sh->is_civilian ? RGB565C(110, 230, 110)
-                                     : RGB565C(170, 170, 180);
-        int bx = cx + (int)dx, by = cy + (int)dz;
-        fb[by * ELITE_FB_W + bx] = c;
-        if (sh->team == TEAM_HOSTILE && by > 0)
-            fb[(by - 1) * ELITE_FB_W + bx] = c;
-    }
-    /* S H T F bars, right */
-    struct { float v; uint16_t c; } bars[4] = {
-        { p->shield / (p->shield_max > 0 ? p->shield_max : 1),
-          RGB565C(90, 170, 255) },
-        { p->hull / (p->hull_max > 0 ? p->hull_max : 1),
-          RGB565C(255, 140, 60) },
-        { p->heat / 100.0f, RGB565C(255, 210, 80) },
-        { g_player.fuel / g_player.fuel_max, RGB565C(170, 170, 190) },
-    };
-    static const char *bl[4] = { "S", "H", "T", "F" };
-    for (int i = 0; i < 4; i++) {
-        int y = 2 + i * 6;
-        craft_font_draw(fb, bl[i], 96, y, bars[i].c);
-        int w = (int)(bars[i].v * 24.0f);
-        if (w > 24) w = 24;
-        for (int x = 0; x < w; x++)
-            fb[(y + 2) * ELITE_FB_W + 103 + x] = bars[i].c;
+    for (int x = x0 + cut; x <= x1 - cut; x++) {
+        fb[y0 * ELITE_FB_W + x] = bc;
+        fb[y1 * ELITE_FB_W + x] = bc;
     }
 }
 
-static void dash_draw_panel(uint16_t *fb, int y0) {
-    /* 2x2 regions: CHART / SYSTEM / STATUS / SETTINGS. */
-    for (int y = y0; y < 118; y++)
-        for (int x = 0; x < 128; x++)
-            fb[y * ELITE_FB_W + x] = RGB565C(10, 13, 22);
-    static const char *names[4] = { "GALAXY", "SYSTEM",
-                                    "STATUS", "SETTINGS" };
-    for (int r = 0; r < 4; r++) {
-        int px2 = (r & 1) ? 66 : 2;
-        int py2 = y0 + 3 + ((r & 2) ? 45 : 0);
-        if (py2 + 40 > 118) continue;
-        bool sel = (r == s_dash_sel);
-        uint16_t bc = sel ? RGB565C(120, 255, 120)
-                          : RGB565C(50, 62, 88);
-        for (int x = px2; x < px2 + 60; x++) {
-            fb[py2 * ELITE_FB_W + x] = bc;
-            fb[(py2 + 40) * ELITE_FB_W + x] = bc;
+static void dash_mini_galaxy(uint16_t *fb, int x0, int y0, int w, int h) {
+    /* a LIVE little chart: stars around us, range ring, us centred */
+    float scale = 2.6f;                       /* px per ly */
+    float cxl, cyl;
+    galaxy_star_pos(s_addr, &cxl, &cyl);
+    int cx = x0 + w / 2, cy = y0 + h / 2;
+    float half_ly = (float)w * 0.5f / scale;
+    int sx0 = (int)floorf((cxl - half_ly) / SECTOR_LY);
+    int sx1 = (int)floorf((cxl + half_ly) / SECTOR_LY);
+    int sy0 = (int)floorf((cyl - half_ly) / SECTOR_LY);
+    int sy1 = (int)floorf((cyl + half_ly) / SECTOR_LY);
+    for (int sy2 = sy0; sy2 <= sy1; sy2++)
+        for (int sx2 = sx0; sx2 <= sx1; sx2++) {
+            int n = galaxy_sector_stars(sx2, sy2);
+            for (int i = 0; i < n; i++) {
+                SysAddr a2 = { sx2, sy2, (uint8_t)i };
+                float px2, py2;
+                galaxy_star_pos(a2, &px2, &py2);
+                int x = cx + (int)((px2 - cxl) * scale);
+                int y = cy + (int)((py2 - cyl) * scale);
+                if (x <= x0 + 1 || x >= x0 + w - 2 ||
+                    y <= y0 + 1 || y >= y0 + h - 2)
+                    continue;
+                fb[y * ELITE_FB_W + x] = RGB565C(165, 175, 205);
+            }
         }
-        for (int y = py2; y <= py2 + 40; y++) {
-            fb[y * ELITE_FB_W + px2] = bc;
-            fb[y * ELITE_FB_W + px2 + 60] = bc;
+    /* jump-range ring */
+    float rr = k_hulls[g_player.hull_id].jump_range * scale;
+    for (int a2 = 0; a2 < 28; a2++) {
+        float th = (float)a2 * (6.2831853f / 28.0f);
+        int x = cx + (int)(cosf(th) * rr);
+        int y = cy + (int)(sinf(th) * rr);
+        if (x > x0 + 1 && x < x0 + w - 2 && y > y0 + 1 && y < y0 + h - 2)
+            fb[y * ELITE_FB_W + x] = RGB565C(70, 150, 90);
+    }
+    /* us */
+    fb[cy * ELITE_FB_W + cx] = RGB565C(120, 255, 255);
+    fb[(cy - 1) * ELITE_FB_W + cx] = RGB565C(60, 140, 150);
+    fb[(cy + 1) * ELITE_FB_W + cx] = RGB565C(60, 140, 150);
+    fb[cy * ELITE_FB_W + cx - 1] = RGB565C(60, 140, 150);
+    fb[cy * ELITE_FB_W + cx + 1] = RGB565C(60, 140, 150);
+}
+
+static void dash_mini_system(uint16_t *fb, int x0, int y0, int w, int h) {
+    /* the system schematic: star + planets, station ticks, our anchor */
+    const SystemInfo *si = system_info();
+    int cy = y0 + h / 2;
+    /* star */
+    for (int dy = -2; dy <= 2; dy++)
+        for (int dx = -2; dx <= 2; dx++)
+            if (dx * dx + dy * dy <= 5)
+                fb[(cy + dy) * ELITE_FB_W + x0 + 6 + dx] = si->star_color;
+    int n = si->n_planets > 0 ? si->n_planets : 1;
+    int step = (w - 18) / n;
+    if (step > 13) step = 13;
+    for (int i = 0; i < si->n_planets; i++) {
+        int x = x0 + 14 + i * step;
+        int r = si->planets[i].type == PT_GAS ? 3 : 2;
+        uint16_t c = (si->planets[i].type == PT_LAVA)
+                         ? RGB565C(200, 90, 30)
+                   : (si->planets[i].type == PT_ICE)
+                         ? RGB565C(210, 225, 240)
+                   : (si->planets[i].type == PT_GAS)
+                         ? RGB565C(200, 170, 120)
+                   : (si->planets[i].type == PT_ROCK)
+                         ? RGB565C(150, 130, 105)
+                         : RGB565C(60, 130, 180);
+        for (int dy = -r; dy <= r; dy++)
+            for (int dx = -r; dx <= r; dx++)
+                if (dx * dx + dy * dy <= r * r)
+                    fb[(cy + dy) * ELITE_FB_W + x + dx] = c;
+        if (si->planets[i].station >= 0) {
+            fb[(cy - 6) * ELITE_FB_W + x] = RGB565C(120, 130, 155);
+            fb[(cy - 7) * ELITE_FB_W + x - 1] = RGB565C(120, 130, 155);
+            fb[(cy - 7) * ELITE_FB_W + x + 1] = RGB565C(120, 130, 155);
         }
-        craft_font_draw(fb, names[r], px2 + 6, py2 + 4,
-                        sel ? RGB565C(120, 255, 120)
-                            : RGB565C(110, 120, 140));
-        /* tiny glyphs */
-        int gx = px2 + 26, gy = py2 + 22;
-        if (r == 0) {                      /* chart: stars + ring */
-            for (int k = 0; k < 14; k++) {
-                uint32_t h2 = 0x9E37u * (k + 3);
-                h2 ^= h2 >> 7;
-                fb[(gy - 8 + (int)(h2 % 17u)) * ELITE_FB_W +
-                   (gx - 14 + (int)((h2 >> 5) % 31u))] =
-                    RGB565C(150, 160, 190);
-            }
-            for (int a2 = 0; a2 < 18; a2++) {
-                float th = (float)a2 * (6.2831853f / 18.0f);
-                fb[(gy + (int)(sinf(th) * 7.0f)) * ELITE_FB_W +
-                   gx + (int)(cosf(th) * 11.0f)] =
-                    RGB565C(90, 200, 120);
-            }
-        } else if (r == 1) {               /* system: star + orbits */
-            for (int dy = -2; dy <= 2; dy++)
-                for (int dx = -2; dx <= 2; dx++)
-                    if (dx * dx + dy * dy <= 4)
-                        fb[(gy + dy) * ELITE_FB_W + gx - 12 + dx] =
-                            RGB565C(255, 200, 90);
-            for (int k = 0; k < 3; k++)
-                fb[gy * ELITE_FB_W + gx - 2 + k * 8] =
-                    RGB565C(120, 170, 220);
-        } else if (r == 2) {               /* status: bars */
-            for (int k = 0; k < 3; k++)
-                for (int x = 0; x < 16 - k * 4; x++)
-                    fb[(gy - 4 + k * 4) * ELITE_FB_W + gx - 8 + x] =
-                        RGB565C(120 + k * 40, 160, 200 - k * 40);
-        } else {                           /* settings: sliders */
-            for (int k = 0; k < 2; k++) {
-                for (int x = 0; x < 22; x++)
-                    fb[(gy - 3 + k * 6) * ELITE_FB_W + gx - 11 + x] =
-                        RGB565C(70, 80, 105);
-                int kx = gx - 11 + (k ? 16 : 6);
-                fb[(gy - 4 + k * 6) * ELITE_FB_W + kx] =
-                    RGB565C(200, 210, 230);
-                fb[(gy - 3 + k * 6) * ELITE_FB_W + kx] =
-                    RGB565C(200, 210, 230);
-            }
+        /* our anchor: cyan chevron under the body we're at */
+        if (s_anchor_has_poi && s_anchor_poi.kind == POI_PLANET &&
+            s_anchor_poi.index == i) {
+            fb[(cy + 6) * ELITE_FB_W + x] = RGB565C(120, 255, 255);
+            fb[(cy + 7) * ELITE_FB_W + x - 1] = RGB565C(120, 255, 255);
+            fb[(cy + 7) * ELITE_FB_W + x + 1] = RGB565C(120, 255, 255);
         }
     }
-    for (int x = 0; x < 128; x++)
-        fb[118 * ELITE_FB_W + x] = RGB565C(45, 60, 85);
-    craft_font_draw(fb, "A:OPEN B:RESUME", 2, 121,
-                    RGB565C(95, 110, 140));
+    if (s_anchor_has_poi && s_anchor_poi.kind == POI_BEACON) {
+        fb[(cy + 6) * ELITE_FB_W + x0 + 6] = RGB565C(120, 255, 255);
+        fb[(cy + 7) * ELITE_FB_W + x0 + 5] = RGB565C(120, 255, 255);
+        fb[(cy + 7) * ELITE_FB_W + x0 + 7] = RGB565C(120, 255, 255);
+    }
+}
+
+static void dash_draw_panels(uint16_t *fb, int y0) {
+    if (y0 >= ELITE_FB_H) return;
+    /* console-coloured backing so it reads as one piece of cockpit */
+    for (int y = y0; y < ELITE_FB_H; y++)
+        for (int x = 0; x < 128; x++)
+            fb[y * ELITE_FB_W + x] = RGB565C(13, 17, 27);
+    int avail = ELITE_FB_H - y0;
+    if (avail < 24) return;                  /* still mostly closed */
+    /* MFD pair */
+    int mh = avail - 26;
+    if (mh > 58) mh = 58;
+    int my0 = y0 + 2, my1 = my0 + mh;
+    dash_bezel(fb, 2, my0, 62, my1, s_dash_sel == 0, 4);
+    dash_bezel(fb, 65, my0, 125, my1, s_dash_sel == 1, 4);
+    if (mh > 20) {
+        dash_mini_galaxy(fb, 4, my0 + 9, 57, mh - 11);
+        dash_mini_system(fb, 67, my0 + 9, 57, mh - 11);
+    }
+    craft_font_draw(fb, "GALAXY", 9, my0 + 2,
+                    s_dash_sel == 0 ? RGB565C(120, 255, 120)
+                                    : RGB565C(110, 120, 140));
+    craft_font_draw(fb, "SYSTEM", 72, my0 + 2,
+                    s_dash_sel == 1 ? RGB565C(120, 255, 120)
+                                    : RGB565C(110, 120, 140));
+    /* button row: small pills */
+    int by = my1 + 3;
+    if (by + 10 < ELITE_FB_H) {
+        dash_bezel(fb, 10, by, 58, by + 10, s_dash_sel == 2, 3);
+        dash_bezel(fb, 70, by, 118, by + 10, s_dash_sel == 3, 3);
+        craft_font_draw(fb, "STATUS", 17, by + 2,
+                        s_dash_sel == 2 ? RGB565C(120, 255, 120)
+                                        : RGB565C(110, 120, 140));
+        craft_font_draw(fb, "SETTINGS", 73, by + 2,
+                        s_dash_sel == 3 ? RGB565C(120, 255, 120)
+                                        : RGB565C(110, 120, 140));
+    }
+    if (by + 20 < ELITE_FB_H)
+        craft_font_draw(fb, "A:OPEN B:RESUME", 22, by + 13,
+                        RGB565C(80, 95, 120));
 }
 
 static void dash_settings_overlay(uint16_t *fb) {
@@ -1876,19 +1898,6 @@ void elite_game_draw_overlay(uint16_t *fb) {
         return;
     }
 
-    case ST_DASH:
-        if (s_dash_anim >= 1.0f) {
-            dash_mini_strip(fb);
-            dash_draw_panel(fb, 28);
-            if (s_in_settings) dash_settings_overlay(fb);
-            if (s_scoop_toast_t > 0)
-                craft_font_draw(fb, s_scoop_toast,
-                                64 - craft_font_width(s_scoop_toast) / 2,
-                                30, RGB565C(255, 200, 60));
-            return;
-        }
-        break;   /* still rising: live 3D renders, panel overlays below */
-
     case ST_GALAXY_MAP: map_galaxy_draw(fb); return;
     case ST_SYSTEM_MAP: map_system_draw(fb); return;
     case ST_HYPERJUMP:  draw_hyperjump_overlay(fb); return;
@@ -1958,6 +1967,18 @@ void elite_game_draw_overlay(uint16_t *fb) {
     }
 
     if (s_state == ST_PAUSE) draw_pause_overlay(fb);
-    if (s_state == ST_DASH && s_dash_anim < 1.0f)
-        dash_draw_panel(fb, 128 - (int)(s_dash_anim * 100.0f));
+    if (s_state == ST_DASH) {
+        /* Move the REAL console (the rows the HUD just painted) up the
+         * screen; the instrument panels slide into view beneath it. */
+        int dtop = ui_hud_dash_top();
+        int dash_h = ELITE_FB_H - dtop;
+        int up = (int)(s_dash_anim * (float)dtop);
+        if (up > 0) {
+            memmove(&fb[(dtop - up) * ELITE_FB_W],
+                    &fb[dtop * ELITE_FB_W],
+                    (size_t)dash_h * ELITE_FB_W * 2);
+            dash_draw_panels(fb, dtop - up + dash_h);
+        }
+        if (s_in_settings) dash_settings_overlay(fb);
+    }
 }
