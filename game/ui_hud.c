@@ -138,7 +138,9 @@ static void scanner(uint16_t *fb) {
         if (stalk > 9) stalk = 9;
         if (stalk < -9) stalk = -9;
         uint16_t c = s->is_police ? RGB565C(90, 180, 255)
-                   : (s->team == TEAM_HOSTILE) ? COL_BLIP_H : COL_BLIP_N;
+                   : (s->team == TEAM_HOSTILE) ? COL_BLIP_H
+                   : s->is_civilian ? RGB565C(110, 230, 110)
+                                    : COL_BLIP_N;
         px(fb, fx, fy, COL_FRAME);
         if (stalk != 0)
             vline(fb, fx, fy < fy + stalk ? fy : fy + stalk,
@@ -267,10 +269,13 @@ static void target_box(uint16_t *fb, int target) {
         COL_HULL);
     craft_font_draw(fb,
                     t->is_police ? "POLICE"
+                  : (t->is_civilian && t->team == TEAM_NEUTRAL) ? "CIVILIAN"
                   : t->is_mark   ? "** MARK **"
                                  : k_tier_names[t->tier > 4 ? 4 : t->tier],
                     98, 28,
-                    t->is_police ? RGB565C(90, 180, 255) : COL_TARGET);
+                    t->is_police ? RGB565C(90, 180, 255)
+                  : (t->is_civilian && t->team == TEAM_NEUTRAL)
+                        ? RGB565C(110, 230, 110) : COL_TARGET);
 }
 
 void ui_hud_draw(uint16_t *fb, const HudInfo *info) {

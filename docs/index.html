@@ -109,7 +109,7 @@
 </header>
 
 <nav>
-  <a href="#start">Start</a><a href="#controls">Controls</a><a href="#hud">HUD</a><a href="#flight">Flight</a><a href="#combat">Combat</a><a href="#weapons">Weapons</a><a href="#equipment">Equipment</a><a href="#salvage">Salvage</a><a href="#travel">Travel</a><a href="#galaxy">Galaxy</a><a href="#trading">Trading</a><a href="#stations">Stations</a><a href="#ships">Ships</a><a href="#missions">Missions</a><a href="#skills">Skills</a><a href="#law">The Law</a><a href="#mining">Mining</a><a href="#rank">Rank</a><a href="#death">Death &amp; Saves</a><a href="#field">Flying Your Ship</a>
+  <a href="#start">Start</a><a href="#controls">Controls</a><a href="#hud">HUD</a><a href="#flight">Flight</a><a href="#combat">Combat</a><a href="#weapons">Weapons</a><a href="#equipment">Equipment</a><a href="#salvage">Salvage</a><a href="#travel">Travel</a><a href="#galaxy">Galaxy</a><a href="#trading">Trading</a><a href="#stations">Stations</a><a href="#ships">Ships</a><a href="#missions">Missions</a><a href="#skills">Skills</a><a href="#law">The Law</a><a href="#dash">Dashboard</a><a href="#traffic">Traffic</a><a href="#mining">Mining</a><a href="#rank">Rank</a><a href="#death">Death &amp; Saves</a><a href="#field">Flying Your Ship</a>
 </nav>
 
 <main>
@@ -159,7 +159,7 @@ yours to choose.</p>
 <tr><td><span class="key">RB</span> tap</td><td>Toggle flight assist (drift mode)</td></tr>
 <tr><td><span class="key">RB</span> double-tap</td><td>Afterburner boost (2.2&nbsp;s burn)</td></tr>
 <tr><td><span class="key">LB</span>+<span class="key">RB</span> together</td><td>Request docking (within 600&nbsp;m of a station) · engage supercruise to your destination</td></tr>
-<tr><td><span class="key">MENU</span></td><td>Pause menu: resume, galaxy chart, system map, ship status, settings (invert-Y, FPS readout)</td></tr>
+<tr><td><span class="key">MENU</span></td><td>The <b>flight dashboard</b> — and the game KEEPS RUNNING under it (see below)</td></tr>
 </table>
 
 <h3>In menus</h3>
@@ -635,7 +635,7 @@ computer takes over and glides you in. On arrival, the station:</p>
 <ul>
 <li><b>repairs and rearms nothing automatically</b> — REPAIR (outfitting), REARM and REFUEL are paid services you choose,</li>
 <li>pays out any completed missions,</li>
-<li><b>saves your game</b> (this is the checkpoint system — see <a href="#law">The Law</a><a href="#mining">Mining</a><a href="#rank">Rank</a><a href="#death">Death &amp; Saves</a><a href="#field">Flying Your Ship</a>).</li>
+<li><b>saves your game</b> (this is the checkpoint system — see <a href="#law">The Law</a><a href="#dash">Dashboard</a><a href="#traffic">Traffic</a><a href="#mining">Mining</a><a href="#rank">Rank</a><a href="#death">Death &amp; Saves</a><a href="#field">Flying Your Ship</a>).</li>
 </ul>
 <p>Services: <b>MARKET</b> (trade), <b>SHIPYARD</b> (hulls), <b>OUTFITTING</b>
 (the armoury — stock varies per terminal — plus equipment, repairs, salvage), <b>MISSIONS</b> (the board),
@@ -744,6 +744,36 @@ Anarchy and Feudal systems, where there are no police at all (and the
 black markets live).</li>
 <li>Your status shows in SHIP STATUS: CLEAN / OFFENDER / FUGITIVE.</li>
 </ul>
+
+<h2 id="dash">The Flight Dashboard</h2>
+<p><span class="key">MENU</span> no longer pauses. The dashboard slides
+up over the cockpit and <b>the game plays on underneath</b> — the strip
+at the top is a live mini-HUD (scanner blips, shield/hull/heat/fuel) so
+you can watch trouble closing while you work. Pick a region with the
+d-pad — <span class="tag">GALAXY</span>, <span class="tag">SYSTEM</span>,
+<span class="tag">STATUS</span>, <span class="tag">SETTINGS</span> —
+and <span class="key">A</span> expands it; the sim keeps running inside
+those screens too. <span class="key">B</span> or
+<span class="key">MENU</span> returns to the stick at any moment.</p>
+<p>There is <b>no safety net</b>: choosing a supercruise destination or
+a jump target mid-dogfight is a race against the pilots shooting at
+you. Escapes are decisions now, not pauses.</p>
+
+<h2 id="traffic">Civilian Traffic &amp; Distress Calls</h2>
+<p><b class="g">Green blips are civilians</b> — mining vessels working
+the belts (watch their amber chip-beams) and cargo haulers on slow
+lanes near stations. They're armed, barely. Attacking one flags you an
+OFFENDER and it will fight back; destroying one makes you a
+<b class="r">FUGITIVE</b>, and its spilled cargo is <b>stolen goods</b>
+— contraband, black-market only, with all the police-scan and pirate
+heat that implies. Piracy pays, then it costs.</p>
+<p>Some planets and beacons in dangerous systems show
+<span class="tag r">DISTRESS CALL!</span> on the system map (a red
+<b class="r">!</b> in the list). Arrive and you'll find a civilian
+under pirate attack — the wing fights <i>them</i> until you put a shot
+in, then it turns on you. Kill the pirates while the victim survives
+and the hail comes with a reward: credits scaled to the danger, plus
+local faction reputation. Dither, and you'll watch them die.</p>
 
 <h2 id="mining">Mining</h2>
 <div class="figrow">

@@ -25,5 +25,7 @@ int loot_nearest(Vec3 from, Vec3 *out_pos);
 void loot_tractor_pull(Vec3 to, float range, float speed);
 /* Mining: spill an ore canister (minerals/metals, rare gems). */
 void loot_spawn_ore(Vec3 pos, Vec3 vel);
+/* Spill a canister of a specific good (civilian wreck cargo). */
+void loot_spawn_good(Vec3 pos, Vec3 vel, int good, int count);
 
 #endif

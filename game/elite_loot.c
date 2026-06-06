@@ -227,6 +227,24 @@ void loot_spawn_ore(Vec3 pos, Vec3 vel) {
     }
 }
 
+void loot_spawn_good(Vec3 pos, Vec3 vel, int good, int count) {
+    for (int i = 0; i < MAX_CANS; i++) {
+        Canister *c = &s_cans[i];
+        if (c->alive) continue;
+        c->alive = true;
+        c->is_component = 0;
+        c->good = (uint8_t)good;
+        c->count = (uint8_t)count;
+        c->pos = pos;
+        c->vel = v3_add(vel, v3(((int)(rnd() % 7) - 3) * 1.2f,
+                                ((int)(rnd() % 5) - 2) * 1.2f,
+                                ((int)(rnd() % 7) - 3) * 1.2f));
+        c->spin = 0.8f;
+        c->life = 1.0f;
+        return;
+    }
+}
+
 void loot_tractor_pull(Vec3 to, float range, float speed) {
     for (int i = 0; i < MAX_CANS; i++) {
         Canister *c = &s_cans[i];

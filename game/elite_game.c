@@ -47,6 +47,8 @@ typedef enum {
     ST_FLIGHT = 0, ST_SUPERCRUISE, ST_HYPERJUMP,
     ST_GALAXY_MAP, ST_SYSTEM_MAP, ST_PAUSE,
     ST_DOCKING, ST_DOCKED, ST_STATUS, ST_TITLE,
+    ST_DASH = 12,   /* appended LAST — inserting mid-enum shifted
+                       DOCKED & friends and broke every state check */
 } GState;
 
 #define DOCK_RANGE 600.0f
@@ -76,6 +78,10 @@ static Vec3    s_hyper_from_mm;   /* departure point: system recedes */
 static int   s_target = -1;      /* combat lock */
 static int   s_loot_target = -1; /* canister lock (no hostiles about) */
 static int   s_rock_target = -1; /* prospector lock (belt finding aid) */
+static uint32_t s_entry_salt;    /* per-system-entry, salts transient
+                                    events (distress) so revisits differ */
+static int   s_distress_civ = -1; /* live distress event: the victim */
+static bool  s_distress_paid;
 static int   s_tgt_class = 0;    /* 0 AUTO, 1 SALVAGE, 2 ROCKS — LB
                                     double-tap demotes the class so you
                                     can mine through floating salvage or
@@ -85,6 +91,10 @@ static bool  s_station_lock;     /* station nav lock (nothing else) */
 static float s_rail_charge01;    /* railgun charge for the HUD arc */
 static bool  s_incoming;         /* seeker tracking the player */
 static bool  s_in_settings;      /* SETTINGS submenu over the pause */
+static int   s_dash_sel;         /* dashboard region 0..3 */
+static float s_dash_anim;        /* 0 closed .. 1 fully risen */
+static uint8_t s_dash_from;      /* state to resume (flight/SC) */
+static bool  s_menus_live;       /* chart/map/status keep the sim running */
 static int   s_settings_cursor;
 static float s_fps;              /* smoothed, for the toggle readout */
 static uint32_t s_boot_seed;
@@ -124,6 +134,28 @@ static float s_time;
 float elite_game_time(void) { return s_time; }
 
 int elite_game_state(void) { return (int)s_state; }
+
+static void drop_anchor(Vec3 pos_mm, const Poi *poi);
+static void spawn_poi_content(void);
+
+/* Debug: jump the anchor straight to POI n (harness only). */
+void elite_game_debug_goto_poi(int n) {
+    Poi pois[MAX_POIS];
+    int np = system_pois(pois, MAX_POIS);
+    if (n < 0 || n >= np) return;
+    drop_anchor(pois[n].pos_mm, &pois[n]);
+    g_ships[PLAYER].pos = v3(0, 0, -700.0f);
+    spawn_poi_content();
+}
+
+/* The player damaged a hostile: any distress wing drops the civilian
+ * and turns on the player (user spec: they fight us once engaged). */
+void elite_game_player_engaged(void) {
+    if (s_distress_civ < 0) return;
+    for (int i = 1; i < MAX_SHIPS; i++)
+        if (g_ships[i].alive && g_ships[i].team == TEAM_HOSTILE)
+            g_ships[i].ai_target = 0;
+}
 
 /* Debug (host harness): face the player directly away from the star
  * so staged screenshots aren't photobombed by the sun. */
@@ -219,6 +251,13 @@ void elite_game_poi_intel(const Poi *poi, PoiIntel *out) {
     /* Salvage odds: the debris formula. */
     int dch = ((poi->kind == POI_STATION) ? 12 : 30) + (int)si->threat * 8;
     out->debris_pct = (uint8_t)(dch > 99 ? 99 : dch);
+    /* Distress calls: transient (salted per system entry), planets and
+     * beacons in dangerous space. Same map<->arrival contract as
+     * belts: what the list shows is what you find. */
+    uint32_t dh = h ^ (s_entry_salt * 0x9E3779B9u) ^ 0xD157u;
+    dh *= 2654435761u; dh ^= dh >> 15;
+    out->distress = (poi->kind != POI_STATION) && si->threat >= 1 &&
+                    (dh % 100u) < 22;
 }
 
 static void spawn_poi_content(void) {
@@ -275,6 +314,93 @@ static void spawn_poi_content(void) {
                 ship_set_tier(idx, 3, 3);
                 g_ships[idx].is_police = 1;
                 g_ships[idx].team = TEAM_NEUTRAL;
+            }
+        }
+    }
+
+    /* Distress call: a civilian under pirate attack — the wing fights
+     * THEM until the player engages. Rescue pays credits and rep. */
+    s_distress_civ = -1;
+    s_distress_paid = false;
+    if (s_anchor_has_poi) {
+        PoiIntel di;
+        elite_game_poi_intel(&s_anchor_poi, &di);
+        if (di.distress) {
+            uint32_t cseed = (uint32_t)(si->seed >> 20) ^ 0xD15Cu;
+            int cls = (xorshift32() & 1) ? 7 : 6;
+            Vec3 cpos = v3(frand(-80, 80), frand(-40, 40), 420.0f);
+            int civ = ship_spawn(hull_mesh(cseed, cls), cpos,
+                                 TEAM_NEUTRAL);
+            if (civ > 0) {
+                ship_set_tier(civ, 1, cls);
+                Ship *cv = &g_ships[civ];
+                cv->is_civilian = 1;
+                cv->civ_kind = (uint8_t)(cls == 6 ? 0 : 1);
+                cv->team = TEAM_NEUTRAL;
+                cv->turret_type = 0;
+                cv->hull = cv->hull_max * 0.6f;   /* already hurting */
+                cv->shield = cv->shield_max * 0.3f;
+                s_distress_civ = civ;
+                int npir = 1 + (int)si->threat / 2;
+                if (npir > 3) npir = 3;
+                int first_pir = -1;
+                for (int k = 0; k < npir; k++) {
+                    float a2 = frand(0, 6.2831f);
+                    Vec3 pp = v3_add(cpos, v3(cosf(a2) * 160.0f,
+                                              frand(-60, 60),
+                                              sinf(a2) * 160.0f));
+                    int tier = (int)si->threat - 1;
+                    if (tier < 0) tier = 0;
+                    int pcls = 1 + tier;
+                    uint32_t ms = (uint32_t)(si->seed >> 24) ^
+                                  (uint32_t)(pcls * 0x9E3779B9u) ^ k;
+                    int idx = ship_spawn(hull_mesh(ms, pcls), pp,
+                                         TEAM_HOSTILE);
+                    if (idx > 0) {
+                        ship_set_tier(idx, tier, pcls);
+                        g_ships[idx].ai_target = (uint8_t)civ;
+                        if (first_pir < 0) first_pir = idx;
+                    }
+                }
+                if (first_pir > 0)
+                    cv->ai_target = (uint8_t)first_pir;  /* fights back */
+                snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                         "DISTRESS CALL!");
+                s_scoop_toast_t = 2.5f;
+            }
+        }
+    }
+
+    /* Civilian traffic: a miner works any belt; cargo ships run lanes
+     * near stations and sometimes beacons. Green on the scanner. */
+    {
+        PoiIntel ci;
+        if (s_anchor_has_poi) {
+            elite_game_poi_intel(&s_anchor_poi, &ci);
+            int want_miner = ci.belt && (int)(xorshift32() % 100u) < 65;
+            int want_cargo =
+                (s_anchor_poi.kind == POI_STATION &&
+                 (int)(xorshift32() % 100u) < 70) ||
+                (s_anchor_poi.kind != POI_STATION &&
+                 (int)(xorshift32() % 100u) < 25);
+            for (int k = 0; k < want_miner + want_cargo; k++) {
+                int kind = (k == 0 && want_miner) ? 0 : 1;
+                float a = frand(0, 6.2831f);
+                float r = kind ? frand(350, 650) : frand(450, 800);
+                Vec3 pos = v3(cosf(a) * r, frand(-120, 120),
+                              sinf(a) * r);
+                uint32_t cseed = (uint32_t)(si->seed >> 20) ^
+                                 (uint32_t)(0xC1B1u + k * 77u);
+                int cls = kind ? 7 : 6;          /* MULE / PACK MULE */
+                int idx = ship_spawn(hull_mesh(cseed, cls), pos,
+                                     TEAM_NEUTRAL);
+                if (idx > 0) {
+                    ship_set_tier(idx, 1, cls);
+                    g_ships[idx].is_civilian = 1;
+                    g_ships[idx].civ_kind = (uint8_t)kind;
+                    g_ships[idx].team = TEAM_NEUTRAL;
+                    g_ships[idx].turret_type = 0;
+                }
             }
         }
     }
@@ -356,6 +482,7 @@ static void drop_anchor(Vec3 pos_mm, const Poi *poi) {
 
 static void arrive_in_system(SysAddr addr) {
     s_addr = addr;
+    s_entry_salt++;
     system_enter(addr);
     Poi beacon;
     Poi pois[MAX_POIS];
@@ -759,6 +886,25 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
                 ambushed = false;
             }
         }
+        /* Distress rescue: wing dead, victim alive -> hail + reward. */
+        if (s_distress_civ > 0 && !s_distress_paid) {
+            Ship *cv = &g_ships[s_distress_civ];
+            if (!cv->alive) {
+                s_distress_civ = -1;       /* lost them */
+            } else if (ships_alive_hostile() == 0) {
+                s_distress_paid = true;
+                const SystemInfo *si3 = system_info();
+                int pay = 250 + (int)si3->threat * 300;
+                g_player.credits += pay;
+                extern void mission_rep_add_public(int fac, int amt);
+                mission_rep_add_public(
+                    (int)system_faction(si3->addr), 2);
+                snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                         "\"THANK YOU CMDR\" +%dCR REP+", pay);
+                s_scoop_toast_t = 4.0f;
+                sfx_lock_acquire();
+            }
+        }
         /* Rank-up fanfare. */
         {
             static const char *last_rank;
@@ -1018,12 +1164,26 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
     }
 
     case ST_FLIGHT:
-        if (menu_edge) { s_state = ST_PAUSE; s_pause_cursor = 0; break; }
+        if (menu_edge) {
+            s_state = ST_DASH;
+            s_dash_from = ST_FLIGHT;
+            s_dash_sel = 0;
+            s_dash_anim = 0;
+            s_in_settings = false;
+            break;
+        }
         tick_flight(btn, dt);
         break;
 
     case ST_SUPERCRUISE:
-        if (menu_edge) { s_state = ST_PAUSE; s_pause_cursor = 0; break; }
+        if (menu_edge) {
+            s_state = ST_DASH;
+            s_dash_from = ST_SUPERCRUISE;
+            s_dash_sel = 0;
+            s_dash_anim = 1.0f;          /* SC: no slide, straight in */
+            s_in_settings = false;
+            break;
+        }
         tick_supercruise(btn, dt);
         if (!g_ships[PLAYER].alive) {
             /* Burned up at the star: drop to flight, whose death path
@@ -1094,11 +1254,84 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
     }
 
     case ST_STATUS:
+        if (s_menus_live) {
+            CraftRawButtons none3 = {0};
+            if (s_dash_from == ST_SUPERCRUISE) tick_supercruise(&none3, dt);
+            else tick_flight(&none3, dt);
+            if (!g_ships[PLAYER].alive) { s_state = s_dash_from; break; }
+        }
         if (status_tick(btn, dt)) {
             elite_input_reset();
-            s_state = ST_FLIGHT;
+            s_state = s_menus_live ? ST_DASH : ST_FLIGHT;
         }
         break;
+
+    case ST_DASH: {
+        /* THE GAME PLAYS ON. Neutral stick; peril remains — taking
+         * hull damage kicks you back to the cockpit. */
+        CraftRawButtons none2 = {0};
+        if (s_dash_from == ST_SUPERCRUISE)
+            tick_supercruise(&none2, dt);
+        else
+            tick_flight(&none2, dt);
+        if (!g_ships[PLAYER].alive) {
+            s_state = (uint8_t)s_dash_from;
+            break;
+        }
+        if (s_dash_anim < 1.0f) {
+            s_dash_anim += dt * 4.0f;
+            if (s_dash_anim > 1.0f) s_dash_anim = 1.0f;
+        }
+        if (s_in_settings) {
+            static bool pu2, pd2, pb2;
+            if (btn->up && !pu2 && s_settings_cursor > 0)
+                s_settings_cursor--;
+            if (btn->down && !pd2 && s_settings_cursor < 1)
+                s_settings_cursor++;
+            pu2 = btn->up; pd2 = btn->down;
+            if (a_edge) {
+                if (s_settings_cursor == 0)
+                    g_player.invert_y = !g_player.invert_y;
+                else
+                    g_player.show_fps = !g_player.show_fps;
+            }
+            if ((btn->b && !pb2) || menu_edge) s_in_settings = false;
+            pb2 = btn->b;
+            break;
+        }
+        {
+            static bool pl2, pr2, pu3, pd3, pb3;
+            if (btn->left && !pl2) s_dash_sel &= ~1;
+            if (btn->right && !pr2) s_dash_sel |= 1;
+            if (btn->up && !pu3) s_dash_sel &= ~2;
+            if (btn->down && !pd3) s_dash_sel |= 2;
+            pl2 = btn->left; pr2 = btn->right;
+            pu3 = btn->up; pd3 = btn->down;
+            if (a_edge) {
+                s_menus_live = true;
+                if (s_dash_sel == 0) {
+                    map_galaxy_open(s_addr, g_player.fuel,
+                                    k_hulls[g_player.hull_id].jump_range);
+                    s_state = ST_GALAXY_MAP;
+                } else if (s_dash_sel == 1) {
+                    map_system_open(cam_pos_mm());
+                    s_state = ST_SYSTEM_MAP;
+                } else if (s_dash_sel == 2) {
+                    status_open();
+                    s_state = ST_STATUS;
+                } else {
+                    s_in_settings = true;
+                    s_settings_cursor = 0;
+                }
+            }
+            if ((btn->b && !pb3) || menu_edge) {
+                elite_input_reset();
+                s_state = (uint8_t)s_dash_from;
+            }
+            pb3 = btn->b;
+        }
+        break;
+    }
 
     case ST_PAUSE: {
         static const int N_ITEMS = 5;
@@ -1146,10 +1379,19 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
     }
 
     case ST_GALAXY_MAP: {
+        if (s_menus_live) {
+            CraftRawButtons none3 = {0};
+            if (s_dash_from == ST_SUPERCRUISE) tick_supercruise(&none3, dt);
+            else tick_flight(&none3, dt);
+            if (!g_ships[PLAYER].alive) { s_state = s_dash_from; break; }
+        }
         SysAddr target;
         float dist;
         MapAction act = map_galaxy_tick(btn, dt, &target, &dist);
-        if (act == MAP_CLOSE) { elite_input_reset(); s_state = ST_FLIGHT; }
+        if (act == MAP_CLOSE) {
+            elite_input_reset();
+            s_state = s_menus_live ? ST_DASH : ST_FLIGHT;
+        }
         else if (act == MAP_ENGAGE_JUMP) {
             sfx_jump();
             s_jump_target = target;
@@ -1159,16 +1401,27 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             s_hyper_t = 0;
             s_hyper_seed = xorshift32();
             ships_despawn_npcs();
+            s_menus_live = false;
             s_state = ST_HYPERJUMP;
         }
         break;
     }
 
     case ST_SYSTEM_MAP: {
+        if (s_menus_live) {
+            CraftRawButtons none3 = {0};
+            if (s_dash_from == ST_SUPERCRUISE) tick_supercruise(&none3, dt);
+            else tick_flight(&none3, dt);
+            if (!g_ships[PLAYER].alive) { s_state = s_dash_from; break; }
+        }
         Poi dest;
         MapAction act = map_system_tick(btn, dt, &dest);
-        if (act == MAP_CLOSE) { elite_input_reset(); s_state = ST_FLIGHT; }
+        if (act == MAP_CLOSE) {
+            elite_input_reset();
+            s_state = s_menus_live ? ST_DASH : ST_FLIGHT;
+        }
         else if (act == MAP_ENGAGE_SC) {
+            s_menus_live = false;
             s_sc_dest = dest;
             s_sc_has_dest = true;
             s_sc_pos_mm = cam_pos_mm();
@@ -1402,6 +1655,160 @@ static void draw_hyperjump_overlay(uint16_t *fb) {
     craft_font_draw(fb, buf, 30, 100, RGB565C(150, 170, 255));
 }
 
+/* The flight dashboard: the game plays on behind this — the top strip
+ * is a live mini-HUD (scanner + bars) so you keep situational
+ * awareness while you pick your escape. */
+static void dash_mini_strip(uint16_t *fb) {
+    for (int y = 0; y < 27; y++)
+        for (int x = 0; x < 128; x++)
+            fb[y * ELITE_FB_W + x] = RGB565C(7, 10, 18);
+    for (int x = 0; x < 128; x++)
+        fb[27 * ELITE_FB_W + x] = RGB565C(45, 60, 85);
+    Ship *p = &g_ships[PLAYER];
+    char b2[16];
+    snprintf(b2, sizeof b2, "%d", (int)v3_len(p->vel));
+    craft_font_draw(fb, "SP", 2, 3, RGB565C(95, 200, 120));
+    craft_font_draw(fb, b2, 18, 3, RGB565C(160, 170, 190));
+    snprintf(b2, sizeof b2, "TH %d%%", (int)(p->throttle * 100));
+    craft_font_draw(fb, b2, 2, 12, RGB565C(95, 130, 160));
+    /* mini scanner disc, centred */
+    const int cx = 64, cy = 13, rx = 22, ry = 11;
+    for (int a2 = 0; a2 < 40; a2++) {
+        float th = (float)a2 * (6.2831853f / 40.0f);
+        int x = cx + (int)(cosf(th) * rx);
+        int y = cy + (int)(sinf(th) * ry);
+        fb[y * ELITE_FB_W + x] = RGB565C(40, 70, 100);
+    }
+    for (int i = 1; i < MAX_SHIPS; i++) {
+        Ship *sh = &g_ships[i];
+        if (!sh->alive) continue;
+        Vec3 local = m3_mul_v3_t(&p->basis, v3_sub(sh->pos, p->pos));
+        float dx = local.x * (rx / 900.0f);
+        float dz = -local.z * (ry / 900.0f);
+        if ((dx * dx) / (rx * rx) + (dz * dz) / (ry * ry) > 1.0f)
+            continue;
+        uint16_t c = sh->is_police ? RGB565C(90, 180, 255)
+                   : (sh->team == TEAM_HOSTILE) ? RGB565C(255, 80, 60)
+                   : sh->is_civilian ? RGB565C(110, 230, 110)
+                                     : RGB565C(170, 170, 180);
+        int bx = cx + (int)dx, by = cy + (int)dz;
+        fb[by * ELITE_FB_W + bx] = c;
+        if (sh->team == TEAM_HOSTILE && by > 0)
+            fb[(by - 1) * ELITE_FB_W + bx] = c;
+    }
+    /* S H T F bars, right */
+    struct { float v; uint16_t c; } bars[4] = {
+        { p->shield / (p->shield_max > 0 ? p->shield_max : 1),
+          RGB565C(90, 170, 255) },
+        { p->hull / (p->hull_max > 0 ? p->hull_max : 1),
+          RGB565C(255, 140, 60) },
+        { p->heat / 100.0f, RGB565C(255, 210, 80) },
+        { g_player.fuel / g_player.fuel_max, RGB565C(170, 170, 190) },
+    };
+    static const char *bl[4] = { "S", "H", "T", "F" };
+    for (int i = 0; i < 4; i++) {
+        int y = 2 + i * 6;
+        craft_font_draw(fb, bl[i], 96, y, bars[i].c);
+        int w = (int)(bars[i].v * 24.0f);
+        if (w > 24) w = 24;
+        for (int x = 0; x < w; x++)
+            fb[(y + 2) * ELITE_FB_W + 103 + x] = bars[i].c;
+    }
+}
+
+static void dash_draw_panel(uint16_t *fb, int y0) {
+    /* 2x2 regions: CHART / SYSTEM / STATUS / SETTINGS. */
+    for (int y = y0; y < 118; y++)
+        for (int x = 0; x < 128; x++)
+            fb[y * ELITE_FB_W + x] = RGB565C(10, 13, 22);
+    static const char *names[4] = { "GALAXY", "SYSTEM",
+                                    "STATUS", "SETTINGS" };
+    for (int r = 0; r < 4; r++) {
+        int px2 = (r & 1) ? 66 : 2;
+        int py2 = y0 + 3 + ((r & 2) ? 45 : 0);
+        if (py2 + 40 > 118) continue;
+        bool sel = (r == s_dash_sel);
+        uint16_t bc = sel ? RGB565C(120, 255, 120)
+                          : RGB565C(50, 62, 88);
+        for (int x = px2; x < px2 + 60; x++) {
+            fb[py2 * ELITE_FB_W + x] = bc;
+            fb[(py2 + 40) * ELITE_FB_W + x] = bc;
+        }
+        for (int y = py2; y <= py2 + 40; y++) {
+            fb[y * ELITE_FB_W + px2] = bc;
+            fb[y * ELITE_FB_W + px2 + 60] = bc;
+        }
+        craft_font_draw(fb, names[r], px2 + 6, py2 + 4,
+                        sel ? RGB565C(120, 255, 120)
+                            : RGB565C(110, 120, 140));
+        /* tiny glyphs */
+        int gx = px2 + 26, gy = py2 + 22;
+        if (r == 0) {                      /* chart: stars + ring */
+            for (int k = 0; k < 14; k++) {
+                uint32_t h2 = 0x9E37u * (k + 3);
+                h2 ^= h2 >> 7;
+                fb[(gy - 8 + (int)(h2 % 17u)) * ELITE_FB_W +
+                   (gx - 14 + (int)((h2 >> 5) % 31u))] =
+                    RGB565C(150, 160, 190);
+            }
+            for (int a2 = 0; a2 < 18; a2++) {
+                float th = (float)a2 * (6.2831853f / 18.0f);
+                fb[(gy + (int)(sinf(th) * 7.0f)) * ELITE_FB_W +
+                   gx + (int)(cosf(th) * 11.0f)] =
+                    RGB565C(90, 200, 120);
+            }
+        } else if (r == 1) {               /* system: star + orbits */
+            for (int dy = -2; dy <= 2; dy++)
+                for (int dx = -2; dx <= 2; dx++)
+                    if (dx * dx + dy * dy <= 4)
+                        fb[(gy + dy) * ELITE_FB_W + gx - 12 + dx] =
+                            RGB565C(255, 200, 90);
+            for (int k = 0; k < 3; k++)
+                fb[gy * ELITE_FB_W + gx - 2 + k * 8] =
+                    RGB565C(120, 170, 220);
+        } else if (r == 2) {               /* status: bars */
+            for (int k = 0; k < 3; k++)
+                for (int x = 0; x < 16 - k * 4; x++)
+                    fb[(gy - 4 + k * 4) * ELITE_FB_W + gx - 8 + x] =
+                        RGB565C(120 + k * 40, 160, 200 - k * 40);
+        } else {                           /* settings: sliders */
+            for (int k = 0; k < 2; k++) {
+                for (int x = 0; x < 22; x++)
+                    fb[(gy - 3 + k * 6) * ELITE_FB_W + gx - 11 + x] =
+                        RGB565C(70, 80, 105);
+                int kx = gx - 11 + (k ? 16 : 6);
+                fb[(gy - 4 + k * 6) * ELITE_FB_W + kx] =
+                    RGB565C(200, 210, 230);
+                fb[(gy - 3 + k * 6) * ELITE_FB_W + kx] =
+                    RGB565C(200, 210, 230);
+            }
+        }
+    }
+    for (int x = 0; x < 128; x++)
+        fb[118 * ELITE_FB_W + x] = RGB565C(45, 60, 85);
+    craft_font_draw(fb, "A:OPEN B:RESUME", 2, 121,
+                    RGB565C(95, 110, 140));
+}
+
+static void dash_settings_overlay(uint16_t *fb) {
+    for (int y = 44; y < 96; y++)
+        for (int x = 20; x < 108; x++)
+            fb[y * ELITE_FB_W + x] = RGB565C(8, 11, 20);
+    craft_font_draw(fb, "SETTINGS", 33, 48, RGB565C(200, 210, 225));
+    const char *si2[2] = {
+        g_player.invert_y ? "INVERT Y: ON" : "INVERT Y: OFF",
+        g_player.show_fps ? "SHOW FPS: ON" : "SHOW FPS: OFF",
+    };
+    for (int i = 0; i < 2; i++) {
+        uint16_t c = (i == s_settings_cursor) ? RGB565C(120, 255, 120)
+                                              : RGB565C(120, 126, 145);
+        if (i == s_settings_cursor)
+            craft_font_draw(fb, ">", 26, 62 + i * 9, c);
+        craft_font_draw(fb, si2[i], 33, 62 + i * 9, c);
+    }
+    craft_font_draw(fb, "B:BACK", 33, 86, RGB565C(95, 110, 140));
+}
+
 static void draw_pause_overlay(uint16_t *fb) {
     /* Dim panel. */
     for (int y = 38; y < 100; y++)
@@ -1468,6 +1875,19 @@ void elite_game_draw_overlay(uint16_t *fb) {
                         RGB565C(70, 90, 115));
         return;
     }
+
+    case ST_DASH:
+        if (s_dash_anim >= 1.0f) {
+            dash_mini_strip(fb);
+            dash_draw_panel(fb, 28);
+            if (s_in_settings) dash_settings_overlay(fb);
+            if (s_scoop_toast_t > 0)
+                craft_font_draw(fb, s_scoop_toast,
+                                64 - craft_font_width(s_scoop_toast) / 2,
+                                30, RGB565C(255, 200, 60));
+            return;
+        }
+        break;   /* still rising: live 3D renders, panel overlays below */
 
     case ST_GALAXY_MAP: map_galaxy_draw(fb); return;
     case ST_SYSTEM_MAP: map_system_draw(fb); return;
@@ -1538,4 +1958,6 @@ void elite_game_draw_overlay(uint16_t *fb) {
     }
 
     if (s_state == ST_PAUSE) draw_pause_overlay(fb);
+    if (s_state == ST_DASH && s_dash_anim < 1.0f)
+        dash_draw_panel(fb, 128 - (int)(s_dash_anim * 100.0f));
 }

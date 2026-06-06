@@ -103,6 +103,8 @@ int main(int argc, char **argv) {
         getenv("ELITE_INTELTEST") ||
         getenv("ELITE_SIEGE") ||
         getenv("ELITE_TAPTEST") ||
+        getenv("ELITE_DISTRESS") ||
+        getenv("ELITE_DASHTEST") ||
         getenv("ELITE_SHOT")) {
         /* Harnesses start in-game: skip the title via NEW GAME. */
         remove("thumbyelite.sav");
@@ -141,6 +143,128 @@ int main(int argc, char **argv) {
             }
         printf("[startcheck] %s nearest=%.1f in6=%d in8=%d stations=%d\n",
                si->name, best, in6, in8, si->n_stations);
+        return 0;
+    }
+
+    /* Dashboard: open, sim-running check, navigate, screenshots. */
+    if (getenv("ELITE_DASHTEST")) {
+        CraftRawButtons none = {0}, b;
+        /* spawn a hostile so the scanner shows peril */
+        elite_game_debug_spawn(2);
+        for (int f = 0; f < 10; f++) elite_game_tick(&none, 1.0f/30.0f);
+        b = none; b.menu = true;
+        elite_game_tick(&b, 1.0f/30.0f);
+        b = none;
+        elite_game_tick(&b, 1.0f/30.0f);
+        printf("[dash] state=%d (12=DASH)\n", elite_game_state());
+        /* mid-rise frame */
+        for (int f = 0; f < 3; f++) elite_game_tick(&none, 1.0f/30.0f);
+        render_frame(); dump_ppm("/tmp/dash_rising.ppm");
+        for (int f = 0; f < 12; f++) elite_game_tick(&none, 1.0f/30.0f);
+        render_frame(); dump_ppm("/tmp/dash_full.ppm");
+        /* sim runs: hostile distance must change over 60 ticks */
+        float d0 = -1, d1 = -1;
+        for (int i = 1; i < MAX_SHIPS; i++)
+            if (g_ships[i].alive && g_ships[i].team == TEAM_HOSTILE) {
+                d0 = v3_len(v3_sub(g_ships[i].pos, g_ships[0].pos));
+                break;
+            }
+        for (int f = 0; f < 60; f++) elite_game_tick(&none, 1.0f/30.0f);
+        for (int i = 1; i < MAX_SHIPS; i++)
+            if (g_ships[i].alive && g_ships[i].team == TEAM_HOSTILE) {
+                d1 = v3_len(v3_sub(g_ships[i].pos, g_ships[0].pos));
+                break;
+            }
+        printf("[dash] sim runs: hostile %5.0fm -> %5.0fm (%s)\n", d0,
+               d1, (d0 != d1) ? "LIVE" : "frozen");
+        /* settings region: right+down then A */
+        b = none; b.right = true; elite_game_tick(&b, 1.0f/30.0f);
+        b = none; elite_game_tick(&b, 1.0f/30.0f);
+        b = none; b.down = true; elite_game_tick(&b, 1.0f/30.0f);
+        b = none; elite_game_tick(&b, 1.0f/30.0f);
+        b = none; b.a = true; elite_game_tick(&b, 1.0f/30.0f);
+        b = none; elite_game_tick(&b, 1.0f/30.0f);
+        render_frame(); dump_ppm("/tmp/dash_settings.ppm");
+        b = none; b.b = true; elite_game_tick(&b, 1.0f/30.0f);
+        b = none; elite_game_tick(&b, 1.0f/30.0f);
+        /* open the chart from the dash (sel back to 0) */
+        b = none; b.up = true; elite_game_tick(&b, 1.0f/30.0f);
+        b = none; elite_game_tick(&b, 1.0f/30.0f);
+        b = none; b.left = true; elite_game_tick(&b, 1.0f/30.0f);
+        b = none; elite_game_tick(&b, 1.0f/30.0f);
+        b = none; b.a = true; elite_game_tick(&b, 1.0f/30.0f);
+        b = none; elite_game_tick(&b, 1.0f/30.0f);
+        printf("[dash] chart open: state=%d (3=GALAXY)\n",
+               elite_game_state());
+        /* B closes back to dash; MENU resumes flight */
+        b = none; b.b = true; elite_game_tick(&b, 1.0f/30.0f);
+        b = none; elite_game_tick(&b, 1.0f/30.0f);
+        printf("[dash] back: state=%d (12=DASH)\n", elite_game_state());
+        b = none; b.menu = true; elite_game_tick(&b, 1.0f/30.0f);
+        b = none; elite_game_tick(&b, 1.0f/30.0f);
+        printf("[dash] resume: state=%d (0=FLIGHT)\n",
+               elite_game_state());
+        return 0;
+    }
+
+    /* Distress event end-to-end. */
+    if (getenv("ELITE_DISTRESS")) {
+        /* find a distress POI per intel, fly the anchor there directly */
+        Poi pois[MAX_POIS];
+        int np = system_pois(pois, MAX_POIS);
+        int target = -1;
+        PoiIntel di;
+        for (int i = 0; i < np; i++) {
+            elite_game_poi_intel(&pois[i], &di);
+            if (di.distress) { target = i; break; }
+        }
+        printf("[distress] poi=%d\n", target);
+        if (target < 0) return 0;
+        elite_game_debug_goto_poi(target);
+        int civ = -1, npir = 0;
+        for (int i = 1; i < MAX_SHIPS; i++) {
+            if (!g_ships[i].alive) continue;
+            if (g_ships[i].is_civilian) civ = i;
+            else if (g_ships[i].team == TEAM_HOSTILE &&
+                     g_ships[i].ai_target > 0) npir++;
+        }
+        printf("[distress] civ=%d pirates_on_civ=%d\n", civ, npir);
+        if (civ < 0 || npir == 0) return 1;
+        /* watch the NPC fight for 5s: civ should take damage */
+        CraftRawButtons none = {0};
+        float h0 = g_ships[civ].hull;
+        for (int f = 0; f < 150; f++) elite_game_tick(&none, 1.0f/30.0f);
+        printf("[distress] civ hull %.0f -> %.0f (fight=%s)\n", h0,
+               g_ships[civ].alive ? g_ships[civ].hull : -1.0f,
+               (!g_ships[civ].alive || g_ships[civ].hull < h0) ? "YES"
+                                                               : "no");
+        /* player engages: wing must switch to us */
+        for (int i = 1; i < MAX_SHIPS; i++)
+            if (g_ships[i].alive && g_ships[i].team == TEAM_HOSTILE) {
+                combat_set_shot_type(WPN_PULSE_S);
+                combat_direct_damage(0, i, 5.0f, g_ships[i].pos);
+                break;
+            }
+        int on_player = 0, alive_pir = 0;
+        for (int i = 1; i < MAX_SHIPS; i++)
+            if (g_ships[i].alive && g_ships[i].team == TEAM_HOSTILE) {
+                alive_pir++;
+                if (g_ships[i].ai_target == 0) on_player++;
+            }
+        printf("[distress] engaged: %d/%d on player\n", on_player,
+               alive_pir);
+        /* kill the wing; rescue should pay */
+        int cr0 = g_player.credits;
+        for (int i = 1; i < MAX_SHIPS; i++)
+            if (g_ships[i].alive && g_ships[i].team == TEAM_HOSTILE)
+                { combat_set_shot_type(WPN_PULSE_S);
+                  combat_direct_damage(0, i, 99999.0f, g_ships[i].pos); }
+        for (int f = 0; f < 5; f++) elite_game_tick(&none, 1.0f/30.0f);
+        printf("[distress] rescue: civ_alive=%d credits +%d "
+               "hostiles=%d state=%d legal=%d\n",
+               g_ships[civ].alive, g_player.credits - cr0,
+               ships_alive_hostile(), elite_game_state(),
+               g_player.legal);
         return 0;
     }
 
@@ -285,6 +409,33 @@ int main(int argc, char **argv) {
                    ore_before, ore_after,
                    ore_after > ore_before ? "AUTOCANNON CHIPS"
                                           : "NO EFFECT");
+        }
+        {
+            int nciv = 0, npol = 0;
+            for (int i = 1; i < MAX_SHIPS; i++) {
+                if (!g_ships[i].alive) continue;
+                if (g_ships[i].is_civilian) nciv++;
+                if (g_ships[i].is_police) npol++;
+            }
+            printf("[intel] civilians=%d police=%d\n", nciv, npol);
+            /* crime check: shoot a civilian, verify legal + flip */
+            if (getenv("ELITE_CRIMETEST")) {
+                for (int i = 1; i < MAX_SHIPS; i++)
+                    if (g_ships[i].alive && g_ships[i].is_civilian) {
+                        combat_set_shot_type(WPN_PULSE_S);
+                        combat_direct_damage(0, i, 10.0f, g_ships[i].pos);
+                        printf("[crime] after hit: legal=%d fine=%d "
+                               "civ_team=%d civ_target=%d\n",
+                               g_player.legal, g_player.fine,
+                               g_ships[i].team, g_ships[i].ai_target);
+                        combat_direct_damage(0, i, 9999.0f,
+                                             g_ships[i].pos);
+                        printf("[crime] after kill: legal=%d fine=%d "
+                               "alive=%d\n", g_player.legal,
+                               g_player.fine, g_ships[i].alive);
+                        break;
+                    }
+            }
         }
         printf("[intel] beacon belt=%d rocks_present=%d %s\n",
                in3.belt, nr,
@@ -456,9 +607,9 @@ int main(int argc, char **argv) {
         pl->throttle = 0.2f;
         MV_IDLE(30);
 
-        /* Phase 4: system map -> engage supercruise to the station. */
-        MV_TAP(menu, 6);
-        MV_TAP(down, 3); MV_TAP(down, 3);       /* SYSTEM MAP */
+        /* Phase 4: dashboard -> SYSTEM region -> supercruise. */
+        MV_TAP(menu, 12);                       /* dash rises (in shot) */
+        MV_TAP(right, 3);
         MV_TAP(a, 10);
         /* Seed 42: the station is POI #5 in TEASO's list. */
         for (int k = 0; k < 5; k++) MV_TAP(down, 3);
@@ -517,9 +668,8 @@ int main(int argc, char **argv) {
 
         printf("[movie] station phase done, state=%d frame=%d\n",
                elite_game_state(), mf);
-        /* Phase 8: galaxy chart -> survey -> hyperjump. */
-        MV_TAP(menu, 6);
-        MV_TAP(down, 3);
+        /* Phase 8: dashboard -> GALAXY -> survey -> hyperjump. */
+        MV_TAP(menu, 12);
         MV_TAP(a, 12);                          /* GALAXY CHART */
         {
             /* aim the snap at the nearest in-range neighbour */
@@ -751,8 +901,8 @@ int main(int argc, char **argv) {
         } while (0)
         for (int k = 0; k < 30; k++) elite_game_tick(&none, 1.0f / 30.0f);
         SNAP("start");
-        TAP(menu, 4);                       /* pause */
-        TAP(down, 3); TAP(down, 3);         /* -> SYSTEM MAP */
+        TAP(menu, 12);                      /* dashboard (rises) */
+        TAP(right, 3);                      /* -> SYSTEM region */
         TAP(a, 4);
         SNAP("sysmap");
         for (int i = 0; i < poi; i++) TAP(down, 2);
@@ -791,8 +941,8 @@ int main(int argc, char **argv) {
                 elite_game_tick(&none, 1.0f / 30.0f); \
         } while (0)
         for (int k = 0; k < 30; k++) elite_game_tick(&none, 1.0f / 30.0f);
-        TAPB(menu, 4);
-        TAPB(down, 3); TAPB(down, 3);
+        TAPB(menu, 12);                 /* dashboard */
+        TAPB(right, 3);                 /* SYSTEM region */
         TAPB(a, 4);
         for (int i = 0; i < poi; i++) TAPB(down, 2);
         TAPB(a, 4);
@@ -857,7 +1007,7 @@ int main(int argc, char **argv) {
         } while (0)
         g_player.credits = 250000;
         for (int k = 0; k < 30; k++) elite_game_tick(&none, 1.0f / 30.0f);
-        TAPS(menu, 4); TAPS(down, 3); TAPS(down, 3); TAPS(a, 4);
+        TAPS(menu, 12); TAPS(right, 3); TAPS(a, 4);
         int target_poi = atoi(getenv("ELITE_SHOPTEST"));
         for (int i = 0; i < target_poi; i++) TAPS(down, 2);
         TAPS(a, 4);
@@ -905,7 +1055,7 @@ int main(int argc, char **argv) {
         } while (0)
         for (int k = 0; k < 30; k++) elite_game_tick(&none, 1.0f / 30.0f);
         /* travel to station + dock */
-        TAPM(menu, 4); TAPM(down, 3); TAPM(down, 3); TAPM(a, 4);
+        TAPM(menu, 12); TAPM(right, 3); TAPM(a, 4);
         int poi = atoi(getenv("ELITE_MISTEST"));
         for (int i = 0; i < poi; i++) TAPM(down, 2);
         TAPM(a, 4);
@@ -977,13 +1127,10 @@ int main(int argc, char **argv) {
         CraftRawButtons none = {0}, b;
         for (int k = 0; k < 10; k++) elite_game_tick(&none, 1.0f / 30.0f);
         b = none; b.menu = true; elite_game_tick(&b, 1.0f / 30.0f);
-        for (int k = 0; k < 3; k++) elite_game_tick(&none, 1.0f / 30.0f);
-        printf("[st] in pause: state=%d (want 5)\n", elite_game_state());
-        for (int i = 0; i < 3; i++) {
-            b = none; b.down = true; elite_game_tick(&b, 1.0f / 30.0f);
-            elite_game_tick(&none, 1.0f / 30.0f);
-            printf("[st] down %d: state=%d\n", i, elite_game_state());
-        }
+        for (int k = 0; k < 12; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        printf("[st] in dash: state=%d (want 12)\n", elite_game_state());
+        b = none; b.down = true; elite_game_tick(&b, 1.0f / 30.0f);
+        elite_game_tick(&none, 1.0f / 30.0f);   /* sel = STATUS */
         b = none; b.a = true;
         elite_game_tick(&b, 1.0f / 30.0f);          /* select SHIP STATUS */
         printf("[st] after A1: state=%d (want 8)\n", elite_game_state());
@@ -1038,9 +1185,7 @@ int main(int argc, char **argv) {
         CraftRawButtons none = {0}, b;
         for (int k = 0; k < 10; k++) elite_game_tick(&none, 1.0f / 30.0f);
         b = none; b.menu = true; elite_game_tick(&b, 1.0f / 30.0f);
-        for (int k = 0; k < 4; k++) elite_game_tick(&none, 1.0f / 30.0f);
-        b = none; b.down = true; elite_game_tick(&b, 1.0f / 30.0f);
-        for (int k = 0; k < 3; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        for (int k = 0; k < 12; k++) elite_game_tick(&none, 1.0f / 30.0f);
         b = none; b.a = true; elite_game_tick(&b, 1.0f / 30.0f);   /* galaxy map */
         for (int k = 0; k < 4; k++) elite_game_tick(&none, 1.0f / 30.0f);
         render_frame(); dump_ppm("/tmp/jump_0_map.ppm");

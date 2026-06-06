@@ -548,6 +548,13 @@ void map_system_draw(uint16_t *fb) {
         craft_font_draw(fb, buf, 8, list_y,
                         (i == s_cursor) ? COL_CUR : COL_DIM);
         if (i == s_cursor) craft_font_draw(fb, ">", 2, list_y, COL_CUR);
+        {
+            PoiIntel li;
+            elite_game_poi_intel(p, &li);
+            if (li.distress)
+                craft_font_draw(fb, "!", 122, list_y,
+                                RGB565C(255, 90, 70));
+        }
     }
 
     /* Scan strip: live intel for the cursor POI. Belts are certain
@@ -585,6 +592,10 @@ void map_system_draw(uint16_t *fb) {
                  (int)in2.debris_pct);
         craft_font_draw(fb, buf, 2, 108,
                         in2.belt ? RGB565C(255, 200, 90) : COL_DIM);
+        if (in2.distress)
+            craft_font_draw(fb, "DISTRESS CALL!",
+                            128 - craft_font_width("DISTRESS CALL!") - 2,
+                            99, RGB565C(255, 90, 70));
     }
 
     for (int x = 0; x < 128; x++) px(fb, x, 118, COL_GRID);

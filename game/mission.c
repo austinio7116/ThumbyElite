@@ -32,6 +32,13 @@ void missions_init(void) {
     s_visit_salt = 0;
 }
 
+/* Public wrapper (distress rescues pay rep from elite_game). */
+void mission_rep_add_public(int faction, int amt);
+static void rep_add(int faction, int amt);
+void mission_rep_add_public(int faction, int amt) {
+    rep_add(faction, amt);
+}
+
 static void rep_add(int faction, int amt) {
     int v = g_rep[faction] + amt;
     if (v > 100) v = 100;

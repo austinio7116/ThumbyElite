@@ -8,6 +8,8 @@
  * the long gun, switch to lasers up close).
  */
 #include "elite_ai.h"
+#include "elite_rocks.h"
+#include "elite_types.h"
 #include "elite_entity.h"
 #include "elite_combat.h"
 #include "elite_weapons.h"
@@ -61,7 +63,13 @@ static void choose_weapon(Ship *s, float dist) {
 
 static void ai_ship(int idx, float dt) {
     Ship *s = &g_ships[idx];
-    Ship *t = &g_ships[PLAYER];
+    /* Generalised targeting (distress events: pirates fight civilians,
+     * civilians fight back) — falls back to the player. */
+    int ti = s->ai_target;
+    if (ti <= 0 || ti >= MAX_SHIPS || !g_ships[ti].alive ||
+        ti == idx)
+        ti = PLAYER;
+    Ship *t = &g_ships[ti];
     if (!t->alive) { s->throttle = 0.25f; return; }
 
     Vec3 rel = v3_sub(t->pos, s->pos);
@@ -92,7 +100,7 @@ static void ai_ship(int idx, float dt) {
              * dodges; sitting still gets you hit (and killed). */
             Vec3 latv = v3_sub(t->vel, v3_scale(dir, v3_dot(t->vel, dir)));
             float sp = k_spread[tier] * (1.0f + v3_len(latv) / 90.0f);
-            combat_fire(idx, sp, PLAYER);
+            combat_fire(idx, sp, ti);
             s->fire_cool = k_refire[tier];
         }
         break;
@@ -110,6 +118,53 @@ static void ai_ship(int idx, float dt) {
 void ai_tick(float dt) {
     for (int i = 1; i < MAX_SHIPS; i++) {
         if (!g_ships[i].alive) continue;
+        if (g_ships[i].team == TEAM_NEUTRAL && g_ships[i].is_civilian) {
+            /* A civilian under attack fights its attacker. */
+            if (g_ships[i].ai_target > 0 &&
+                g_ships[g_ships[i].ai_target].alive) {
+                ai_ship(i, dt);
+                continue;
+            }
+            /* Working traffic: miners hover by the rocks and chip them
+             * (visible beams); cargo ships cruise a slow lane. */
+            Ship *cv = &g_ships[i];
+            if (cv->civ_kind == 0) {
+                Vec3 rk[8];
+                int nr = rocks_positions(rk, 8);
+                if (nr > 0) {
+                    Vec3 want = v3_add(rk[i % nr], v3(30, 18, -25));
+                    Vec3 d2 = v3_sub(want, cv->pos);
+                    float dl = v3_len(d2);
+                    if (dl > 12.0f)
+                        cv->vel = v3_lerp(cv->vel,
+                                          v3_scale(d2, 14.0f / dl),
+                                          0.8f * dt);
+                    else
+                        cv->vel = v3_scale(cv->vel, 1.0f - 0.8f * dt);
+                    turn_toward(cv, v3_norm(v3_sub(rk[i % nr], cv->pos)),
+                                dt * 0.5f);
+                    cv->fire_cool -= dt;
+                    if (dl < 90.0f && cv->fire_cool <= 0.0f) {
+                        cv->fire_cool = 1.3f;
+                        Vec3 mz = v3_add(cv->pos,
+                                         v3_scale(cv->basis.r[2],
+                                                  cv->mesh->bound_r));
+                        fx_beam(mz, rk[i % nr],
+                                RGB565C(255, 200, 90));
+                    }
+                } else {
+                    cv->vel = v3_scale(cv->vel, 1.0f - 0.4f * dt);
+                }
+            } else {
+                /* slow lane between two offsets */
+                m3_rotate_local(&cv->basis, 1, 0.04f * dt);
+                cv->vel = v3_lerp(cv->vel,
+                                  v3_scale(cv->basis.r[2], 22.0f),
+                                  0.4f * dt);
+            }
+            cv->pos = v3_add(cv->pos, v3_scale(cv->vel, dt));
+            continue;
+        }
         if (g_ships[i].team == TEAM_NEUTRAL && g_ships[i].is_police) {
             /* Patrol drift: a slow circuit of the station approaches. */
             Ship *s2 = &g_ships[i];

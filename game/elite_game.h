@@ -39,8 +39,13 @@ typedef struct {
     uint8_t  pirate_pct;      /* arrival ambush odds (live, incl. cargo) */
     uint8_t  debris_pct;      /* salvage odds */
     uint8_t  belt_rocks;
+    uint8_t  distress;        /* live distress call at this POI */
     uint32_t belt_seed;
 } PoiIntel;
 void elite_game_poi_intel(const Poi *poi, PoiIntel *out);
+/* Combat callback: the player just damaged a hostile (distress wings
+ * switch from the civilian onto the player). */
+void elite_game_player_engaged(void);
+void elite_game_debug_goto_poi(int n);
 
 #endif

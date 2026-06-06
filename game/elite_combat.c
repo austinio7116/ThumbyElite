@@ -133,6 +133,9 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
     }
     if (shooter == PLAYER) {
         s_hitmark = 0.12f;
+        /* Distress wings fight the civilian until YOU engage. */
+        if (v->team == TEAM_HOSTILE)
+            elite_game_player_engaged();
         if (had_shield && v->shield > 0.0f) sfx_enemy_shield_hit();
         /* Firing on the law: instant FUGITIVE, and they engage. */
         if (v->is_police && g_player.legal < 2) {
@@ -141,6 +144,13 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
             v->team = TEAM_HOSTILE;
         }
         if (v->is_police) v->team = TEAM_HOSTILE;
+        /* Firing on civilians: OFFENDER, and they defend themselves. */
+        if (v->is_civilian && v->team == TEAM_NEUTRAL) {
+            if (g_player.legal < 1) g_player.legal = 1;
+            g_player.fine += 250;
+            v->team = TEAM_HOSTILE;     /* fights back (low tier) */
+            v->ai_target = PLAYER;
+        }
     }
     if (v->hull <= 0.0f) {
         v->alive = false;
@@ -153,7 +163,10 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
         }
         if (victim == PLAYER) plat_rumble(1.0f, 0.7f);
         if (victim != PLAYER) {
-            s_kills++;
+            /* Wrecks drop loot whoever fired; the kill TALLY (rank) is
+             * the player's alone — distress events add NPC-vs-NPC
+             * kills that must not inflate it. */
+            if (shooter == PLAYER) s_kills++;
             loot_on_kill(v->pos, v->vel, v->tier);
             if (shooter == PLAYER)
                 mission_on_kill(v->tier, v->is_mark != 0);
@@ -164,6 +177,14 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
                 /* Cop killer: no bounty, a heavy fine on your head. */
                 g_player.legal = 2;
                 g_player.fine += 1500;
+            } else if (victim != PLAYER && v->is_civilian) {
+                /* Murder: FUGITIVE, and the wreck's cargo is STOLEN —
+                 * contraband canisters, black-market only. */
+                g_player.legal = 2;
+                g_player.fine += 1000;
+                int nc = 2 + (victim & 1);
+                for (int c2 = 0; c2 < nc; c2++)
+                    loot_spawn_good(v->pos, v->vel, 19, 1 + (c2 & 1));
             } else if (victim != PLAYER) {
                 g_player.xp_gunnery++;
                 /* Lawful kill bounty: dangerous pilots pay big. */

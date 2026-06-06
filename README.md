@@ -11,6 +11,27 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 
 ## Changelog
 
+### 1.22 (in development)
+
+**The flight dashboard** — MENU no longer pauses: a dashboard slides up
+over the live game (top strip = mini scanner + bars, so you can watch
+trouble close in) with d-pad regions for GALAXY / SYSTEM / STATUS /
+SETTINGS. The sim keeps running inside every menu screen — picking an
+escape mid-dogfight is now a race, not a pause. No safety net by
+design.
+
+**Civilian traffic** — green-blip miners work the belts (visible
+chip-beams) and cargo haulers run lanes near stations. They shoot back,
+weakly. Attacking one = OFFENDER; destroying one = FUGITIVE, and its
+cargo spills as STOLEN contraband (black-market only, full police/
+pirate heat). Piracy is now a career with consequences.
+
+**Distress calls** — planets/beacons in dangerous space can show
+DISTRESS CALL! on the system map (red !). A civilian under pirate
+attack: the wing fights them until you engage, then it's on you. Save
+the victim for credits + faction rep; the kill tally stays honest
+(NPC-vs-NPC kills don't count toward your rank).
+
 ### 1.21 (ThumbyOne v1.21)
 
 **The Law**
