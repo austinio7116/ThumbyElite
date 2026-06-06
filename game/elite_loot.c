@@ -213,8 +213,8 @@ void loot_spawn_ore(Vec3 pos, Vec3 vel) {
         c->alive = true;
         c->is_component = 0;
         int roll = (int)(rnd() % 100u);
-        c->good = (roll < 55) ? 12          /* MINERALS */
-                : (roll < 92) ? 11          /* METALS */
+        c->good = (roll < 56) ? 12          /* MINERALS */
+                : (roll < 94) ? 11          /* METALS */
                               : 15;         /* RARE GEMS — the jackpot */
         c->count = (uint8_t)(1 + (rnd() & 1));
         c->pos = pos;

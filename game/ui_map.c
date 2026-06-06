@@ -137,21 +137,26 @@ static void gmap_snap(float dx, float dy) {
 
 MapAction map_galaxy_tick(const CraftRawButtons *btn, float dt,
                           SysAddr *out_addr, float *out_dist_ly) {
-    /* Tap = snap to the next star that way; hold >0.35s = smooth pan. */
-    static float s_hold;
+    /* Tap = snap to the next star that way; hold = autorepeat snapping,
+     * same cadence as every list (0.35s, then steps) — the old smooth
+     * pan lost the star-to-star focus (user req). */
+    static float s_hold, s_rep;
     bool any = btn->left || btn->right || btn->up || btn->down;
-    if (any) s_hold += dt; else s_hold = 0;
+    if (any) s_hold += dt; else { s_hold = 0; s_rep = 0; }
 
     if (JUST(btn, left))  gmap_snap(-1, 0);
     if (JUST(btn, right)) gmap_snap(1, 0);
     if (JUST(btn, up))    gmap_snap(0, -1);
     if (JUST(btn, down))  gmap_snap(0, 1);
     if (s_hold > 0.35f) {
-        float spd = 12.0f * dt;
-        if (btn->left)  s_cx_ly -= spd;
-        if (btn->right) s_cx_ly += spd;
-        if (btn->up)    s_cy_ly -= spd;
-        if (btn->down)  s_cy_ly += spd;
+        s_rep -= dt;
+        if (s_rep <= 0.0f) {
+            s_rep = 0.16f;
+            if (btn->left)  gmap_snap(-1, 0);
+            if (btn->right) gmap_snap(1, 0);
+            if (btn->up)    gmap_snap(0, -1);
+            if (btn->down)  gmap_snap(0, 1);
+        }
     }
     gmap_highlight();
 

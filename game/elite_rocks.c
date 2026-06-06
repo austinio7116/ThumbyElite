@@ -198,8 +198,8 @@ bool rocks_damage(int idx, float dmg, Vec3 hit_pos) {
     r->hp -= dmg;
     r->chip += dmg;
     fx_spawn_spark(hit_pos, r->vel);
-    while (r->chip >= 20.0f) {
-        r->chip -= 20.0f;
+    while (r->chip >= 24.0f) {
+        r->chip -= 24.0f;
         loot_spawn_ore(v3_add(r->pos,
                               v3_scale(v3_sub(hit_pos, r->pos), 1.15f)),
                        r->vel);

@@ -68,6 +68,22 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
   scoop heat lost to passive cooling and never registered); past the
   redline the hull burns 5/s — you can die in the corona
 
+**Balance pass** (income rates computed from the live tables)
+- Mining trimmed to ~7–9k cr/hr (ore spill threshold 20→24 chip damage,
+  gems 8%→6%) — still the best broke-pilot bootstrap; trade overtakes
+  with the first hauler (~50k/hr in a MULE), missions pay ~15–20k/hr
+  mid-game
+- Every hull now has at least two weapon mounts (SKIFF/DART/PACK MULE
+  gain a Z1) — laser + autocannon is the natural early pairing instead
+  of being forced into a laser build by dry-tank risk
+- Ammo weapons: HOMING 6→10 rounds at 40 cr/round (was 55), FLAK 40→60,
+  AUTOCANNON 160→200
+- Defense gear gets its own steeper quality curve ({0.80, 1.00, 1.20,
+  1.40, 1.65}) — HIGH-TECH +40% cap, PROTOTYPE +65%; quality upgrades
+  were +12% and read as worthless
+- Galaxy chart: hold-to-scroll autorepeat snapping (star to star, same
+  cadence as the lists) replaces the smooth pan
+
 **QoL & fixes**
 - SETTINGS submenu in the pause menu: INVERT Y + SHOW FPS (smoothed
   green readout, top middle, works on every screen)

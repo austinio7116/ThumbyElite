@@ -73,7 +73,11 @@ int equip_price(int type, int tier, int q) {
 
 float equip_mult(const WeaponInst *e) {
     if (!e->in_use) return 0.55f;        /* flying bare: weak baseline */
-    return quality_dmg_mult(e->quality) *
+    /* Defense gear climbs steeper than weapons (+12% cap for 1800cr
+     * read as worthless — user report): HIGH-TECH +40%, PROTO +65%. */
+    static const float k_def_qual[5] = { 0.80f, 1.00f, 1.20f,
+                                         1.40f, 1.65f };
+    return k_def_qual[e->quality > 4 ? 4 : e->quality] *
            (0.6f + 0.4f * (float)e->integrity * 0.01f);
 }
 
@@ -183,7 +187,7 @@ static int round_cost(int type) {
     case WPN_AUTOCANNON: return 1;
     case WPN_GAUSS: return 8;
     case WPN_MISSILE: return 35;
-    case WPN_HOMING: return 55;
+    case WPN_HOMING: return 40;
     case WPN_FLAK: return 3;
     case WPN_RAILGUN: return 22;
     case WPN_MINE: return 30;
