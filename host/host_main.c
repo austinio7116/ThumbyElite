@@ -150,6 +150,9 @@ int main(int argc, char **argv) {
     if (getenv("ELITE_DASHTEST")) {
         CraftRawButtons none = {0}, b;
         /* spawn a hostile so the scanner shows peril */
+        g_player.util_eq[0] = (WeaponInst){ .type = EQ_CHAFF,
+            .quality = 1, .integrity = 100, .in_use = 1 };
+        g_player.chaff_charges = 4;
         elite_game_debug_spawn(2);
         for (int f = 0; f < 10; f++) elite_game_tick(&none, 1.0f/30.0f);
         b = none; b.menu = true;

@@ -552,12 +552,8 @@ void ui_hud_draw_sc(uint16_t *fb, const HudScInfo *info) {
 
     craft_font_draw(fb, "SUPERCRUISE", 42, 110, COL_SHIELD);
 
-    /* Left panel: speed (Mm/s) + throttle. */
-    if (player_has_util(EQ_CHAFF)) {
-        char cb[6];
-        snprintf(cb, sizeof cb, "C%d", g_player.chaff_charges);
-        craft_font_draw(fb, cb, 94, 115, RGB565C(200, 200, 215));
-    }
+    /* Left panel: speed (Mm/s) + throttle. (No chaff readout here —
+     * nothing fires missiles at you in supercruise.) */
     craft_font_draw(fb, "SP", 2, 102, COL_TEXT);
     bar(fb, 13, 105, 20, info->speed_mms / 50.0f, COL_TEXT);
     craft_font_draw(fb, "TH", 2, 109, COL_NUM);
