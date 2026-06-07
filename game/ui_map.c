@@ -540,18 +540,17 @@ void map_galaxy_draw(uint16_t *fb) {
         craft_font_draw(fb, "DOM", 90, 110, RGB565C(255, 95, 120));
         craft_font_draw(fb, "FRE", 110, 110, RGB565C(245, 200, 80));
     } else if (s_chart_layer == 3) {
-        /* one coloured letter per economy + ? for mixed */
-        static const char k_el[9] = "AIHXRTMS?";
+        /* two-letter coloured key per economy + ?? for mixed */
+        static const char *k_el[9] = { "Ag", "In", "Hi", "Ex", "Re",
+                                       "To", "Mi", "Sv", "??" };
         static const uint16_t k_ec[9] = {
             RGB565C(110, 210, 90), RGB565C(245, 150, 60),
             RGB565C(90, 210, 255), RGB565C(190, 130, 80),
             RGB565C(150, 160, 190), RGB565C(245, 120, 210),
             RGB565C(255, 80, 70), RGB565C(150, 150, 150),
             RGB565C(255, 255, 255) };
-        for (int i = 0; i < 9; i++) {
-            char one[2] = { k_el[i], 0 };
-            craft_font_draw(fb, one, 64 + i * 7, 110, k_ec[i]);
-        }
+        for (int i = 0; i < 9; i++)
+            craft_font_draw(fb, k_el[i], 11 + i * 13, 110, k_ec[i]);
     }
 }
 
