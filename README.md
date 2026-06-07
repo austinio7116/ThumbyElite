@@ -25,11 +25,8 @@ turns and flees. Fights end in more states than "dead".
 **Trade economy pass** — market prices colour-code against galactic
 base (green = cheap here / gold = dear here: the trade matrix finally
 visible in the UI), bulk staples re-based so their margins mean
-something, local price jitter widened ±12%, and smuggling pays by the
-light-year: black markets price illegal cargo +5%/ly hauled from
-acquisition (capped 2×). Galaxy chart gains RB data layers (THREAT
-heat-map / FACTION territory). Save format v4 (smuggling origins) —
-old saves reset on first load.
+something, and local price jitter widened ±12%. Galaxy chart gains RB data
+layers (THREAT heat-map / FACTION territory). Saves unchanged.
 
 **The flight dashboard** — MENU no longer pauses: a dashboard slides up
 over the live game (top strip = mini scanner + bars, so you can watch

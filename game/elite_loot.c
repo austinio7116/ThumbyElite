@@ -146,8 +146,6 @@ const char *loot_tick(float dt) {
                 continue;
             }
             int take = c->count < room ? c->count : room;
-            if (k_goods[c->good].flags & GOOD_ILLEGAL)
-                player_smuggle_mark(c->good);   /* stolen: from HERE */
             g_player.cargo[c->good] += (uint8_t)take;
             snprintf(s_toast, sizeof s_toast, "+%d %s", take,
                      k_goods[c->good].name);
