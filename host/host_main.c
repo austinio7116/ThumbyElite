@@ -118,6 +118,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
         getenv("ELITE_STOLENTEST") ||
+        getenv("ELITE_SMUGTEST") ||
         getenv("ELITE_SHOT")) {
         /* Harnesses start in-game: skip the title via NEW GAME. */
         remove("thumbyelite.sav");
@@ -191,6 +192,32 @@ int main(int argc, char **argv) {
             made++;
         }
         printf("[planets] wrote %d\n", made);
+        return 0;
+    }
+
+    /* Smuggling mile-money: premium grows with distance hauled. */
+    if (getenv("ELITE_SMUGTEST")) {
+        g_player.cargo[16] = 2;                 /* narcotics */
+        player_smuggle_mark(16);
+        float m0 = player_smuggle_mult(16);
+        /* hop three systems away */
+        const SystemInfo *si = system_info();
+        SysAddr far2 = si->addr;
+        for (int k = 3; k < 12; k++) {
+            far2.sx = si->addr.sx + k;
+            if (galaxy_sector_stars(far2.sx, far2.sy) > 0) break;
+        }
+        if (galaxy_sector_stars(far2.sx, far2.sy) > 0) {
+            far2.idx = 0;
+            elite_game_debug_jump(far2);
+            float m1 = player_smuggle_mult(16);
+            const SystemInfo *si2 = system_info();
+            int base_sell = econ_price(si2, 0, 16, false);
+            printf("[smug] mult %0.2f -> %0.2f base_sell=%d boosted=%d "
+                   "(%s)\n", m0, m1, base_sell,
+                   (int)(base_sell * m1),
+                   m1 > m0 + 0.1f ? "MILE MONEY" : "no growth");
+        }
         return 0;
     }
 

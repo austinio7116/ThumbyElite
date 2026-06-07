@@ -13,7 +13,7 @@
 #include <string.h>
 
 #define SAVE_MAGIC   0x454C4954u   /* 'ELIT' */
-#define SAVE_VERSION 3   /* v3: equipment instances */
+#define SAVE_VERSION 4   /* v4: smuggling origins (PlayerState grew) */
 
 typedef struct {
     uint32_t magic, version, len, crc;

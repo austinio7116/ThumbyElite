@@ -4,9 +4,9 @@
 #include "econ.h"
 
 const GoodDef k_goods[N_GOODS] = {
-    { "FOOD",      8, 0 },             /* 0 */
-    { "TEXTILES", 12, 0 },             /* 1 */
-    { "WATER",     4, 0 },             /* 2 */
+    { "FOOD",     16, 0 },             /* 0 */
+    { "TEXTILES", 20, 0 },             /* 1 */
+    { "WATER",     9, 0 },             /* 2 */
     { "LIQUOR",   35, 0 },             /* 3 */
     { "LUXURIES", 180, 0 },            /* 4 */
     { "MEDICINE", 60, 0 },             /* 5 */
@@ -17,8 +17,8 @@ const GoodDef k_goods[N_GOODS] = {
     { "ALLOYS",   70, 0 },             /* 10 */
     { "METALS",   45, 0 },             /* 11 */
     { "MINERALS", 25, 0 },             /* 12 */
-    { "FUELCELLS", 18, 0 },            /* 13 */
-    { "HYDROGEN", 10, 0 },             /* 14 */
+    { "FUELCELLS", 26, 0 },            /* 13 */
+    { "HYDROGEN", 15, 0 },             /* 14 */
     { "RARE GEMS", 400, 0 },           /* 15 */
     { "NARCOTICS", 320, GOOD_ILLEGAL },/* 16 */
     { "WEAPONS",  150, GOOD_ILLEGAL }, /* 17 */
@@ -65,7 +65,7 @@ int econ_price(const SystemInfo *si, int station, int good, bool buying) {
     pct += tech_adj;
     /* Seeded jitter +-8%. */
     uint32_t h = emix((uint32_t)si->seed ^ (uint32_t)(station * 197 + good * 31));
-    pct += (int)(h % 17u) - 8;
+    pct += (int)(h % 25u) - 12;     /* local jitter +-12% */
 
     int price = ((int)g->base * pct) / 100;
     if (price < 1) price = 1;

@@ -51,6 +51,10 @@ typedef struct {
     uint8_t show_fps;                   /* green FPS readout, top middle */
     uint8_t legal;                      /* 0 CLEAN / 1 OFFENDER / 2 FUGITIVE */
     int32_t fine;                       /* outstanding, payable at any dock */
+    /* Smuggling: where each illegal good (16..19) was acquired — black
+     * markets pay by the light-year hauled. */
+    int16_t smug_sx[4], smug_sy[4];
+    uint8_t smug_valid[4];
     int16_t ammo[HULL_SLOTS];           /* rounds per mount (-1 energy) */
 
     /* Pilot skills: XP accumulators (levels derived). */
@@ -80,6 +84,8 @@ int   equip_price(int type, int tier, int q);
 float equip_mult(const WeaponInst *e);
 int   instance_price(const WeaponInst *w);  /* base x quality x affix */
 int   player_util_slots(void);              /* hull-dependent (1 or 2) */
+float player_smuggle_mult(int good);        /* black-market mile money */
+void  player_smuggle_mark(int good);        /* record acquisition system */
 bool  player_has_util(int eq_type);         /* gadget fitted + working? */
 
 /* Effective damage/heat for a mounted instance (quality + integrity). */

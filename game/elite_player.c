@@ -2,6 +2,8 @@
  * ThumbyElite — persistent player state.
  */
 #include "elite_player.h"
+#include <math.h>
+#include "system_sim.h"
 #include "elite_entity.h"
 #include <string.h>
 
@@ -236,6 +238,33 @@ void player_load_mount_ammo(int mount, float fill01) {
 
 int player_util_slots(void) {
     return k_hulls[g_player.hull_id].util_slots;
+}
+
+/* Smuggling premium: black markets pay illegal cargo by the distance
+ * it was hauled — +5%/ly from acquisition, capped at double. */
+float player_smuggle_mult(int good) {
+    if (good < 16 || good > 19 || !g_player.smug_valid[good - 16])
+        return 1.0f;
+    const SystemInfo *si = system_info();
+    float cx, cy, ox, oy;
+    galaxy_star_pos(si->addr, &cx, &cy);
+    SysAddr o = { g_player.smug_sx[good - 16],
+                  g_player.smug_sy[good - 16], 0 };
+    galaxy_star_pos(o, &ox, &oy);
+    float d = sqrtf((cx - ox) * (cx - ox) + (cy - oy) * (cy - oy));
+    float m = 1.0f + d * 0.05f;
+    return m > 2.0f ? 2.0f : m;
+}
+
+void player_smuggle_mark(int good) {
+    if (good < 16 || good > 19) return;
+    if (g_player.smug_valid[good - 16] &&
+        g_player.cargo[good] > 0)
+        return;                       /* keep the FIRST origin */
+    const SystemInfo *si = system_info();
+    g_player.smug_sx[good - 16] = si->addr.sx;
+    g_player.smug_sy[good - 16] = si->addr.sy;
+    g_player.smug_valid[good - 16] = 1;
 }
 
 bool player_has_util(int eq_type) {

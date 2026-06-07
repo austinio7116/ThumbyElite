@@ -134,6 +134,7 @@ static void try_buy(int good) {
     if (g_player.credits < price) { toast("NO CREDITS"); return; }
     if (player_cargo_total() >= player_cargo_cap()) { toast("HOLD FULL"); return; }
     g_player.credits -= price;
+    player_smuggle_mark(good);        /* before count rises: keeps origin */
     g_player.cargo[good]++;
     s_bought[good]++;
 }
@@ -143,8 +144,11 @@ static void try_sell(int good) {
     int price = econ_price(si, s_station, good, false);
     if (g_player.cargo[good] == 0) { toast("NONE HELD"); return; }
     if (price <= 0) { toast("NO TRADE"); return; }
+    price = (int)(price * player_smuggle_mult(good));   /* mile money */
     g_player.cargo[good]--;
     g_player.credits += price;
+    if (good >= 16 && good <= 19 && g_player.cargo[good] == 0)
+        g_player.smug_valid[good - 16] = 0;   /* hold empty: origin done */
 }
 
 static void try_refuel(void) {
@@ -973,16 +977,26 @@ static void draw_market(uint16_t *fb) {
         bool illegal = (k_goods[i].flags & GOOD_ILLEGAL) != 0;
         int buy = econ_price(si, s_station, i, true);
         int sell = econ_price(si, s_station, i, false);
+        if (illegal)
+            sell = (int)(sell * player_smuggle_mult(i));
         int stock = econ_stock(si, s_station, i) - s_bought[i];
         uint16_t c = (i == s_cursor) ? COL_CUR : illegal ? COL_ILL : COL_DIM;
         if (i == s_cursor) craft_font_draw(fb, ">", 2, y, COL_CUR);
         craft_font_draw(fb, k_goods[i].name, 8, y, c);
         char buf[12];
         if (buy > 0) {
+            /* Value colours: green = well under galactic base (buy
+             * here), gold = well over (sell here). The trade matrix,
+             * finally visible in the UI. */
+            int base = (int)k_goods[i].base;
+            uint16_t bc = (buy * 100 < base * 95)
+                              ? RGB565C(110, 220, 110) : c;
+            uint16_t sc2 = (sell * 100 > base * 108)
+                               ? RGB565C(245, 200, 80) : c;
             snprintf(buf, sizeof buf, "%d", buy);
-            craft_font_draw(fb, buf, 56, y, c);
+            craft_font_draw(fb, buf, 56, y, bc);
             snprintf(buf, sizeof buf, "%d", sell);
-            craft_font_draw(fb, buf, 76, y, c);
+            craft_font_draw(fb, buf, 76, y, sc2);
             snprintf(buf, sizeof buf, "%d", stock > 0 ? stock : 0);
             craft_font_draw(fb, buf, 100, y, c);
         } else {
