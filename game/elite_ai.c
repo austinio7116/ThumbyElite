@@ -319,7 +319,18 @@ static void ai_ship(int idx, float dt) {
             }
             break;
         }
-        if (dist < w->range && dist < k_eng[tier] &&
+        /* FLAK is a fixed-fuze airburst: only fire when the target is
+         * AT the fuze range. Aces judge it tight; greens have a loose
+         * window and mistime it (burst lands short/long). */
+        int flak_ok = 1;
+        if (s->weapons[s->active_w] == WPN_FLAK) {
+            static const float k_flakwin[5] = { 170.0f, 120.0f, 80.0f,
+                                                50.0f, 30.0f };
+            float off = dist - FLAK_FUZE;
+            if (off < 0) off = -off;
+            flak_ok = off < k_flakwin[tier];
+        }
+        if (flak_ok && dist < w->range && dist < k_eng[tier] &&
             v3_dot(s->basis.r[2], dir) > k_cone[tier] &&
             combat_can_fire(s)) {
             /* THE HUMAN FIRE MODEL (user design): fire at the WEAPON's

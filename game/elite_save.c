@@ -112,7 +112,6 @@ bool save_load(SaveMeta *out) {
     if (!read_blob(&b)) return false;
     galaxy_set_seed(b.p.galaxy_seed);
     g_player = b.p.player;
-    sfx_set_laser(g_player.laser_sfx);     /* restore the chosen sfx */
     memcpy(g_rep, b.p.rep, sizeof b.p.rep);
     memcpy(g_missions, b.p.missions, sizeof b.p.missions);
     out->addr = b.p.addr;

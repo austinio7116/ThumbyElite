@@ -21,7 +21,6 @@ float audio_get_master(void);
 
 /* SFX (amp 0..1 lets callers distance-attenuate). */
 void sfx_weapon(int wpn_type, float amp);
-void sfx_set_laser(int v);   /* 0/1/2 firing-sound variant */
 void sfx_explosion(float amp, float big01);
 void sfx_hit_shield(void);
 void sfx_enemy_shield_hit(void);

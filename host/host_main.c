@@ -245,6 +245,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_LANCESHOT") ||
         getenv("ELITE_SFXTEST") ||
         getenv("ELITE_SETSHOT") ||
+        getenv("ELITE_FLAKTEST") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -736,6 +737,47 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    /* FLAK airburst: damage at correct fuze range vs mistimed. */
+    if (getenv("ELITE_FLAKTEST")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Ship *pl = &g_ships[0];
+        elite_game_debug_face_away_from_sun();
+        float dists[3] = { FLAK_FUZE, FLAK_FUZE - 130.0f, FLAK_FUZE + 130.0f };
+        const char *lbl[3] = { "ON fuze (timed)", "too CLOSE", "too FAR" };
+        for (int c = 0; c < 3; c++) {
+            int e = ship_spawn(hull_mesh(0xACE1u, 4),
+                               v3_add(pl->pos,
+                                      v3_scale(pl->basis.r[2], dists[c])),
+                               TEAM_HOSTILE);
+            ship_set_tier(e, 4, 4);
+            Ship *t2 = &g_ships[e];
+            t2->n_weapons = 0;
+            Vec3 hold = t2->pos;
+            float hp0 = t2->shield + t2->hull;
+            g_player.mounts[0] = (WeaponInst){ .type = WPN_FLAK,
+                .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
+            g_player.ammo[0] = 60;
+            player_apply_to_ship();
+            pl->active_w = 0; pl->fire_cool = 0; pl->heat = 0;
+            combat_set_shot_type(WPN_FLAK);
+            { CraftRawButtons lb = {0}; lb.lb = true;
+              elite_game_tick(&lb, 1.0f/30.0f);
+              for (int k=0;k<6;k++){CraftRawButtons n={0};elite_game_tick(&n,1.0f/30.0f);} }
+            pl->fire_cool = 0;
+            combat_fire(0, 0, e);
+            CraftRawButtons none = {0};
+            for (int f = 0; f < 60; f++) {
+                elite_game_tick(&none, 1.0f/30.0f);
+                t2->pos = hold; t2->vel = v3(0,0,0); pl->vel = v3(0,0,0);
+                if (!t2->alive) break;
+            }
+            printf("[flak] %-16s one shot dealt %.0f damage\n",
+                   lbl[c], hp0 - (t2->alive ? t2->shield + t2->hull : 0));
+            if (t2->alive) t2->alive = false;
+        }
+        return 0;
+    }
+
     /* Settings overlay screenshot (laser-sfx row). */
     if (getenv("ELITE_SETSHOT")) {
         CraftRawButtons none = {0}, b;
@@ -758,8 +800,7 @@ int main(int argc, char **argv) {
         const char *nm = getenv("ELITE_SFXTEST");
         int wt = WPN_PULSE_S;
         for (const char *c = nm; c && *c; c++) {
-            if (*c >= '0' && *c <= '2') sfx_set_laser(*c - '0');
-            else if (*c == 'P') wt = WPN_PLASMA;
+            if (*c == 'P') wt = WPN_PLASMA;
             else if (*c == 'L') wt = WPN_LANCE;
             else if (*c == 'B') wt = WPN_BLASTER;
             else if (*c == 'M') wt = WPN_PULSE_M;

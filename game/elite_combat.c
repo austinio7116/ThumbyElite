@@ -463,14 +463,16 @@ int combat_fire(int shooter, float spread, int target) {
         return -1;
     }
 
-    /* FLAK: 5 pellets in a cone. */
+    /* FLAK: 5 pellets in a cone — a SHOTGUN. Timing is the skill: it
+     * only groups tight enough to multi-hit at close range (see the
+     * small proximity radius in proj.c). */
     if (wtype == WPN_FLAK) {
         for (int p2 = 0; p2 < 5; p2++) {
             uint32_t r = (uint32_t)(s->heat * 977.0f) ^
                          (uint32_t)(p2 * 2654435761u) ^ (uint32_t)shooter;
             r ^= r >> 13; r *= 1274126177u; r ^= r >> 16;
-            float a = ((r & 0xFF) / 255.0f - 0.5f) * 0.14f;
-            float b = (((r >> 8) & 0xFF) / 255.0f - 0.5f) * 0.14f;
+            float a = ((r & 0xFF) / 255.0f - 0.5f) * 0.20f;
+            float b = (((r >> 8) & 0xFF) / 255.0f - 0.5f) * 0.20f;
             Vec3 pd = v3_norm(v3_add(dir,
                          v3_add(v3_scale(s->basis.r[0], a),
                                 v3_scale(s->basis.r[1], b))));

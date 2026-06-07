@@ -247,27 +247,33 @@ void proj_tick(float dt) {
             p->alive = false;
             continue;
         }
-        /* FLAK proximity fuse (user design B): pellets airburst near
-         * any ship that isn't the shooter's side — at shotgun range
-         * the whole cluster fuses on the target (devastating); at
-         * range the spread means most pellets pass wide (bad). */
+        /* FLAK fixed-fuze airburst (user): detonates at FLAK_FUZE from
+         * the muzzle regardless of any target — frag cloud does AoE
+         * with falloff at the burst point. Fire when the enemy is AT
+         * that range or the cloud bursts behind/short of them. */
         if (p->type == WPN_FLAK) {
-            for (int v2 = 0; v2 < MAX_SHIPS; v2++) {
-                Ship *sv = &g_ships[v2];
-                if (!sv->alive || v2 == p->owner) continue;
-                if (p->owner == PLAYER && v2 == PLAYER) continue;
-                float rr = 13.0f + (sv->mesh ? sv->mesh->bound_r : 4.0f);
-                if (v3_len2(v3_sub(sv->pos, p->pos)) < rr * rr) {
-                    combat_set_shot_type(WPN_FLAK);
-                    combat_direct_damage(p->owner, v2,
-                                         k_weapons[WPN_FLAK].dmg *
-                                             p->dmg_mult, p->pos);
-                    fx_spawn_spark(p->pos, sv->vel);
-                    p->alive = false;
-                    break;
+            float travelled = k_weapons[WPN_FLAK].range -
+                              p->life * k_weapons[WPN_FLAK].speed;
+            if (travelled >= FLAK_FUZE) {
+                combat_set_shot_type(WPN_FLAK);
+                for (int v2 = 0; v2 < MAX_SHIPS; v2++) {
+                    Ship *sv = &g_ships[v2];
+                    if (!sv->alive || v2 == p->owner) continue;
+                    if (p->owner == PLAYER && v2 == PLAYER) continue;
+                    float br = FLAK_BURST + (sv->mesh ? sv->mesh->bound_r
+                                                      : 4.0f);
+                    float d2 = v3_len2(v3_sub(sv->pos, p->pos));
+                    if (d2 < br * br) {
+                        float fall = 1.0f - sqrtf(d2) / br;  /* edge=0 */
+                        combat_direct_damage(p->owner, v2,
+                            k_weapons[WPN_FLAK].dmg * p->dmg_mult * fall,
+                            p->pos);
+                    }
                 }
+                fx_spawn_explosion(p->pos, p->vel);
+                p->alive = false;
+                continue;
             }
-            if (!p->alive) continue;
         }
 
         if (hit >= 0) {
