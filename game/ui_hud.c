@@ -214,6 +214,12 @@ static void scanner(uint16_t *fb) {
 static void target_box(uint16_t *fb, int target) {
     const Ship *p = &g_ships[PLAYER];
     const Ship *t = &g_ships[target];
+    /* Friendlies wear green brackets/arrows, police blue — red is for
+     * hostiles (and for friends you've made hostile). */
+    uint16_t bc = (t->team == TEAM_HOSTILE) ? COL_TARGET
+                : t->is_police ? RGB565C(90, 180, 255)
+                : t->is_civilian ? RGB565C(110, 230, 110)
+                                 : COL_TARGET;
     float sx, sy;
     uint16_t d;
     if (r3d_scene_project(v3_sub(t->pos, p->pos), &sx, &sy, &d) &&
@@ -244,14 +250,14 @@ static void target_box(uint16_t *fb, int target) {
         int x0 = (int)sx - h, x1 = (int)sx + h;
         int y0 = (int)sy - h, y1 = (int)sy + h;
         int l = h / 2;
-        hline(fb, x0, x0 + l, y0, COL_TARGET);
-        vline(fb, x0, y0, y0 + l, COL_TARGET);
-        hline(fb, x1 - l, x1, y0, COL_TARGET);
-        vline(fb, x1, y0, y0 + l, COL_TARGET);
-        hline(fb, x0, x0 + l, y1, COL_TARGET);
-        vline(fb, x0, y1 - l, y1, COL_TARGET);
-        hline(fb, x1 - l, x1, y1, COL_TARGET);
-        vline(fb, x1, y1 - l, y1, COL_TARGET);
+        hline(fb, x0, x0 + l, y0, bc);
+        vline(fb, x0, y0, y0 + l, bc);
+        hline(fb, x1 - l, x1, y0, bc);
+        vline(fb, x1, y0, y0 + l, bc);
+        hline(fb, x0, x0 + l, y1, bc);
+        vline(fb, x0, y1 - l, y1, bc);
+        hline(fb, x1 - l, x1, y1, bc);
+        vline(fb, x1, y1 - l, y1, bc);
     } else {
         /* Edge arrow = the way to TURN: the view-space lateral direction
          * already encodes the shortest rotation, in front OR behind —
@@ -264,33 +270,38 @@ static void target_box(uint16_t *fb, int target) {
         int ex = 64 + (int)(ax * 52.0f);
         int ey = 60 + (int)(ay * 44.0f);
         /* Arrowhead: tip leads, barbs flare BACK from it. */
-        px(fb, ex, ey, COL_TARGET);
+        px(fb, ex, ey, bc);
         px(fb, ex - (int)(ax * 2 + ay * 2), ey - (int)(ay * 2 - ax * 2),
-           COL_TARGET);
+           bc);
         px(fb, ex - (int)(ax * 2 - ay * 2), ey - (int)(ay * 2 + ax * 2),
-           COL_TARGET);
-        px(fb, ex - (int)(ax * 3), ey - (int)(ay * 3), COL_TARGET);
-        px(fb, ex - (int)(ax * 5), ey - (int)(ay * 5), COL_TARGET);
+           bc);
+        px(fb, ex - (int)(ax * 3), ey - (int)(ay * 3), bc);
+        px(fb, ex - (int)(ax * 5), ey - (int)(ay * 5), bc);
     }
 
     /* Target readout under the canopy line, top-right. */
     char buf[24];
     float dist = v3_len(v3_sub(t->pos, p->pos));
     snprintf(buf, sizeof buf, "%dM", (int)dist);
-    craft_font_draw(fb, buf, 98, 12, COL_TARGET);
+    craft_font_draw(fb, buf, 98, 12, bc);
     bar(fb, 100, 20, 22, t->shield / (t->shield_max > 0 ? t->shield_max : 1),
         COL_SHIELD);
     bar(fb, 100, 24, 22, t->hull / (t->hull_max > 0 ? t->hull_max : 1),
         COL_HULL);
-    craft_font_draw(fb,
-                    t->is_police ? "POLICE"
-                  : (t->is_civilian && t->team == TEAM_NEUTRAL) ? "CIVILIAN"
-                  : t->is_mark   ? "** MARK **"
-                                 : k_tier_names[t->tier > 4 ? 4 : t->tier],
-                    98, 28,
-                    t->is_police ? RGB565C(90, 180, 255)
-                  : (t->is_civilian && t->team == TEAM_NEUTRAL)
-                        ? RGB565C(110, 230, 110) : COL_TARGET);
+    /* Two lines: WHO they are (faction colour), then how GOOD they
+     * are (tier). All raiders are pirates by trade (user q). */
+    {
+        const char *id = t->is_police ? "POLICE"
+                       : t->is_civilian ? "CIVILIAN"
+                       : t->is_mark ? "** MARK **" : "PIRATE";
+        uint16_t idc = t->is_police ? RGB565C(90, 180, 255)
+                     : (t->is_civilian && t->team == TEAM_NEUTRAL)
+                           ? RGB565C(110, 230, 110)
+                           : COL_TARGET;
+        craft_font_draw(fb, id, 98, 28, idc);
+        craft_font_draw(fb, k_tier_names[t->tier > 4 ? 4 : t->tier],
+                        98, 36, RGB565C(150, 156, 170));
+    }
 }
 
 void ui_hud_draw(uint16_t *fb, const HudInfo *info) {

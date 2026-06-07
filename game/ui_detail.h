@@ -23,7 +23,7 @@ void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
 
 /* Hull sheet: full specs; cost < 0 renders OWNED. The caller's 3D pane
  * (right column, y 10..95) stays open — text fits the left column. */
-void detail_draw_hull(uint16_t *fb, int hull_id, int cost,
+void detail_draw_hull(uint16_t *fb, int hull_id, uint32_t seed, int cost,
                       const char *footer);
 
 /* Commodity sheet (status cargo drill-down). */

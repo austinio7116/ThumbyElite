@@ -116,6 +116,8 @@ int main(int argc, char **argv) {
         getenv("ELITE_DISTRESS") ||
         getenv("ELITE_NEWDEATH") ||
         getenv("ELITE_DRONETEST") ||
+        getenv("ELITE_PIRGEN") ||
+        getenv("ELITE_JITTERTEST") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -268,54 +270,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    /* Yard compare-colour examples (3 ownership scenarios). */
-    if (getenv("ELITE_YARDCOLOR")) {
-        /* REAL flow: dock, open the shipyard, B for the detail sheet —
-         * the live rotating hull fills the right pane (the old direct
-         * draw shipped a black pane into the guide). */
-        CraftRawButtons none = {0}, b;
-        #define TY(field, settle) do { \
-            b = none; b.field = true; \
-            elite_game_tick(&b, 1.0f / 30.0f); \
-            for (int k = 0; k < (settle); k++) \
-                elite_game_tick(&none, 1.0f / 30.0f); \
-        } while (0)
-        for (int k = 0; k < 30; k++) elite_game_tick(&none, 1.0f/30.0f);
-        TY(menu, 12); TY(right, 3); TY(a, 4);
-        for (int i = 0; i < 5; i++) TY(down, 2);
-        TY(a, 4);
-        int f = 0;
-        while (elite_game_state() == 1 && f++ < 30 * 240)
-            elite_game_tick(&none, 1.0f / 30.0f);
-        b = none; b.lb = b.rb = true;
-        for (int k = 0; k < 8; k++) elite_game_tick(&b, 1.0f / 30.0f);
-        f = 0;
-        while (elite_game_state() == 6 && f++ < 200)
-            elite_game_tick(&none, 1.0f / 30.0f);
-        for (int k = 0; k < 12; k++) elite_game_tick(&none, 1.0f/30.0f);
-        if (elite_game_state() != 7) { printf("[yc] no dock\n"); return 1; }
-        TY(down, 2);                      /* HOME -> SHIPYARD */
-        TY(a, 6);
-        printf("[yc] own hull=%d\n", g_player.hull_id);
-        TY(b, 8);                         /* detail on offer 0 */
-        /* the figure must compare a ship that ISN'T ours: cycle until
-         * the offer's class differs from the player's hull */
-        for (int tries = 0; tries < 6; tries++) {
-            extern int station_preview2(uint32_t *, int *);
-            uint32_t seed2; int cls2;
-            station_preview2(&seed2, &cls2);
-            if (cls2 != g_player.hull_id) break;
-            TY(rb, 8);
-        }
-        for (int k = 0; k < 20; k++) elite_game_tick(&none, 1.0f/30.0f);
-        render_frame(); dump_ppm("/tmp/yc_live_detail.ppm");
-        TY(rb, 8);                        /* next offer */
-        for (int k = 0; k < 20; k++) elite_game_tick(&none, 1.0f/30.0f);
-        render_frame(); dump_ppm("/tmp/yc_live_detail2.ppm");
-        #undef TY
-        return 0;
-    }
-
     /* Magazine conservation through unfit/refit (the free-reload
      * exploit): fit AC, fire it down, unfit, refit, count rounds. */
     if (getenv("ELITE_SWAPTEST")) {
@@ -342,19 +296,47 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    /* Yard compare-colour examples (3 ownership scenarios). */
     if (getenv("ELITE_YARDCOLOR")) {
-        struct { int own, view; const char *path; } cases[3] = {
-            { 0, 3, "/tmp/yc_skiff_views_viper.ppm" },
-            { 3, 6, "/tmp/yc_viper_views_packmule.ppm" },
-            { 5, 0, "/tmp/yc_mauler_views_skiff.ppm" },
-        };
-        for (int i = 0; i < 3; i++) {
-            g_player.hull_id = (uint8_t)cases[i].own;
-            memset(g_fb, 0, sizeof g_fb);
-            detail_draw_hull(g_fb, cases[i].view, 12345, "B:BACK");
-            dump_ppm(cases[i].path);
+        /* REAL flow: dock, open the shipyard, B for the detail sheet —
+         * the live rotating hull fills the right pane. */
+        CraftRawButtons none = {0}, b;
+        #define TY(field, settle) do { \
+            b = none; b.field = true; \
+            elite_game_tick(&b, 1.0f / 30.0f); \
+            for (int k = 0; k < (settle); k++) \
+                elite_game_tick(&none, 1.0f / 30.0f); \
+        } while (0)
+        for (int k = 0; k < 30; k++) elite_game_tick(&none, 1.0f/30.0f);
+        TY(menu, 12); TY(right, 3); TY(a, 4);
+        for (int i = 0; i < 5; i++) TY(down, 2);
+        TY(a, 4);
+        int f = 0;
+        while (elite_game_state() == 1 && f++ < 30 * 240)
+            elite_game_tick(&none, 1.0f / 30.0f);
+        b = none; b.lb = b.rb = true;
+        for (int k = 0; k < 8; k++) elite_game_tick(&b, 1.0f / 30.0f);
+        f = 0;
+        while (elite_game_state() == 6 && f++ < 200)
+            elite_game_tick(&none, 1.0f / 30.0f);
+        for (int k = 0; k < 12; k++) elite_game_tick(&none, 1.0f/30.0f);
+        if (elite_game_state() != 7) { printf("[yc] no dock\n"); return 1; }
+        TY(down, 2);
+        TY(a, 6);
+        printf("[yc] own hull=%d\n", g_player.hull_id);
+        TY(b, 8);
+        for (int tries = 0; tries < 6; tries++) {
+            extern int station_preview2(uint32_t *, int *);
+            uint32_t seed2; int cls2;
+            station_preview2(&seed2, &cls2);
+            if (cls2 != g_player.hull_id) break;
+            TY(rb, 8);
         }
+        for (int k = 0; k < 20; k++) elite_game_tick(&none, 1.0f/30.0f);
+        render_frame(); dump_ppm("/tmp/yc_live_detail.ppm");
+        TY(rb, 8);
+        for (int k = 0; k < 20; k++) elite_game_tick(&none, 1.0f/30.0f);
+        render_frame(); dump_ppm("/tmp/yc_live_detail2.ppm");
+        #undef TY
         return 0;
     }
 
@@ -517,6 +499,62 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    /* Hull-roll variety + determinism. */
+    if (getenv("ELITE_JITTERTEST")) {
+        HullRoll a, b, c;
+        hull_roll(3, 0x1111, &a);
+        hull_roll(3, 0x2222, &b);
+        hull_roll(3, 0x1111, &c);
+        printf("[jit] VIPER r1: spd=%.2f hull=%.2f slots=%d utils=%d\n",
+               a.spd, a.hull, a.n_slots, a.utils);
+        printf("[jit] VIPER r2: spd=%.2f hull=%.2f slots=%d utils=%d\n",
+               b.spd, b.hull, b.n_slots, b.utils);
+        printf("[jit] determinism: %s; differs: %s\n",
+               (a.spd == c.spd && a.utils == c.utils) ? "STABLE" : "BUG",
+               (a.spd != b.spd || a.utils != b.utils) ? "YES" : "no");
+        int ucount[5] = { 0 };
+        for (int i = 0; i < 200; i++) {
+            HullRoll r;
+            hull_roll(4, 0xABC0 + i * 7, &r);
+            if (r.utils <= 4) ucount[r.utils]++;
+        }
+        printf("[jit] REAVER utils dist (200): 1=%d 2=%d 3=%d 4=%d\n",
+               ucount[1], ucount[2], ucount[3], ucount[4]);
+        return 0;
+    }
+
+    /* Pirate generation census: real ship_set_tier loadouts. */
+    if (getenv("ELITE_PIRGEN")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        static const uint8_t k_tier_class[5] = { 1, 2, 3, 4, 5 };
+        static const char *hn[10] = { "SKIFF","DART","SPARROW","VIPER",
+            "REAVER","MAULER","PACKMULE","MULE","ATLAS","BASILISK" };
+        static const char *sv[4] = { "STD","REGEN","BULWARK","PHASE" };
+        for (int tier = 0; tier <= 4; tier++) {
+            for (int idx = 1; idx <= 6; idx++) {
+                int cls = k_tier_class[tier];
+                int e = ship_spawn(hull_mesh(0xACE1u ^ idx, cls),
+                                   v3(0, 0, 500), TEAM_HOSTILE);
+                if (e <= 0) continue;
+                /* force the entity index parity the spawner would get */
+                ship_set_tier(e, tier, cls);
+                Ship *p2 = &g_ships[e];
+                char guns[40] = "";
+                for (int w = 0; w < p2->n_weapons; w++) {
+                    strcat(guns, k_weapons[p2->weapons[w]].name);
+                    strcat(guns, " ");
+                }
+                printf("[pirgen] T%d idx%%6=%d %-8s hull=%3.0f shd=%3.0f "
+                       "%-7s turret=%d guns= %s\n",
+                       tier, e % 6, hn[cls], p2->hull_max,
+                       p2->shield_max, sv[p2->shield_var],
+                       p2->turret_type, guns);
+                p2->alive = false;
+            }
+        }
+        return 0;
+    }
+
     /* Repair drone: hull rises, critted mount returns to service. */
     if (getenv("ELITE_DRONETEST")) {
         g_player.util_eq[0] = (WeaponInst){ .type = EQ_DRONE,
@@ -654,6 +692,8 @@ int main(int argc, char **argv) {
             for (int f = 0; f < 8; f++)
                 elite_game_tick(&n4, 1.0f / 30.0f);
             extern int elite_game_debug_target(void);
+            render_frame();
+            dump_ppm("/tmp/civ_lock.ppm");
             printf("[post] LB lock -> %d (civ=%d) %s\n",
                    elite_game_debug_target(), civ,
                    elite_game_debug_target() == civ ? "LOCKED"

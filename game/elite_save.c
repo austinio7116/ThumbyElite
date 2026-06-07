@@ -7,13 +7,14 @@
  * start beats corrupt state).
  */
 #include "elite_save.h"
+#include <stddef.h>
 #include "elite_player.h"
 #include "elite_platform.h"
 #include "mission.h"
 #include <string.h>
 
 #define SAVE_MAGIC   0x454C4954u   /* 'ELIT' */
-#define SAVE_VERSION 3   /* v3: equipment instances */
+#define SAVE_VERSION 4   /* v4: four utility bays (v3 loads migrate) */
 
 typedef struct {
     uint32_t magic, version, len, crc;
@@ -49,9 +50,26 @@ static uint32_t crc32_simple(const uint8_t *d, int n) {
 static bool read_blob(SaveBlob *blob) {
     int n = plat_load((uint8_t *)blob, (int)sizeof *blob);
     if (n < (int)sizeof *blob) return false;
-    if (blob->h.magic != SAVE_MAGIC || blob->h.version != SAVE_VERSION)
+    if (blob->h.magic != SAVE_MAGIC) return false;
+    if (blob->h.version == SAVE_VERSION) {
+        if (blob->h.len != sizeof(SavePayload)) return false;
+    } else if (blob->h.version == 3) {
+        /* v3 -> v4: PlayerState grew util_eq[2] -> [4]. The payload on
+         * disk is 16 bytes shorter and everything after util_eq sits
+         * earlier. Migrate by splitting at the insertion point. */
+        if (blob->h.len + 2 * sizeof(WeaponInst) != sizeof(SavePayload))
+            return false;
+        uint8_t *p = (uint8_t *)&blob->p;
+        size_t cut = offsetof(SavePayload, player) +
+                     offsetof(PlayerState, util_eq) +
+                     2 * sizeof(WeaponInst);
+        size_t grow = 2 * sizeof(WeaponInst);
+        size_t tail = blob->h.len - cut;
+        memmove(p + cut + grow, p + cut, tail);
+        memset(p + cut, 0, grow);          /* new bays arrive empty */
+    } else {
         return false;
-    if (blob->h.len != sizeof(SavePayload)) return false;
+    }
     if (blob->h.crc != crc32_simple((const uint8_t *)&blob->p,
                                     (int)sizeof blob->p))
         return false;

@@ -253,7 +253,7 @@ static uint16_t cmp_col(float nv, float cv) {
     return RGB565C(255, 75, 60);
 }
 
-void detail_draw_hull(uint16_t *fb, int hull_id, int cost,
+void detail_draw_hull(uint16_t *fb, int hull_id, uint32_t seed, int cost,
                       const char *footer) {
     /* Left column only — the shipyard's rotating 3D pane stays live. */
     for (int y = 0; y < ELITE_FB_H; y++) {
@@ -265,6 +265,11 @@ void detail_draw_hull(uint16_t *fb, int hull_id, int cost,
 
     const HullDef *h = &k_hulls[hull_id];
     const HullDef *cur = &k_hulls[g_player.hull_id];
+    /* This INSTANCE's roll vs YOUR ship's roll — shopping is reading
+     * the quirks, not the brochure. */
+    HullRoll rv;
+    hull_roll(hull_id, seed, &rv);
+    const HullRoll *rc = player_roll();
     char buf[28];
     craft_font_draw(fb, h->name, 2, 2, COL_HDR);
     hl(fb, 9, COL_GRID);
@@ -279,18 +284,28 @@ void detail_draw_hull(uint16_t *fb, int hull_id, int cost,
         craft_font_draw(fb, buf, 34, y, col); \
         y += 8; \
     } while (0)
-    HSTATC("SPD", CMPC(h->max_speed, cur->max_speed), "%d",
-           (int)h->max_speed);
-    HSTATC("ACC", CMPC(h->accel, cur->accel), "%d", (int)h->accel);
-    HSTATC("TRN", CMPC(h->turn_rate, cur->turn_rate), "%d.%d",
-           (int)h->turn_rate, ((int)(h->turn_rate * 10)) % 10);
-    HSTATC("CRG", CMPC(h->cargo, cur->cargo), "%dT", h->cargo);
-    HSTATC("JMP", CMPC(h->jump_range, cur->jump_range), "%d.%dLY",
-           (int)h->jump_range, ((int)(h->jump_range * 10)) % 10);
-    HSTATC("HUL", CMPC(h->hull_base, cur->hull_base), "%d",
-           (int)h->hull_base);
-    HSTATC("SHD", CMPC(h->shield_base, cur->shield_base), "%d",
-           (int)h->shield_base);
+    HSTATC("SPD", CMPC(h->max_speed * rv.spd,
+                       cur->max_speed * rc->spd), "%d",
+           (int)(h->max_speed * rv.spd));
+    HSTATC("ACC", CMPC(h->accel * rv.acc, cur->accel * rc->acc), "%d",
+           (int)(h->accel * rv.acc));
+    {
+        float tn = h->turn_rate * rv.trn, tc = cur->turn_rate * rc->trn;
+        HSTATC("TRN", CMPC(tn, tc), "%d.%d", (int)tn,
+               ((int)(tn * 10)) % 10);
+    }
+    HSTATC("CRG", CMPC(rv.cargo, rc->cargo), "%dT", rv.cargo);
+    {
+        float jn = h->jump_range * rv.jmp;
+        HSTATC("JMP", CMPC(jn, cur->jump_range * rc->jmp), "%d.%dLY",
+               (int)jn, ((int)(jn * 10)) % 10);
+    }
+    HSTATC("HUL", CMPC(h->hull_base * rv.hull,
+                       cur->hull_base * rc->hull), "%d",
+           (int)(h->hull_base * rv.hull));
+    HSTATC("SHD", CMPC(h->shield_base * rv.shd,
+                       cur->shield_base * rc->shd), "%d",
+           (int)(h->shield_base * rv.shd));
     /* TIER + GUNS: colour compares TOTALS across slots, but the text
      * stays in its original form (user spec). */
     {
@@ -299,17 +314,19 @@ void detail_draw_hull(uint16_t *fb, int hull_id, int cost,
         HSTATC("TIER", CMPC(nt, ct), "S%d H%d",
                h->max_shield_tier, h->max_hull_tier);
         int ng = 0, cg = 0;
-        for (int i = 0; i < h->n_slots; i++) ng += h->slot_size[i];
-        for (int i = 0; i < cur->n_slots; i++) cg += cur->slot_size[i];
-        char slots[12];
+        for (int i = 0; i < rv.n_slots; i++) ng += rv.slot_size[i];
+        for (int i = 0; i < rc->n_slots; i++) cg += rc->slot_size[i];
+        char slots[14];
         int sl = 0;
-        for (int i = 0; i < h->n_slots; i++) {
+        for (int i = 0; i < rv.n_slots; i++) {
             slots[sl++] = 'Z';
-            slots[sl++] = (char)('0' + h->slot_size[i]);
+            slots[sl++] = (char)('0' + rv.slot_size[i]);
             slots[sl++] = ' ';
         }
         slots[sl] = 0;
         HSTATC("GUNS", CMPC(ng, cg), "%s", slots);
+        HSTATC("UTIL", CMPC(rv.utils, rc->utils), "%d BAY%s",
+               rv.utils, rv.utils == 1 ? "" : "S");
     }
     #undef HSTATC
     #undef CMPC

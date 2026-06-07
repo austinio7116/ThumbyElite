@@ -44,4 +44,16 @@ void hull_cache_reset(const Mesh *keep);
 extern const float k_tier_mult[4];      /* 1.0 / 1.3 / 1.6 / 2.0 */
 int upgrade_price(int hull_id, int tier);
 
+/* Per-instance hull roll (user req: within-class variety — shopping is
+ * a treasure hunt). Derived ONLY from the hull seed, so a ship's
+ * quirks persist through save/load with no extra state. */
+typedef struct {
+    float spd, acc, trn, hull, shd, jmp;   /* stat multipliers ~±10% */
+    uint8_t cargo;                          /* jittered tonnes */
+    uint8_t n_slots;
+    uint8_t slot_size[3];
+    uint8_t utils;                          /* 1 / 2-4 / 3-4 by class */
+} HullRoll;
+void hull_roll(int hull_id, uint32_t seed, HullRoll *out);
+
 #endif

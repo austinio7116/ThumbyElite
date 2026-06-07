@@ -28,6 +28,45 @@ int upgrade_price(int hull_id, int tier) {
     return p < 200 ? 200 : p;
 }
 
+static uint32_t roll_mix(uint32_t h) {
+    h ^= h >> 13; h *= 1274126177u; h ^= h >> 16;
+    return h;
+}
+static float roll_pm(uint32_t h, float pm) {     /* 1.0 ± pm */
+    return 1.0f + ((float)(h & 0xFFFF) / 32768.0f - 1.0f) * pm;
+}
+
+void hull_roll(int hull_id, uint32_t seed, HullRoll *out) {
+    const HullDef *h = &k_hulls[hull_id];
+    uint32_t r = roll_mix(seed ^ 0xB0A7u);
+    out->spd  = roll_pm(r, 0.08f); r = roll_mix(r);
+    out->acc  = roll_pm(r, 0.08f); r = roll_mix(r);
+    out->trn  = roll_pm(r, 0.08f); r = roll_mix(r);
+    out->hull = roll_pm(r, 0.10f); r = roll_mix(r);
+    out->shd  = roll_pm(r, 0.10f); r = roll_mix(r);
+    out->jmp  = roll_pm(r, 0.05f); r = roll_mix(r);
+    int cg = (int)((float)h->cargo * roll_pm(r, 0.15f) + 0.5f);
+    out->cargo = (uint8_t)(cg < 1 ? 1 : cg);
+    r = roll_mix(r);
+    /* weapon slot config: base, with character */
+    out->n_slots = h->n_slots;
+    for (int i = 0; i < 3; i++) out->slot_size[i] = h->slot_size[i];
+    if (out->n_slots < 3 && (r % 100u) < 20) {     /* bonus Z1 mount */
+        out->slot_size[out->n_slots++] = 1;
+    } else if ((r % 100u) < 35) {                  /* one slot upsized */
+        int i = (int)((r >> 8) % out->n_slots);
+        if (out->slot_size[i] < 3) out->slot_size[i]++;
+    } else if ((r % 100u) < 45) {                  /* one slot downsized */
+        int i = (int)((r >> 8) % out->n_slots);
+        if (out->slot_size[i] > 1) out->slot_size[i]--;
+    }
+    r = roll_mix(r);
+    /* utility bays (user ranges) */
+    if (hull_id == 0 || hull_id == 1)        out->utils = 1;
+    else if (hull_id >= 8)                   out->utils = 3 + (r & 1);
+    else                                     out->utils = 2 + (int)(r % 3u);
+}
+
 /* --- procedural hull mesh cache ----------------------------------------*/
 #include "ship_gen.h"
 #include <string.h>

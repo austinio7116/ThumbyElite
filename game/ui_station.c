@@ -215,7 +215,7 @@ static void shipyard_buy(int offer) {
         int sl = -1;
         for (int t = 0; t < h->rack && t < MAX_SALVAGE; t++)
             if (!g_player.salvage[t].in_use) { sl = t; break; }
-        if (sl >= 0 && player_cargo_total() < h->cargo)
+        if (sl >= 0)
             g_player.salvage[sl] = g_player.turret_eq;
         else
             g_player.credits += (int)(instance_price(&g_player.turret_eq) *
@@ -233,18 +233,52 @@ static void shipyard_buy(int offer) {
     for (int i = 0; i < HULL_SLOTS; i++) {
         WeaponInst *m = &g_player.mounts[i];
         if (!m->in_use) continue;
-        bool fits = i < h->n_slots &&
-                    k_weapons[m->type].size <= h->slot_size[i];
+        bool fits = i < player_n_slots() &&
+                    k_weapons[m->type].size <= player_slot_size(i);
         if (fits) continue;
         int sl = -1;
         for (int t = 0; t < h->rack && t < MAX_SALVAGE; t++)
             if (!g_player.salvage[t].in_use) { sl = t; break; }
-        if (sl >= 0 && player_cargo_total() < h->cargo) {
+        if (sl >= 0) {
             g_player.salvage[sl] = *m;
         } else {
             g_player.credits += weapon_price(m->type, m->quality) / 2;
         }
         m->in_use = 0;
+    }
+    /* The KIT (user req): used ships come with rolled gear — part-worn
+     * guns of varied quality in some slots. Early-game progress is
+     * swapping marginally better-rolled pieces; the empties are your
+     * upgrade canvas. */
+    {
+        uint32_t kr = s_yard[offer].seed ^ 0x6EA7u;
+        for (int i = 0; i < player_n_slots(); i++) {
+            if (g_player.mounts[i].in_use) continue;
+            kr ^= kr << 13; kr ^= kr >> 17; kr ^= kr << 5;
+            if ((kr % 100u) >= 70) continue;        /* some stay empty */
+            int sz = player_slot_size(i);
+            static const uint8_t z1[3] = { WPN_PULSE_S, WPN_AUTOCANNON,
+                                           WPN_MINING };
+            static const uint8_t z2[4] = { WPN_PULSE_M, WPN_ION,
+                                           WPN_FLAK, WPN_HOMING };
+            int ty = (sz >= 3) ? WPN_PULSE_L
+                   : (sz == 2) ? z2[(kr >> 8) % 4u]
+                               : z1[(kr >> 8) % 3u];
+            int q = (int)((kr >> 16) % 100u);
+            g_player.mounts[i] = (WeaponInst){
+                .type = (uint8_t)ty,
+                .quality = (uint8_t)(q < 30 ? 0 : q < 80 ? 1
+                                   : q < 95 ? 2 : 3),
+                .integrity = (uint8_t)(55 + (kr >> 24) % 41u),
+                .in_use = 1,
+                .affix = (uint8_t)(((kr >> 5) % 100u) < 15
+                                       ? 1 + (kr >> 9) % (AFX_COUNT - 1)
+                                       : 0),
+                .ammo_flag = 1,
+                .ammo_lo = (uint8_t)(k_weapons[ty].ammo_max * 2 / 5),
+            };
+            player_fit_restore_ammo(i);
+        }
     }
     player_apply_to_ship();
     g_ships[PLAYER].hull = g_ships[PLAYER].hull_max;   /* delivered fresh */
@@ -370,7 +404,7 @@ static void outfit_build_rows(void) {
     s_n_rows = 0;
     /* Sections: YOUR SHIP / YOUR HOLD / STATION SHOP (user req). */
     s_rows[s_n_rows++] = (OutfitRow){ ROW_HDR, 0, 0 };
-    for (int i = 0; i < h->n_slots; i++)
+    for (int i = 0; i < player_n_slots(); i++)
         s_rows[s_n_rows++] = (OutfitRow){ ROW_MOUNT, (uint8_t)i, 0 };
     s_rows[s_n_rows++] = (OutfitRow){ ROW_EQUIP, 0, 0 };   /* shield */
     s_rows[s_n_rows++] = (OutfitRow){ ROW_EQUIP, 1, 0 };   /* armor */
@@ -448,10 +482,9 @@ static int repair_cost(const WeaponInst *w) {
 }
 
 static int free_slot_for(int wpn_type) {
-    const HullDef *h = &k_hulls[g_player.hull_id];
-    for (int i = 0; i < h->n_slots; i++)
+    for (int i = 0; i < player_n_slots(); i++)
         if (!g_player.mounts[i].in_use &&
-            k_weapons[wpn_type].size <= h->slot_size[i])
+            k_weapons[wpn_type].size <= player_slot_size(i))
             return i;
     return -1;
 }
@@ -546,7 +579,7 @@ static void pick_build(void) {
     s_pick_n = 0;
     s_pick_cur = 0;
     if (r->kind == ROW_MOUNT) {
-        int ssz = h->slot_size[r->index];
+        int ssz = player_slot_size(r->index);
         for (int i = 0; i < MAX_SALVAGE && s_pick_n < 6; i++) {
             const WeaponInst *sv = &g_player.salvage[i];
             if (sv->in_use && sv->type < WPN_COUNT &&
@@ -555,8 +588,8 @@ static void pick_build(void) {
         }
     } else {
         int wsz = k_weapons[g_player.salvage[r->index].type].size;
-        for (int i = 0; i < h->n_slots && s_pick_n < 6; i++)
-            if (h->slot_size[i] >= wsz && g_player.mounts[i].in_use)
+        for (int i = 0; i < player_n_slots() && s_pick_n < 6; i++)
+            if (player_slot_size(i) >= wsz && g_player.mounts[i].in_use)
                 s_pick_items[s_pick_n++] = (int8_t)i;
     }
 }
@@ -1275,6 +1308,12 @@ static void draw_shipyard(uint16_t *fb) {
     const HullDef *sel = (s_cursor == YARD_OFFERS)
                              ? &k_hulls[g_player.hull_id]
                              : &k_hulls[s_yard[s_cursor].cls];
+    HullRoll selr;
+    hull_roll((s_cursor == YARD_OFFERS) ? g_player.hull_id
+                                        : s_yard[s_cursor].cls,
+              (s_cursor == YARD_OFFERS) ? g_player.hull_seed
+                                        : s_yard[s_cursor].seed,
+              &selr);
     hl(fb, 95, COL_GRID);
     char buf[36];
     if (s_cursor == YARD_OFFERS) {
@@ -1292,14 +1331,14 @@ static void draw_shipyard(uint16_t *fb) {
     {
         char slots[8];
         int sl = 0;
-        for (int i = 0; i < sel->n_slots; i++)
-            slots[sl++] = (char)('0' + sel->slot_size[i]);
+        for (int i = 0; i < selr.n_slots && sl < 7; i++)
+            slots[sl++] = (char)('0' + selr.slot_size[i]);
         slots[sl] = 0;
         char vals[5][8];
-        snprintf(vals[0], 8, "%d", (int)sel->max_speed);
-        snprintf(vals[1], 8, "%d", sel->cargo);
-        snprintf(vals[2], 8, "%d", (int)sel->hull_base);
-        snprintf(vals[3], 8, "%d", (int)sel->shield_base);
+        snprintf(vals[0], 8, "%d", (int)(sel->max_speed * selr.spd));
+        snprintf(vals[1], 8, "%d", selr.cargo);
+        snprintf(vals[2], 8, "%d", (int)(sel->hull_base * selr.hull));
+        snprintf(vals[3], 8, "%d", (int)(sel->shield_base * selr.shd));
         snprintf(vals[4], 8, "%s", slots);
         static const char *labs[5] = { "SPD", "CRG", "H", "S", "SL" };
         int x = 2;
@@ -1332,13 +1371,14 @@ static void draw_outfit(uint16_t *fb) {
             if (m->in_use) {
                 icon_weapon(fb, 7, y - 1, m->type);
                 snprintf(buf, sizeof buf, "Z%d %s%s%s %s %d%%",
-                         h->slot_size[r->index], k_weapons[m->type].name,
+                         player_slot_size(r->index),
+                         k_weapons[m->type].name,
                          m->affix ? "-" : "",
                          m->affix ? k_affixes[m->affix].tag : "",
                          k_qtag[m->quality], m->integrity);
             } else
                 snprintf(buf, sizeof buf, "Z%d EMPTY",
-                         h->slot_size[r->index]);
+                         player_slot_size(r->index));
             craft_font_draw(fb, buf, 21, y, c);
             if (m->in_use && m->integrity < 100) {
                 snprintf(buf, sizeof buf, "%d", repair_cost(m));
@@ -1656,15 +1696,16 @@ void station_draw(uint16_t *fb) {
     /* Detail sheets replace the list view. */
     if (s_detail && s_screen == SCR_SHIPYARD) {
         if (s_cursor == YARD_OFFERS) {       /* YOUR ship: comparison */
-            detail_draw_hull(fb, g_player.hull_id, -1,
-                             "LB/RB:NEXT B:BACK");
+            detail_draw_hull(fb, g_player.hull_id, g_player.hull_seed,
+                             -1, "LB/RB:NEXT B:BACK");
             return;
         }
         int cls = s_yard[s_cursor].cls;
         int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
         int cost = k_hulls[cls].price - tradein;
         if (cost < 0) cost = 0;
-        detail_draw_hull(fb, cls, cost, "LB/RB:NEXT A:BUY B:BACK");
+        detail_draw_hull(fb, cls, s_yard[s_cursor].seed, cost,
+                         "LB/RB:NEXT A:BUY B:BACK");
         return;
     }
     if (s_detail && s_screen == SCR_OUTFIT) {
@@ -1756,9 +1797,8 @@ void station_draw(uint16_t *fb) {
                 const WeaponInst *e = equip_slot(wi->type - WPN_COUNT);
                 if (e->in_use && e != wi) cmp = e;
             } else if (r->kind != ROW_MOUNT) {
-                const HullDef *hh = &k_hulls[g_player.hull_id];
                 int best_price = -1;
-                for (int m = 0; m < hh->n_slots; m++) {
+                for (int m = 0; m < player_n_slots(); m++) {
                     const WeaponInst *mw = &g_player.mounts[m];
                     if (!mw->in_use || mw->type >= WPN_COUNT) continue;
                     if (mw->type == wi->type) { cmp = mw; best_price = -2; break; }

@@ -13,6 +13,15 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 
 ### 1.22.1 (in development)
 
+- **Every hull is an individual** — stats roll ±8–15% around class
+  book values, weapon-slot layouts vary, utility bays run 1/2–4/3–4 by
+  class, and used ships arrive with rolled part-worn kit. Spec sheets
+  show the instance (with compare colours), so shopping is a treasure
+  hunt. SAVE v4 (v3 saves migrate automatically)
+- **Friend-or-foe lock colours** — green brackets/arrows for
+  civilians, blue for police, red for hostiles; the readout names the
+  contact (PIRATE/POLICE/CIVILIAN) with pilot tier beneath
+
 - **SERVICE** (was REARM): one bill now refills magazines AND patches
   hull damage (~2 cr/point, Tech-skill discounted) — current hull HP
   was unrepairable anywhere, contrary to the guide

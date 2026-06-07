@@ -47,7 +47,7 @@ int player_cargo_total(void) {
     return n;
 }
 
-int player_cargo_cap(void) { return k_hulls[g_player.hull_id].cargo; }
+int player_cargo_cap(void) { return player_roll()->cargo; }
 
 int player_rack_cap(void) { return k_hulls[g_player.hull_id].rack; }
 
@@ -133,9 +133,10 @@ void player_apply_to_ship(void) {
     Ship *p = &g_ships[PLAYER];
     const HullDef *h = &k_hulls[g_player.hull_id];
     p->mesh = hull_mesh(g_player.hull_seed, g_player.hull_id);
-    p->max_speed = h->max_speed;
-    p->accel = h->accel;
-    p->turn_rate = h->turn_rate * skill_turn_mult();
+    const HullRoll *rl = player_roll();
+    p->max_speed = h->max_speed * rl->spd;
+    p->accel = h->accel * rl->acc;
+    p->turn_rate = h->turn_rate * rl->trn * skill_turn_mult();
     /* Protection from fitted equipment: tier x quality x wear x
      * variant character. */
     float sh_t = g_player.shield_eq.in_use
@@ -147,9 +148,9 @@ void player_apply_to_ship(void) {
     static const float k_shv_cap[4] = { 1.0f, 0.70f, 1.50f, 0.85f };
     static const float k_shv_rgn[4] = { 1.0f, 2.40f, 0.40f, 1.00f };
     static const float k_arv_hp[4]  = { 1.0f, 1.00f, 1.35f, 0.85f };
-    p->hull_max = h->hull_base * ar_t * equip_mult(&g_player.armor_eq) *
-                  k_arv_hp[arv & 3];
-    p->shield_max = h->shield_base * sh_t *
+    p->hull_max = h->hull_base * rl->hull * ar_t *
+                  equip_mult(&g_player.armor_eq) * k_arv_hp[arv & 3];
+    p->shield_max = h->shield_base * rl->shd * sh_t *
                     equip_mult(&g_player.shield_eq) * k_shv_cap[shv & 3];
     p->shield_regen = 3.0f * k_shv_rgn[shv & 3];
     p->shield_delay = (shv == SHV_REGEN) ? 2.0f : 4.5f;
@@ -168,7 +169,7 @@ void player_apply_to_ship(void) {
 
     p->n_weapons = 0;
     p->active_w = 0;
-    for (int i = 0; i < h->n_slots; i++) {
+    for (int i = 0; i < player_n_slots(); i++) {
         if (!g_player.mounts[i].in_use) continue;
         int m = p->n_weapons;
         s_mount_map[m] = (uint8_t)i;
@@ -264,13 +265,29 @@ void player_load_mount_ammo(int mount, float fill01) {
     g_player.ammo[mount] = maxa ? (int16_t)((float)maxa * fill01) : -1;
 }
 
+/* The player's hull roll (per-instance quirks from hull_seed). */
+const HullRoll *player_roll(void) {
+    static HullRoll r;
+    static uint32_t for_seed = 0;
+    static int for_hull = -1;
+    if (for_seed != g_player.hull_seed || for_hull != g_player.hull_id) {
+        hull_roll(g_player.hull_id, g_player.hull_seed, &r);
+        for_seed = g_player.hull_seed;
+        for_hull = g_player.hull_id;
+    }
+    return &r;
+}
+
+int player_n_slots(void) { return player_roll()->n_slots; }
+int player_slot_size(int i) { return player_roll()->slot_size[i]; }
+
 int player_util_slots(void) {
-    return k_hulls[g_player.hull_id].util_slots;
+    return player_roll()->utils;
 }
 
 bool player_has_util(int eq_type) {
     int n = player_util_slots();
-    for (int i = 0; i < n && i < 2; i++)
+    for (int i = 0; i < n && i < 4; i++)
         if (g_player.util_eq[i].in_use &&
             g_player.util_eq[i].type == eq_type &&
             g_player.util_eq[i].integrity > 0)   /* critted = dead */

@@ -952,8 +952,8 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
         if (player_has_util(EQ_DRONE)) {
             static float dr_acc;
             static int dr_job = -1;       /* 0 hull, 1.. = item index */
-            WeaponInst *items[8];
-            const char *names[8];
+            WeaponInst *items[10];
+            const char *names[10];
             int ni = 0;
             for (int i = 0; i < HULL_SLOTS; i++) {
                 static char wn[3][8];
@@ -962,8 +962,10 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
             }
             items[ni] = &g_player.shield_eq; names[ni++] = "SHIELD GEN";
             items[ni] = &g_player.armor_eq;  names[ni++] = "ARMOR";
-            items[ni] = &g_player.util_eq[0]; names[ni++] = "GADGET";
-            items[ni] = &g_player.util_eq[1]; names[ni++] = "GADGET";
+            for (int u = 0; u < 4; u++) {
+                items[ni] = &g_player.util_eq[u];
+                names[ni++] = "GADGET";
+            }
             int want = -1;
             if (p->hull < p->hull_max - 0.5f) want = 0;
             else
@@ -1478,7 +1480,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
                 s_menus_live = true;
                 if (s_dash_sel == 0) {
                     map_galaxy_open(s_addr, g_player.fuel,
-                                    k_hulls[g_player.hull_id].jump_range);
+                                    (k_hulls[g_player.hull_id].jump_range * player_roll()->jmp));
                     s_state = ST_GALAXY_MAP;
                 } else if (s_dash_sel == 1) {
                     map_system_open(cam_pos_mm());
@@ -1528,7 +1530,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         }
         else if (a_edge && s_pause_cursor == 1) {
             map_galaxy_open(s_addr, g_player.fuel,
-                            k_hulls[g_player.hull_id].jump_range);
+                            (k_hulls[g_player.hull_id].jump_range * player_roll()->jmp));
             s_state = ST_GALAXY_MAP;
         } else if (a_edge && s_pause_cursor == 2) {
             map_system_open(cam_pos_mm());
@@ -1871,7 +1873,7 @@ static void dash_mini_galaxy(uint16_t *fb, int x0, int y0, int w, int h) {
             }
         }
     /* jump-range ring */
-    float rr = k_hulls[g_player.hull_id].jump_range * scale;
+    float rr = (k_hulls[g_player.hull_id].jump_range * player_roll()->jmp) * scale;
     for (int a2 = 0; a2 < 28; a2++) {
         float th = (float)a2 * (6.2831853f / 28.0f);
         int x = cx + (int)(cosf(th) * rr);
