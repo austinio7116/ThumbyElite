@@ -1317,14 +1317,16 @@ static void tick_supercruise(const CraftRawButtons *btn, float dt) {
     float standoff = 0.0f;
     if (s_sc_has_dest && s_sc_dest.kind == POI_PLANET)
         standoff = system_info()->planets[s_sc_dest.index].radius_mm * 3.5f;
-    float vmax = 3000.0f;
+    /* 12,000 cap + 0.6 slope (user: 42s end-to-end too long — worst
+     * diameter now ~23s, short hops keep a ~5s journey feel; ODE-sim
+     * picked). */
+    float vmax = 12000.0f;
     float dist = 1e9f;
     if (s_sc_has_dest) {
         dist = v3_len(v3_sub(s_sc_dest.pos_mm, s_sc_pos_mm));
         float eff = dist - standoff;
         if (eff < 0.0f) eff = 0.0f;
-        /* eff/2 decay + 2 Mm/s floor: ~20s hops (user: less waiting). */
-        float lim = eff * 0.5f + 2.0f;
+        float lim = eff * 0.6f + 2.0f;
         if (lim < vmax) vmax = lim;
     }
     float want = p->throttle * vmax;
@@ -1337,8 +1339,8 @@ static void tick_supercruise(const CraftRawButtons *btn, float dt) {
         float thr = p->throttle < 0.05f ? 0.05f : p->throttle;
         float eff = dist - standoff;
         if (eff < 0.0f) eff = 0.0f;
-        float vcap = 3000.0f * thr;
-        float eff_decay = 2.0f * (vcap - 2.0f);
+        float vcap = 12000.0f * thr;
+        float eff_decay = (vcap - 2.0f) / 0.6f;
         if (eff_decay < 1.0f) eff_decay = 1.0f;
         float t = 0.0f;
         float e0 = eff;
@@ -1346,7 +1348,7 @@ static void tick_supercruise(const CraftRawButtons *btn, float dt) {
             t += (e0 - eff_decay) / vcap;
             e0 = eff_decay;
         }
-        t += (2.0f / thr) * logf((0.5f * e0 + 2.0f) / 2.6f);
+        t += (1.0f / (0.6f * thr)) * logf((0.6f * e0 + 2.0f) / 2.6f);
         if (t < 0) t = 0;
         s_sc_eta = t + 1.0f;          /* spool-up allowance */
     } else {
