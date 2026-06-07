@@ -118,6 +118,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
         getenv("ELITE_STOLENTEST") ||
+        getenv("ELITE_YARDCOLOR") ||
         getenv("ELITE_SHOT")) {
         /* Harnesses start in-game: skip the title via NEW GAME. */
         remove("thumbyelite.sav");
@@ -191,6 +192,22 @@ int main(int argc, char **argv) {
             made++;
         }
         printf("[planets] wrote %d\n", made);
+        return 0;
+    }
+
+    /* Yard compare-colour examples (3 ownership scenarios). */
+    if (getenv("ELITE_YARDCOLOR")) {
+        struct { int own, view; const char *path; } cases[3] = {
+            { 0, 3, "/tmp/yc_skiff_views_viper.ppm" },
+            { 3, 6, "/tmp/yc_viper_views_packmule.ppm" },
+            { 5, 0, "/tmp/yc_mauler_views_skiff.ppm" },
+        };
+        for (int i = 0; i < 3; i++) {
+            g_player.hull_id = (uint8_t)cases[i].own;
+            memset(g_fb, 0, sizeof g_fb);
+            detail_draw_hull(g_fb, cases[i].view, 12345, "B:BACK");
+            dump_ppm(cases[i].path);
+        }
         return 0;
     }
 

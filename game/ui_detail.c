@@ -241,6 +241,18 @@ void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
     craft_font_draw(fb, footer, 2, 121, COL_DIM);
 }
 
+/* Margin-scaled comparison colour: bright green >= +30%, soft green
+ * +5..30%, grey within 5%, orange -5..-30%, red <= -30%. */
+static uint16_t cmp_col(float nv, float cv) {
+    if (cv <= 0.0001f) return RGB565C(150, 156, 170);
+    float d = (nv - cv) / cv;
+    if (d >= 0.30f) return RGB565C(70, 255, 90);
+    if (d >= 0.05f) return RGB565C(140, 215, 125);
+    if (d > -0.05f) return RGB565C(150, 156, 170);   /* match = grey */
+    if (d > -0.30f) return RGB565C(235, 150, 70);
+    return RGB565C(255, 75, 60);
+}
+
 void detail_draw_hull(uint16_t *fb, int hull_id, int cost,
                       const char *footer) {
     /* Left column only — the shipyard's rotating 3D pane stays live. */
@@ -252,39 +264,46 @@ void detail_draw_hull(uint16_t *fb, int hull_id, int cost,
     for (int y = 10; y < 95; y++) fb[y * ELITE_FB_W + 64] = COL_GRID;
 
     const HullDef *h = &k_hulls[hull_id];
+    const HullDef *cur = &k_hulls[g_player.hull_id];
     char buf[28];
     craft_font_draw(fb, h->name, 2, 2, COL_HDR);
     hl(fb, 9, COL_GRID);
 
     int y = 13;
-    #define HSTAT(label, fmt, ...) do { \
+    /* Stat colour vs YOUR ship (user spec: colour only, no deltas —
+     * green better / red worse on a margin scale, grey = matching). */
+    #define CMPC(nv, cv) cmp_col((float)(nv), (float)(cv))
+    #define HSTATC(label, col, fmt, ...) do { \
         craft_font_draw(fb, label, 2, y, COL_DIM); \
         snprintf(buf, sizeof buf, fmt, __VA_ARGS__); \
-        craft_font_draw(fb, buf, 34, y, COL_VAL); \
+        craft_font_draw(fb, buf, 34, y, col); \
         y += 8; \
     } while (0)
-    HSTAT("SPD", "%d", (int)h->max_speed);
-    HSTAT("ACC", "%d", (int)h->accel);
-    HSTAT("TRN", "%d.%d", (int)h->turn_rate,
-          ((int)(h->turn_rate * 10)) % 10);
-    HSTAT("CRG", "%dT", h->cargo);
-    HSTAT("JMP", "%d.%dLY", (int)h->jump_range,
-          ((int)(h->jump_range * 10)) % 10);
-    HSTAT("HUL", "%d", (int)h->hull_base);
-    HSTAT("SHD", "%d", (int)h->shield_base);
-    HSTAT("TIER", "S%d H%d", h->max_shield_tier, h->max_hull_tier);
+    HSTATC("SPD", CMPC(h->max_speed, cur->max_speed), "%d",
+           (int)h->max_speed);
+    HSTATC("ACC", CMPC(h->accel, cur->accel), "%d", (int)h->accel);
+    HSTATC("TRN", CMPC(h->turn_rate, cur->turn_rate), "%d.%d",
+           (int)h->turn_rate, ((int)(h->turn_rate * 10)) % 10);
+    HSTATC("CRG", CMPC(h->cargo, cur->cargo), "%dT", h->cargo);
+    HSTATC("JMP", CMPC(h->jump_range, cur->jump_range), "%d.%dLY",
+           (int)h->jump_range, ((int)(h->jump_range * 10)) % 10);
+    HSTATC("HUL", CMPC(h->hull_base, cur->hull_base), "%d",
+           (int)h->hull_base);
+    HSTATC("SHD", CMPC(h->shield_base, cur->shield_base), "%d",
+           (int)h->shield_base);
+    /* TIER + GUNS compare TOTALS across slots (user spec). */
     {
-        char slots[12];
-        int sl = 0;
-        for (int i = 0; i < h->n_slots; i++) {
-            slots[sl++] = 'Z';
-            slots[sl++] = (char)('0' + h->slot_size[i]);
-            slots[sl++] = ' ';
-        }
-        slots[sl] = 0;
-        HSTAT("GUNS", "%s", slots);
+        int nt = h->max_shield_tier + h->max_hull_tier;
+        int ct = cur->max_shield_tier + cur->max_hull_tier;
+        HSTATC("TIER", CMPC(nt, ct), "%d (S%d H%d)", nt,
+               h->max_shield_tier, h->max_hull_tier);
+        int ng = 0, cg = 0;
+        for (int i = 0; i < h->n_slots; i++) ng += h->slot_size[i];
+        for (int i = 0; i < cur->n_slots; i++) cg += cur->slot_size[i];
+        HSTATC("GUNS", CMPC(ng, cg), "%d (X%d)", ng, h->n_slots);
     }
-    #undef HSTAT
+    #undef HSTATC
+    #undef CMPC
 
     hl(fb, 95, COL_GRID);
     if (cost < 0)
