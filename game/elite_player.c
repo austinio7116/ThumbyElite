@@ -40,10 +40,10 @@ void player_init(void) {
 }
 
 int player_cargo_total(void) {
+    /* Goods only — the component rack is its own pool now (user
+     * decision: racked salvage no longer eats trade capacity). */
     int n = 0;
     for (int i = 0; i < N_GOODS; i++) n += g_player.cargo[i];
-    for (int i = 0; i < MAX_SALVAGE; i++)
-        if (g_player.salvage[i].in_use) n++;   /* components take a slot */
     return n;
 }
 

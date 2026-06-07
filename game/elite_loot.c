@@ -132,10 +132,11 @@ const char *loot_tick(float dt) {
             continue;
 
         if (c->is_component) {
-            /* Into the salvage rack (takes a cargo slot). */
+            /* Into the salvage rack (its own pool — components no
+             * longer take trade-cargo slots). */
             int slot = player_free_rack_slot();
-            if (slot < 0 || player_cargo_total() >= player_cargo_cap()) {
-                snprintf(s_toast, sizeof s_toast, "HOLD FULL");
+            if (slot < 0) {
+                snprintf(s_toast, sizeof s_toast, "RACK FULL");
                 toast = s_toast;
                 continue;
             }

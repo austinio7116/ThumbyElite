@@ -406,7 +406,7 @@ static WeaponInst *equip_slot(int which) {
  * hold rack instead (user req: full mounts must not block buying). */
 static bool buy_to_rack(const WeaponInst *inst) {
     int sl = player_free_rack_slot();
-    if (sl < 0 || player_cargo_total() >= player_cargo_cap()) return false;
+    if (sl < 0) return false;
     g_player.salvage[sl] = *inst;
     return true;
 }
@@ -830,7 +830,7 @@ static void outfit_action_b(int row) {
     case ROW_TURRET: {
         if (!g_player.turret_eq.in_use) return;
         int sl = player_free_rack_slot();
-        if (sl < 0 || player_cargo_total() >= player_cargo_cap()) {
+        if (sl < 0) {
             toast("NO RACK SPACE");
             return;
         }
@@ -844,7 +844,7 @@ static void outfit_action_b(int row) {
         WeaponInst *e = &g_player.util_eq[r->index];
         if (!e->in_use) return;
         int sl = player_free_rack_slot();
-        if (sl < 0 || player_cargo_total() >= player_cargo_cap()) {
+        if (sl < 0) {
             toast("NO RACK SPACE");
             return;
         }
@@ -857,7 +857,7 @@ static void outfit_action_b(int row) {
         WeaponInst *e = equip_slot(r->index);
         if (!e->in_use) return;
         int sl = player_free_rack_slot();
-        if (sl < 0 || player_cargo_total() >= player_cargo_cap()) {
+        if (sl < 0) {
             toast("NO RACK SPACE");
             return;
         }
@@ -873,7 +873,7 @@ static void outfit_action_b(int row) {
         if (!m->in_use) return;
         player_stash_mount_ammo(r->index);
         int sl = player_free_rack_slot();
-        if (sl < 0 || player_cargo_total() >= player_cargo_cap()) {
+        if (sl < 0) {
             toast("NO RACK SPACE");
             return;
         }
