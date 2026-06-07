@@ -138,6 +138,8 @@ int main(int argc, char **argv) {
         getenv("ELITE_DPSTEST") ||
         getenv("ELITE_CMTEST") ||
         getenv("ELITE_DODGETEST") ||
+        getenv("ELITE_BENDTEST") ||
+        getenv("ELITE_SPEEDKILL") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -571,6 +573,132 @@ int main(int argc, char **argv) {
             }
         printf("[orbit] outermost: avg=%.0f worst=%.0f Mm over %d\n",
                sum / (n ? n : 1), worst, n);
+        return 0;
+    }
+
+    /* Kill-speed matrix (user req): each weapon in the hands of each
+     * tier vs a player flying STRAIGHT at 66%% throttle, standard
+     * SKIFF shield, no evasion. Cell = seconds to kill, AMMO = ran
+     * dry, ->60s = survived the window. */
+    if (getenv("ELITE_SPEEDKILL")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        printf("[sk] %-9s", "WEAPON");
+        for (int t = 0; t <= 4; t++) printf("  T%d   ", t);
+        printf("\n");
+        for (int wt = 0; wt < WPN_COUNT; wt++) {
+            if (wt == WPN_MINE || wt == WPN_TRACTOR) continue;
+            printf("[sk] %-9s", k_weapons[wt].name);
+            for (int tier = 0; tier <= 4; tier++) {
+                /* fresh standard player */
+                g_player.hull_id = 0;
+                g_player.hull_seed = 0x5EEDu;
+                memset(g_player.mounts, 0, sizeof g_player.mounts);
+                memset(g_player.util_eq, 0, sizeof g_player.util_eq);
+                g_player.shield_eq = (WeaponInst){ .type = WPN_COUNT,
+                    .quality = Q_STANDARD, .integrity = 100,
+                    .in_use = 1, .tier = 1 };
+                player_apply_to_ship();
+                Ship *pl = &g_ships[0];
+                pl->hull = pl->hull_max;
+                pl->shield = pl->shield_max;
+                pl->pos = v3(0, 0, -600);
+                pl->basis = m3_identity();
+                pl->vel = v3_scale(pl->basis.r[2],
+                                   pl->max_speed * 0.66f);
+                pl->throttle = 0.66f;
+                int e = ship_spawn(hull_mesh(0xACE1u, 1 + tier),
+                                   v3_add(pl->pos, v3(60, 0, -250)),
+                                   TEAM_HOSTILE);
+                if (e <= 0) { printf(" spawn!"); continue; }
+                ship_set_tier(e, tier, 1 + tier);
+                Ship *t2 = &g_ships[e];
+                t2->weapons[0] = (uint8_t)wt;
+                t2->n_weapons = 1;
+                t2->active_w = 0;
+                t2->ammo[0] = k_weapons[wt].ammo_max
+                                  ? k_weapons[wt].ammo_max : -1;
+                t2->turret_type = 0;
+                float tkill = -1;
+                CraftRawButtons none = {0};
+                for (int f = 0; f < 30 * 60; f++) {
+                    elite_game_tick(&none, 1.0f / 30.0f);
+                    /* hold the straight line: re-pin heading+speed */
+                    pl->basis = m3_identity();
+                    pl->vel = v3_scale(v3(0, 0, 1),
+                                       pl->max_speed * 0.66f);
+                    pl->throttle = 0.66f;
+                    if (!pl->alive || pl->hull <= 0) {
+                        tkill = (float)f / 30.0f;
+                        break;
+                    }
+                    if (k_weapons[wt].ammo_max && t2->ammo[0] <= 0 &&
+                        proj_count() == 0) {
+                        tkill = -2;
+                        break;
+                    }
+                    if (!t2->alive) { tkill = -3; break; }
+                }
+                if (tkill >= 0) printf(" %5.1f", tkill);
+                else if (tkill == -2) printf("  AMMO");
+                else if (tkill == -3) printf("  DIED");
+                else printf("  >60s");
+                /* clean the battlefield + revive player */
+                if (t2->alive) t2->alive = false;
+                g_ships[0].alive = true;
+                proj_clear_all();
+            }
+            printf("\n");
+        }
+        return 0;
+    }
+
+    /* BLASTER bend: off-axis target that a straight bolt misses. */
+    if (getenv("ELITE_BENDTEST")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Ship *pl = &g_ships[0];
+        elite_game_debug_face_away_from_sun();
+        for (int w = 0; w < 2; w++) {
+            int wt = w ? WPN_BLASTER : WPN_PLASMA;
+            int e = ship_spawn(hull_mesh(0xACE1u, 2),
+                               v3_add(pl->pos,
+                                      v3_add(v3_scale(pl->basis.r[2],
+                                                      300.0f),
+                                             v3_scale(pl->basis.r[0],
+                                                      28.0f))),
+                               TEAM_HOSTILE);
+            ship_set_tier(e, 0, 2);
+            Ship *t2 = &g_ships[e];
+            t2->n_weapons = 0;
+            t2->vel = v3(0, 0, 0);
+            Vec3 hold = t2->pos;
+            float s0 = t2->shield + t2->hull;
+            g_player.mounts[0] = (WeaponInst){ .type = (uint8_t)wt,
+                .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
+            g_player.ammo[0] = -1;
+            player_apply_to_ship();
+            pl->active_w = 0;
+            CraftRawButtons none = {0};
+            { CraftRawButtons lb = none; lb.lb = true;
+              elite_game_tick(&lb, 1.0f / 30.0f);
+              for (int k = 0; k < 8; k++)
+                  elite_game_tick(&none, 1.0f / 30.0f); }
+            for (int f = 0; f < 90; f++) {
+                pl->fire_cool = 0; pl->heat = 0;
+                CraftRawButtons b = none; b.a = true;
+                elite_game_tick(&b, 1.0f / 30.0f);
+                t2->pos = hold; t2->vel = v3(0, 0, 0);
+                pl->vel = v3(0, 0, 0);
+            }
+            for (int f = 0; f < 60; f++) {
+                elite_game_tick(&none, 1.0f / 30.0f);
+                t2->pos = hold;
+            }
+            printf("[bend] %-8s off-axis dmg: %.0f (%s)\n",
+                   k_weapons[wt].name, s0 - (t2->shield + t2->hull),
+                   wt == WPN_BLASTER ? "should HIT via bend"
+                                     : "straight: should miss");
+            t2->alive = false;
+        }
         return 0;
     }
 

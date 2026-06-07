@@ -53,7 +53,7 @@ bool proj_homing_on(int victim) {
     for (int i = 0; i < MAX_PROJ; i++) {
         const Proj *p = &s_proj[i];
         if (p->alive && p->target == victim &&
-            k_weapons[p->type].turn > 0)
+            k_weapons[p->type].turn >= 1.0f)   /* bend != seeker */
             return true;
     }
     return false;
@@ -65,7 +65,7 @@ float proj_nearest_homing(int victim) {
     for (int i = 0; i < MAX_PROJ; i++) {
         Proj *p = &s_proj[i];
         if (!p->alive || p->target != victim) continue;
-        if (k_weapons[p->type].turn <= 0) continue;
+        if (k_weapons[p->type].turn < 1.0f) continue;
         float d = v3_len(v3_sub(p->pos, g_ships[victim].pos));
         if (d < best) best = d;
     }
@@ -79,11 +79,15 @@ Vec3 proj_homing_pos(int victim) {
     for (int i = 0; i < MAX_PROJ; i++) {
         Proj *p = &s_proj[i];
         if (!p->alive || p->target != victim) continue;
-        if (k_weapons[p->type].turn <= 0) continue;
+        if (k_weapons[p->type].turn < 1.0f) continue;
         float d = v3_len(v3_sub(p->pos, g_ships[victim].pos));
         if (d < best) { best = d; out = p->pos; }
     }
     return out;
+}
+
+void proj_clear_all(void) {
+    for (int i = 0; i < MAX_PROJ; i++) s_proj[i].alive = false;
 }
 
 int proj_break_locks(int victim) {
@@ -91,7 +95,7 @@ int proj_break_locks(int victim) {
     for (int i = 0; i < MAX_PROJ; i++) {
         Proj *p = &s_proj[i];
         if (!p->alive || p->target != victim) continue;
-        if (k_weapons[p->type].turn <= 0) continue;
+        if (k_weapons[p->type].turn < 1.0f) continue;
         if (p->target == 0 && elite_game_cloaked()) continue; /* blind */
         p->target = -1;            /* flies straight into the chaff */
         n++;

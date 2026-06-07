@@ -28,6 +28,7 @@ const WeaponDef k_weapons[WPN_COUNT] = {
     [WPN_MINING]    = { "MINING",   2, 0.09f, 1.4f,    0,  350,  0,   0, 1,  0, RGB565C(255, 200,  90) },
     [WPN_PLASMA]    = { "PLASMA",   7, 0.09f, 2.2f,  380,  700,  0,   0, 2,  0, RGB565C(120, 235, 255) },
     [WPN_LANCE]     = { "P.LANCE", 18, 0.60f, 9.0f,    0,  600,  0,   0, 3,  0, RGB565C(190, 140, 255) },
+    [WPN_BLASTER]   = { "BLASTER", 11, 0.16f, 3.2f,  260,  700, 0.5f, 0, 2,  0, RGB565C(150, 200, 255) },
 };
 
 const AffixDef k_affixes[AFX_COUNT] = {

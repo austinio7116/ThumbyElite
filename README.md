@@ -19,6 +19,9 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 - **PLASMA LANCE** (Z3, T11+, 6,400 cr): phases through shields
   straight to hull — can crit a shielded target; the BULWARK-tank
   killer, countered by thick armor
+- **PHOTON BLASTER** (Z2, T8+, 3,400 cr): slower plasma-style bolts
+  that bend gently toward your lock — forgiveness, not homing (chaff
+  ignores them)
 - **Missile rework** — HOMING slowed (172 m/s, gentler 1.0 rad/s
   arcs). Pirates answer by rank: VETERAN+ chaffs first (1-2 charges),
   turns and runs (the fastest hulls can outpace a long stern chase),

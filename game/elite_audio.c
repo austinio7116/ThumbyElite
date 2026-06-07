@@ -112,6 +112,10 @@ void sfx_weapon(int t, float amp) {
         play(W_SINE, 180, 60, 0.22f * amp, 0.003f, 0.16f);
         play(W_NOISE, 2400, 1600, 0.07f * amp, 0.001f, 0.04f);
         break;
+    case WPN_BLASTER:
+        /* rounder, deeper whump than plasma */
+        play(W_SINE, 260, 110, 0.20f * amp, 0.004f, 0.10f);
+        break;
     case WPN_PLASMA:
         /* soft hollow whump per ball, doomy */
         play(W_SQUARE, 320, 140, 0.16f * amp, 0.004f, 0.07f);

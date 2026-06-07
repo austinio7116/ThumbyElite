@@ -228,7 +228,7 @@ static void target_box(uint16_t *fb, int target) {
          * the cross on the pip and the rounds arrive on target. */
         if (player_has_util(EQ_TARGETCOMP)) {
             const WeaponDef *aw = &k_weapons[p->weapons[p->active_w]];
-            if (aw->speed > 0.0f && aw->turn <= 0.0f) {
+            if (aw->speed > 0.0f && aw->turn < 1.0f) {
                 float tt = v3_len(v3_sub(t->pos, p->pos)) / aw->speed;
                 Vec3 lead = v3_add(t->pos,
                                    v3_scale(v3_sub(t->vel, p->vel), tt));

@@ -26,5 +26,6 @@ void proj_tick(float dt);
 /* Project live rounds into the scene (camera-relative). */
 void proj_emit(Vec3 cam_pos);
 int  proj_count(void);
+void proj_clear_all(void);
 
 #endif
