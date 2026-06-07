@@ -108,6 +108,57 @@ int main(int argc, char **argv) {
                                : (uint32_t)time(NULL);
     printf("[elite] seed = %u\n", seed);
     elite_game_init(seed);
+    /* 100-ship weapon census across all tiers/classes. */
+    if (getenv("ELITE_SHIPCENSUS")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        int wcount[WPN_COUNT];
+        for (int i = 0; i < WPN_COUNT; i++) wcount[i] = 0;
+        int nguns = 0, withturret = 0, ships = 0;
+        for (int n = 0; n < 100; n++) {
+            int tier = n % 5;               /* even spread of ranks */
+            int cls = 1 + (n * 7 + tier) % 9;
+            int e = ship_spawn(hull_mesh(0x1000u + n * 131u, cls),
+                               v3(0, 0, 500), TEAM_HOSTILE);
+            if (e <= 0) continue;
+            ship_set_tier(e, tier, cls);
+            Ship *p = &g_ships[e];
+            ships++;
+            nguns += p->n_weapons;
+            if (p->turret_type) withturret++;
+            for (int w = 0; w < p->n_weapons; w++)
+                if (p->weapons[w] < WPN_COUNT) wcount[p->weapons[w]]++;
+            p->alive = false;
+        }
+        printf("[census] %d ships, %d guns (%.1f avg), %d with turret\n",
+               ships, nguns, (float)nguns / ships, withturret);
+        for (int i = 0; i < WPN_COUNT; i++)
+            if (wcount[i])
+                printf("[census] %-9s %3d  (%.0f%% of guns)\n",
+                       k_weapons[i].name, wcount[i],
+                       100.0f * wcount[i] / nguns);
+        return 0;
+    }
+
+    /* Title RB-x10 cheat -> 100k start. */
+    if (getenv("ELITE_CHEATTEST")) {
+        CraftRawButtons none = {0}, b;
+        for (int k = 0; k < 5; k++) elite_game_tick(&none, 1.0f/30.0f);
+        for (int tap = 0; tap < 10; tap++) {
+            b = none; b.rb = true;
+            elite_game_tick(&b, 1.0f / 30.0f);
+            elite_game_tick(&none, 1.0f / 30.0f);
+        }
+        /* cursor to NEW GAME, fire */
+        b = none; b.down = true; elite_game_tick(&b, 1.0f/30.0f);
+        elite_game_tick(&none, 1.0f/30.0f);
+        b = none; b.a = true; elite_game_tick(&b, 1.0f/30.0f);
+        for (int k = 0; k < 5; k++) elite_game_tick(&none, 1.0f/30.0f);
+        printf("[cheat] credits after 10xRB + NEW GAME: %d (%s)\n",
+               g_player.credits,
+               g_player.credits == 100000 ? "CHEAT ON" : "FAIL");
+        return 0;
+    }
+
     if (getenv("ELITE_DEMO") || getenv("ELITE_FIRETEST") ||
         getenv("ELITE_KILLTEST") || getenv("ELITE_TRAVELTEST") ||
         getenv("ELITE_TRADETEST") || getenv("ELITE_JUMPTEST") ||

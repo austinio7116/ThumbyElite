@@ -117,6 +117,8 @@ static int   s_settings_cursor;
 static float s_fps;              /* smoothed, for the toggle readout */
 static uint32_t s_boot_seed;
 static int   s_title_cursor;
+static int   s_cheat_taps;       /* RB x10 on the title -> cheat menu */
+static bool  s_cheat_on;         /* fat starting wallet armed */
 static char  s_scoop_toast[28];
 static float s_scoop_toast_t;
 static float s_frame_ms;
@@ -760,7 +762,7 @@ static void start_new_game(uint32_t seed) {
                 .integrity = (uint8_t)(55 + (h % 36u)), .in_use = 1,
             };
         }
-        g_player.credits = 1000;
+        g_player.credits = s_cheat_on ? 100000 : 1000;
     }
     spawn_player();    /* AFTER player state is final */
     missions_init();
@@ -1449,10 +1451,19 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
     switch (s_state) {
     case ST_TITLE: {
         bool has_save = save_exists();
-        static bool tu, td;
+        static bool tu, td, trb;
         if (btn->up && !tu && s_title_cursor > 0) { s_title_cursor--; sfx_ui_move(); }
         if (btn->down && !td && s_title_cursor < 1) { s_title_cursor++; sfx_ui_move(); }
-        tu = btn->up; td = btn->down;
+        if (btn->rb && !trb) {
+            if (++s_cheat_taps >= 10) {
+                s_cheat_taps = 0;
+                s_cheat_on = !s_cheat_on;
+                sfx_lock_acquire();        /* audible confirmation */
+            } else {
+                sfx_ui_move();
+            }
+        }
+        tu = btn->up; td = btn->down; trb = btn->rb;
         if (a_edge) {
             /* No chime on game start (user pref) — straight in. */
             if (s_title_cursor == 0 && has_save) {
@@ -2157,8 +2168,12 @@ void elite_game_draw_overlay(uint16_t *fb) {
                 craft_font_draw(fb, ">", 44, 78 + i * 10, RGB565C(120, 255, 120));
             craft_font_draw(fb, items[i], 52, 78 + i * 10, c);
         }
-        craft_font_draw(fb, "AN INFINITE GALAXY AWAITS", 14, 116,
-                        RGB565C(70, 90, 115));
+        if (s_cheat_on)
+            craft_font_draw(fb, "CHEAT: 100,000 CR START", 14, 104,
+                            RGB565C(245, 200, 80));
+        else
+            craft_font_draw(fb, "AN INFINITE GALAXY AWAITS", 14, 116,
+                            RGB565C(70, 90, 115));
         return;
     }
 
