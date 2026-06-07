@@ -268,6 +268,70 @@ int main(int argc, char **argv) {
 
     /* Yard compare-colour examples (3 ownership scenarios). */
     if (getenv("ELITE_YARDCOLOR")) {
+        /* REAL flow: dock, open the shipyard, B for the detail sheet —
+         * the live rotating hull fills the right pane (the old direct
+         * draw shipped a black pane into the guide). */
+        CraftRawButtons none = {0}, b;
+        #define TY(field, settle) do { \
+            b = none; b.field = true; \
+            elite_game_tick(&b, 1.0f / 30.0f); \
+            for (int k = 0; k < (settle); k++) \
+                elite_game_tick(&none, 1.0f / 30.0f); \
+        } while (0)
+        for (int k = 0; k < 30; k++) elite_game_tick(&none, 1.0f/30.0f);
+        TY(menu, 12); TY(right, 3); TY(a, 4);
+        for (int i = 0; i < 5; i++) TY(down, 2);
+        TY(a, 4);
+        int f = 0;
+        while (elite_game_state() == 1 && f++ < 30 * 240)
+            elite_game_tick(&none, 1.0f / 30.0f);
+        b = none; b.lb = b.rb = true;
+        for (int k = 0; k < 8; k++) elite_game_tick(&b, 1.0f / 30.0f);
+        f = 0;
+        while (elite_game_state() == 6 && f++ < 200)
+            elite_game_tick(&none, 1.0f / 30.0f);
+        for (int k = 0; k < 12; k++) elite_game_tick(&none, 1.0f/30.0f);
+        if (elite_game_state() != 7) { printf("[yc] no dock\n"); return 1; }
+        TY(down, 2);                      /* HOME -> SHIPYARD */
+        TY(a, 6);
+        TY(b, 8);                         /* detail on offer 0 */
+        for (int k = 0; k < 20; k++) elite_game_tick(&none, 1.0f/30.0f);
+        render_frame(); dump_ppm("/tmp/yc_live_detail.ppm");
+        TY(rb, 8);                        /* next offer */
+        for (int k = 0; k < 20; k++) elite_game_tick(&none, 1.0f/30.0f);
+        render_frame(); dump_ppm("/tmp/yc_live_detail2.ppm");
+        #undef TY
+        return 0;
+    }
+
+    /* Magazine conservation through unfit/refit (the free-reload
+     * exploit): fit AC, fire it down, unfit, refit, count rounds. */
+    if (getenv("ELITE_SWAPTEST")) {
+        ship_fit_weapon(0, 0, WPN_AUTOCANNON);
+        g_player.mounts[0] = (WeaponInst){ .type = WPN_AUTOCANNON,
+            .quality = 1, .integrity = 100, .in_use = 1 };
+        player_fit_restore_ammo(0);
+        int full = g_player.ammo[0];
+        g_player.ammo[0] = 37;               /* fired most of the mag */
+        player_stash_mount_ammo(0);          /* unfit path stashes */
+        WeaponInst saved = g_player.mounts[0];
+        g_player.mounts[0].in_use = 0;
+        g_player.mounts[0] = saved;          /* refit the same gun */
+        player_fit_restore_ammo(0);
+        printf("[swap] full=%d fired-down=37 after-refit=%d (%s)\n",
+               full, g_player.ammo[0],
+               g_player.ammo[0] == 37 ? "CONSERVED" : "FREE RELOAD BUG");
+        /* factory gun still arrives sealed */
+        g_player.mounts[0] = (WeaponInst){ .type = WPN_AUTOCANNON,
+            .quality = 1, .integrity = 100, .in_use = 1 };
+        player_fit_restore_ammo(0);
+        printf("[swap] factory seal: %d/%d (%s)\n", g_player.ammo[0],
+               full, g_player.ammo[0] == full ? "SEALED" : "WRONG");
+        return 0;
+    }
+
+    /* Yard compare-colour examples (3 ownership scenarios). */
+    if (getenv("ELITE_YARDCOLOR")) {
         struct { int own, view; const char *path; } cases[3] = {
             { 0, 3, "/tmp/yc_skiff_views_viper.ppm" },
             { 3, 6, "/tmp/yc_viper_views_packmule.ppm" },
