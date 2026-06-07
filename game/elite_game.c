@@ -1500,51 +1500,6 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         break;
     }
 
-    case ST_PAUSE: {
-        static const int N_ITEMS = 5;
-        bool up = btn->up, down = btn->down;
-        static bool pu, pd;
-        if (s_in_settings) {
-            /* SETTINGS submenu: INVERT Y / SHOW FPS. */
-            if (up && !pu && s_settings_cursor > 0) s_settings_cursor--;
-            if (down && !pd && s_settings_cursor < 1) s_settings_cursor++;
-            pu = up; pd = down;
-            if (a_edge) {
-                if (s_settings_cursor == 0)
-                    g_player.invert_y = !g_player.invert_y;
-                else
-                    g_player.show_fps = !g_player.show_fps;
-            }
-            static bool pb;
-            if (menu_edge || (btn->b && !pb))         /* B or MENU back */
-                s_in_settings = false;
-            pb = btn->b;
-            break;
-        }
-        if (up && !pu && s_pause_cursor > 0) s_pause_cursor--;
-        if (down && !pd && s_pause_cursor < N_ITEMS - 1) s_pause_cursor++;
-        pu = up; pd = down;
-        if (menu_edge || (a_edge && s_pause_cursor == 0)) {
-            elite_input_reset();
-            s_state = ST_FLIGHT;
-        }
-        else if (a_edge && s_pause_cursor == 1) {
-            map_galaxy_open(s_addr, g_player.fuel,
-                            (k_hulls[g_player.hull_id].jump_range * player_roll()->jmp));
-            s_state = ST_GALAXY_MAP;
-        } else if (a_edge && s_pause_cursor == 2) {
-            map_system_open(cam_pos_mm());
-            s_state = ST_SYSTEM_MAP;
-        } else if (a_edge && s_pause_cursor == 3) {
-            status_open();
-            s_state = ST_STATUS;
-        } else if (a_edge && s_pause_cursor == 4) {
-            s_in_settings = true;
-            s_settings_cursor = 0;
-        }
-        break;
-    }
-
     case ST_GALAXY_MAP: {
         if (s_menus_live) {
             CraftRawButtons none3 = {0};
@@ -2004,42 +1959,6 @@ static void dash_settings_overlay(uint16_t *fb) {
                     RGB565C(95, 110, 140));
 }
 
-static void draw_pause_overlay(uint16_t *fb) {
-    /* Dim panel. */
-    for (int y = 38; y < 100; y++)
-        for (int x = 28; x < 100; x++)
-            fb[y * ELITE_FB_W + x] = RGB565C(10, 14, 24);
-    for (int x = 28; x < 100; x++) {
-        fb[38 * ELITE_FB_W + x] = RGB565C(95, 110, 140);
-        fb[99 * ELITE_FB_W + x] = RGB565C(95, 110, 140);
-    }
-    craft_font_draw(fb, "PAUSED", 52, 43, RGB565C(200, 210, 225));
-    if (s_in_settings) {
-        craft_font_draw(fb, "SETTINGS", 41, 44, RGB565C(200, 210, 225));
-        const char *sitems[2] = {
-            g_player.invert_y ? "INVERT Y: ON" : "INVERT Y: OFF",
-            g_player.show_fps ? "SHOW FPS: ON" : "SHOW FPS: OFF",
-        };
-        for (int i = 0; i < 2; i++) {
-            uint16_t c = (i == s_settings_cursor) ? RGB565C(120, 255, 120)
-                                                  : RGB565C(120, 126, 145);
-            if (i == s_settings_cursor)
-                craft_font_draw(fb, ">", 34, 58 + i * 9, c);
-            craft_font_draw(fb, sitems[i], 41, 58 + i * 9, c);
-        }
-        craft_font_draw(fb, "B:BACK", 41, 86, RGB565C(95, 110, 140));
-        return;
-    }
-    const char *items[5] = { "RESUME", "GALAXY CHART", "SYSTEM MAP",
-                             "SHIP STATUS", "SETTINGS" };
-    for (int i = 0; i < 5; i++) {
-        uint16_t c = (i == s_pause_cursor) ? RGB565C(120, 255, 120)
-                                           : RGB565C(120, 126, 145);
-        if (i == s_pause_cursor) craft_font_draw(fb, ">", 34, 52 + i * 9, c);
-        craft_font_draw(fb, items[i], 41, 52 + i * 9, c);
-    }
-}
-
 void elite_game_draw_overlay(uint16_t *fb) {
     if (g_player.show_fps) {
         char fbuf[12];
@@ -2139,7 +2058,6 @@ void elite_game_draw_overlay(uint16_t *fb) {
                         RGB565C(170, 170, 180));
     }
 
-    if (s_state == ST_PAUSE) draw_pause_overlay(fb);
     if (s_state == ST_DASH) {
         /* Move the REAL console (the rows the HUD just painted) up the
          * screen; the instrument panels slide into view beneath it. */

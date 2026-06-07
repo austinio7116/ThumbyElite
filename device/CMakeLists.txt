@@ -159,8 +159,16 @@ if (THUMBYONE_SLOT_MODE)
     )
 endif()
 
+# -Os in slot mode: the 256KB partition overflowed at -O3 (264.5KB ->
+# blank boot, user-diagnosed); size first, the renderer has FPS to
+# spare. Standalone keeps -O3.
+if(THUMBYONE_SLOT_MODE)
+    set(ELITE_OPT -Os)
+else()
+    set(ELITE_OPT -O3)
+endif()
 target_compile_options(thumbyelite PRIVATE
-    -O3 -g -Wall -Wextra
+    ${ELITE_OPT} -g -Wall -Wextra
     -Wno-unused-parameter -Wno-unused-function -Wno-unused-but-set-variable
     -ffast-math
     -mcpu=cortex-m33 -mthumb -mfloat-abi=softfp -mfpu=fpv5-sp-d16
@@ -198,6 +206,16 @@ if (THUMBYONE_SLOT_MODE)
 endif()
 
 pico_add_extra_outputs(thumbyelite)
+
+if(THUMBYONE_SLOT_MODE)
+    # FAIL THE BUILD if the image exceeds the 256KB partition — a
+    # silent overflow ships a blank boot (runs after the .bin exists).
+    add_custom_command(TARGET thumbyelite POST_BUILD
+        COMMAND ${CMAKE_COMMAND}
+            -DBIN=$<TARGET_FILE_DIR:thumbyelite>/firmware_thumbyelite.bin
+            -DLIMIT=262144
+            -P ${CMAKE_CURRENT_LIST_DIR}/check_size.cmake)
+endif()
 
 if (THUMBYONE_SLOT_MODE)
     set_target_properties(thumbyelite PROPERTIES OUTPUT_NAME "firmware_thumbyelite")
