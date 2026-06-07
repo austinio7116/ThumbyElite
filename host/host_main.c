@@ -243,6 +243,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_FURBALL") ||
         getenv("ELITE_CIVMOVE") ||
         getenv("ELITE_LANCESHOT") ||
+        getenv("ELITE_SFXTEST") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -731,6 +732,27 @@ int main(int argc, char **argv) {
             if (pc > peak) peak = pc;
         }
         printf("[furball] 6 shooters, peak projectiles: %d / 72\n", peak);
+        return 0;
+    }
+
+    /* Verify a weapon's sfx produces audio (non-silent render). */
+    if (getenv("ELITE_SFXTEST")) {
+        const char *nm = getenv("ELITE_SFXTEST");
+        int wt = WPN_BLASTER;
+        if (nm && nm[0]=='P') wt = WPN_PLASMA;
+        extern void sfx_weapon(int wpn_type, float amp);
+        sfx_weapon(wt, 1.0f);
+        int16_t buf[512]; int peak = 0;
+        for (int b = 0; b < 20; b++) {
+            audio_render(buf, 512);
+            for (int i = 0; i < 512; i++) {
+                int a = buf[i] < 0 ? -buf[i] : buf[i];
+                if (a > peak) peak = a;
+            }
+        }
+        printf("[sfx] %s peak amplitude: %d (%s)\n",
+               wt == WPN_BLASTER ? "BLASTER" : "PLASMA", peak,
+               peak > 200 ? "AUDIBLE" : "SILENT");
         return 0;
     }
 
