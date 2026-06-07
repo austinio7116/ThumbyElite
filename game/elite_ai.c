@@ -10,6 +10,9 @@
 #include "elite_ai.h"
 #include "elite_rocks.h"
 #include "elite_game.h"
+#include "elite_proj.h"
+#include "r3d_fx.h"
+#include "elite_audio.h"
 #include "elite_types.h"
 #include "elite_entity.h"
 #include "elite_combat.h"
@@ -110,6 +113,32 @@ static void ai_ship(int idx, float dt) {
         if (al > 1e-3f) dir = v3_scale(away, 1.0f / al);
     }
     int tier = s->tier > 4 ? 4 : s->tier;
+
+    /* MISSILE COUNTERMEASURES (user design): CAPABLE+ breaks hard off
+     * an inbound seeker (the missile's 1.7 rad/s turn cap + their
+     * blue-zone slowdown decide who wins the corner); VETERAN+ pops
+     * chaff when it closes — visible burst, finite charges. */
+    if (tier >= 2 && s->team == TEAM_HOSTILE) {
+        float md = proj_nearest_homing(idx);
+        if (md < 400.0f) {
+            if (tier >= 3 && s->chaff_n > 0 && md < 150.0f) {
+                s->chaff_n--;
+                proj_break_locks(idx);
+                fx_chaff_burst(v3_sub(s->pos,
+                                      v3_scale(s->basis.r[2], 4.0f)),
+                               s->vel);
+                sfx_chaff();
+            } else {
+                /* hard lateral break across the seeker's nose */
+                Vec3 brk = v3_add(v3_scale(s->basis.r[0],
+                                           (idx & 1) ? 1.0f : -1.0f),
+                                  v3_scale(s->basis.r[1], 0.5f));
+                turn_toward(s, v3_norm(brk), dt);
+                s->throttle = 0.95f * k_fight_speed[tier];
+                return;
+            }
+        }
+    }
 
     /* THE TAIL FIGHT (user req: position should be earned and owned).
      * When the target sits behind us with guns on, respond by tier:

@@ -58,6 +58,19 @@ bool proj_homing_on(int victim) {
     return false;
 }
 
+/* Distance of the nearest live seeker homing on victim (1e9 = none). */
+float proj_nearest_homing(int victim) {
+    float best = 1e9f;
+    for (int i = 0; i < MAX_PROJ; i++) {
+        Proj *p = &s_proj[i];
+        if (!p->alive || p->target != victim) continue;
+        if (k_weapons[p->type].turn <= 0) continue;
+        float d = v3_len(v3_sub(p->pos, g_ships[victim].pos));
+        if (d < best) best = d;
+    }
+    return best;
+}
+
 int proj_break_locks(int victim) {
     int n = 0;
     for (int i = 0; i < MAX_PROJ; i++) {

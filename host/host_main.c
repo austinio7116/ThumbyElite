@@ -135,6 +135,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_REDISTRESS") ||
         getenv("ELITE_ARMOURYSHOT") ||
         getenv("ELITE_DPSTEST") ||
+        getenv("ELITE_CMTEST") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -568,6 +569,46 @@ int main(int argc, char **argv) {
             }
         printf("[orbit] outermost: avg=%.0f worst=%.0f Mm over %d\n",
                sum / (n ? n : 1), worst, n);
+        return 0;
+    }
+
+    /* NPC missile countermeasures ladder. */
+    if (getenv("ELITE_CMTEST")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Ship *pl = &g_ships[0];
+        elite_game_debug_face_away_from_sun();
+        for (int tier = 1; tier <= 3; tier++) {
+            int e = ship_spawn(hull_mesh(0xACE1u, 1 + tier),
+                               v3_add(pl->pos,
+                                      v3_scale(pl->basis.r[2], 500.0f)),
+                               TEAM_HOSTILE);
+            ship_set_tier(e, tier, 1 + tier);
+            Ship *t2 = &g_ships[e];
+            int chaff0 = t2->chaff_n;
+            Vec3 head0 = t2->basis.r[2];
+            g_player.mounts[0] = (WeaponInst){ .type = WPN_HOMING,
+                .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
+            g_player.ammo[0] = 10;
+            player_apply_to_ship();
+            pl->active_w = 0;
+            pl->fire_cool = 0; pl->heat = 0;
+            combat_set_shot_type(WPN_HOMING);
+            combat_fire(0, 0, e);
+            CraftRawButtons none = {0};
+            int blinded = 0;
+            for (int f = 0; f < 30 * 6 && t2->alive; f++) {
+                elite_game_tick(&none, 1.0f / 30.0f);
+                if (proj_nearest_homing(e) > 9e8f && f > 30) break;
+            }
+            float turn_amt = 1.0f - v3_dot(head0, t2->basis.r[2]);
+            printf("[cm] tier %d: alive=%d chaff %d->%d heading-change="
+                   "%.2f %s\n", tier, t2->alive, chaff0, t2->chaff_n,
+                   turn_amt,
+                   tier >= 3 ? (t2->chaff_n < chaff0 ? "(CHAFFED)" : "(hit?)")
+                 : tier >= 2 ? (turn_amt > 0.05f ? "(BROKE)" : "(no react)")
+                             : "(oblivious ok)");
+            if (t2->alive) t2->alive = false;
+        }
         return 0;
     }
 

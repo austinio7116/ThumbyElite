@@ -19,6 +19,9 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 - **PLASMA LANCE** (Z3, T11+, 6,400 cr): phases through shields
   straight to hull — can crit a shielded target; the BULWARK-tank
   killer, countered by thick armor
+- **Missile countermeasures by rank** — CAPABLE+ breaks off inbound
+  seekers, VETERAN+ pops chaff (1-2 charges, visible burst); save on
+  LAUNCH as well as dock; measured-DPS weapon table in the guide
 - **Confidence is speed** — pilot tier sets fighting pace
   (HARMLESS ~55% of envelope up to DEADLY at 100%): green pilots are
   slow, trackable prey; aces duel at the edge. Distress call rate

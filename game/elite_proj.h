@@ -16,6 +16,7 @@ void proj_spawn(WeaponType type, int owner, int8_t target,
 void proj_spawn_mine(int owner, Vec3 pos, Vec3 vel, float dmg_mult);
 /* Chaff: every seeker tracking `victim` loses its lock. Returns count. */
 int proj_break_locks(int victim);
+float proj_nearest_homing(int victim);
 /* Is any live seeker tracking this ship? (missile warning) */
 bool proj_homing_on(int victim);
 void proj_spawn_ex(WeaponType type, int owner, int8_t target,
