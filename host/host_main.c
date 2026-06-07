@@ -132,6 +132,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_TIERMOVIE") ||
         getenv("ELITE_FINETEST") ||
         getenv("ELITE_ORBITPROBE") ||
+        getenv("ELITE_REDISTRESS") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -510,6 +511,43 @@ int main(int argc, char **argv) {
         for (int f = 0; f < 12; f++) elite_game_tick(&none, 1.0f/30.0f);
         printf("[dash] resume: state=%d (0=FLIGHT)\n",
                elite_game_state());
+        return 0;
+    }
+
+    /* Resolved distress must not respawn at the same POI. */
+    if (getenv("ELITE_REDISTRESS")) {
+        extern int elite_game_debug_distress_civ(void);
+        /* find a distress POI in this system, fly there */
+        CraftRawButtons none = {0};
+        for (int k = 0; k < 10; k++) elite_game_tick(&none, 1.0f/30.0f);
+        int civ0 = -1, poi_idx = -1;
+        for (int pi = 0; pi < 8 && civ0 <= 0; pi++) {
+            elite_game_debug_goto_poi(pi);
+            for (int k = 0; k < 10; k++)
+                elite_game_tick(&none, 1.0f / 30.0f);
+            civ0 = elite_game_debug_distress_civ();
+            poi_idx = pi;
+        }
+        printf("[redis] event live: civ=%d at poi %d\n", civ0, poi_idx);
+        if (civ0 > 0) {
+            /* resolve it: kill the wing via harness */
+            for (int i = 1; i < MAX_SHIPS; i++)
+                if (g_ships[i].alive && g_ships[i].team == TEAM_HOSTILE)
+                    g_ships[i].alive = false;
+            for (int k = 0; k < 30; k++)
+                elite_game_tick(&none, 1.0f / 30.0f);
+            extern const char *elite_game_debug_toast(void);
+            printf("[redis] resolve toast: %s\n",
+                   elite_game_debug_toast());
+            /* re-arrive at the SAME poi */
+            elite_game_debug_goto_poi(poi_idx);
+            for (int k = 0; k < 10; k++)
+                elite_game_tick(&none, 1.0f / 30.0f);
+            printf("[redis] after re-arrival: civ=%d (%s)\n",
+                   elite_game_debug_distress_civ(),
+                   elite_game_debug_distress_civ() <= 0
+                       ? "NOT FARMABLE" : "RESPAWNED - BUG");
+        }
         return 0;
     }
 

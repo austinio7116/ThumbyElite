@@ -88,6 +88,9 @@ static int   s_prev_loot = -1;
 static uint32_t s_entry_salt;    /* per-system-entry, salts transient
                                     events (distress) so revisits differ */
 static int   s_distress_civ = -1; /* live distress event: the victim */
+static uint32_t s_distress_done;  /* per-POI resolved bits, this system
+                                     (user bug: re-arriving respawned a
+                                     paid rescue — farmable) */
 static bool  s_distress_paid;
 static int   s_tgt_class = 0;    /* 0 AUTO, 1 SALVAGE, 2 ROCKS — LB
                                     double-tap demotes the class so you
@@ -166,6 +169,7 @@ void elite_game_police_stand_down(void) {
     }
 }
 int elite_game_debug_rock_target(void) { return s_rock_target; }
+int elite_game_debug_distress_civ(void) { return s_distress_civ; }
 
 /* Debug: jump the anchor straight to POI n (harness only). */
 void elite_game_debug_goto_poi(int n) {
@@ -320,7 +324,8 @@ void elite_game_poi_intel(const Poi *poi, PoiIntel *out) {
     uint32_t dh = h ^ (s_entry_salt * 0x9E3779B9u) ^ 0xD157u;
     dh *= 2654435761u; dh ^= dh >> 15;
     out->distress = (poi->kind != POI_STATION) && si->threat >= 1 &&
-                    (dh % 100u) < 11;     /* was 22 — user: too many */
+                    (dh % 100u) < 11 &&   /* was 22 — user: too many */
+                    !(s_distress_done & (1u << (poi->index & 31)));
 }
 
 static void spawn_poi_content(void) {
@@ -548,6 +553,7 @@ static void drop_anchor(Vec3 pos_mm, const Poi *poi) {
 static void arrive_in_system(SysAddr addr) {
     s_addr = addr;
     s_entry_salt++;
+    s_distress_done = 0;       /* fresh system, fresh emergencies */
     system_enter(addr);
     Poi beacon;
     Poi pois[MAX_POIS];
@@ -1139,11 +1145,13 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
             Ship *cv = &g_ships[s_distress_civ];
             if (!cv->alive) {
                 s_distress_civ = -1;
+                s_distress_done |= 1u << (s_anchor_poi.index & 31);
                 snprintf(s_scoop_toast, sizeof s_scoop_toast,
                          "THE VICTIM IS LOST");
                 s_scoop_toast_t = 3.0f;
             } else if (ships_alive_hostile() == 0) {
                 s_distress_paid = true;
+                s_distress_done |= 1u << (s_anchor_poi.index & 31);
                 const SystemInfo *si3 = system_info();
                 int pay = 250 + (int)si3->threat * 300;
                 g_player.credits += pay;
