@@ -19,10 +19,10 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 - **PLASMA LANCE** (Z3, T11+, 6,400 cr): phases through shields
   straight to hull — can crit a shielded target; the BULWARK-tank
   killer, countered by thick armor
-- **Missile rework** — HOMING slowed (172 m/s) with a short 1,100m
-  leash: long stern shots are outrun, close shots commit. Pirates
-  answer by rank: VETERAN+ chaffs first (1-2 charges), runs early,
-  and slips the terminal lock (CAPABLE 25%% / ELITE 50%%); save on
+- **Missile rework** — HOMING slowed (172 m/s, gentler 1.0 rad/s
+  arcs). Pirates answer by rank: VETERAN+ chaffs first (1-2 charges),
+  turns and runs (the fastest hulls can outpace a long stern chase),
+  and slips the terminal lock (CAPABLE ~25% / ELITE ~50%); save on
   LAUNCH as well as dock; measured-DPS weapon table in the guide
 - **Confidence is speed** — pilot tier sets fighting pace
   (HARMLESS ~55% of envelope up to DEADLY at 100%): green pilots are
