@@ -34,7 +34,7 @@ static const float k_fight_speed[5] = { 0.55f, 0.70f, 0.85f,
  * compensated its gauss payload; the kill matrix showed it inverting
  * the ladder once geometry was fixed — k_npc_dmg carries balance now). */
 static const float k_refire[5] = { 0.90f, 0.75f, 0.60f, 0.50f, 0.42f };
-static const float k_spread[5] = { 0.052f, 0.038f, 0.028f, 0.018f, 0.012f };
+static const float k_spread[5] = { 0.078f, 0.058f, 0.040f, 0.030f, 0.023f };
 
 /* The tier accuracy table, shared with the turret gunner. */
 float ai_tier_spread(int tier) {

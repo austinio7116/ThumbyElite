@@ -633,6 +633,10 @@ int main(int argc, char **argv) {
             if (wt == WPN_MINE || wt == WPN_TRACTOR) continue;
             printf("[sk] %-9s", k_weapons[wt].name);
             for (int tier = 0; tier <= 4; tier++) {
+              float tsum = 0; int tn = 0, surv = 0, ammo = 0;
+              int NT = atoi(getenv("ELITE_SPEEDKILL"));
+              if (NT < 1) NT = 1;
+              for (int trial = 0; trial < NT; trial++) {
                 /* fresh standard player */
                 g_player.hull_id = 0;
                 g_player.hull_seed = 0x5EEDu;
@@ -650,8 +654,11 @@ int main(int argc, char **argv) {
                 pl->vel = v3_scale(pl->basis.r[2],
                                    pl->max_speed * 0.66f);
                 pl->throttle = 0.66f;
-                int e = ship_spawn(hull_mesh(0xACE1u, 1 + tier),
-                                   v3_add(pl->pos, v3(60, 0, -250)),
+                float ang = 0.5f + (float)trial * 1.7f;
+                int e = ship_spawn(hull_mesh(0xACE1u + trial, 1 + tier),
+                                   v3_add(pl->pos,
+                                          v3(60.0f * cosf(ang), 0,
+                                             -250.0f)),
                                    TEAM_HOSTILE);
                 if (e <= 0) { printf(" spawn!"); continue; }
                 ship_set_tier(e, tier, 1 + tier);
@@ -664,7 +671,7 @@ int main(int argc, char **argv) {
                 t2->turret_type = 0;
                 float tkill = -1;
                 CraftRawButtons none = {0};
-                for (int f = 0; f < 30 * 60; f++) {
+                for (int f = 0; f < 30 * 45; f++) {
                     elite_game_tick(&none, 1.0f / 30.0f);
                     /* hold the straight line: re-pin heading+speed */
                     pl->basis = m3_identity();
@@ -682,14 +689,16 @@ int main(int argc, char **argv) {
                     }
                     if (!t2->alive) { tkill = -3; break; }
                 }
-                if (tkill >= 0) printf(" %5.1f", tkill);
-                else if (tkill == -2) printf("  AMMO");
-                else if (tkill == -3) printf("  DIED");
-                else printf("  >60s");
-                /* clean the battlefield + revive player */
+                if (tkill >= 0) { tsum += tkill; tn++; }
+                else if (tkill == -2) ammo++;
+                else surv++;
                 if (t2->alive) t2->alive = false;
                 g_ships[0].alive = true;
                 proj_clear_all();
+              }
+              if (tn > NT / 2) printf(" %5.1f", tsum / tn);
+              else if (surv >= ammo) printf("  >45s");
+              else printf("  AMMO");
             }
             printf("\n");
         }
