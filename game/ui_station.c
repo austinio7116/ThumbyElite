@@ -111,9 +111,14 @@ static void toast(const char *msg) {
 
 int station_preview2(uint32_t *mesh_seed, int *class_hint) {
     if (s_screen == SCR_HOME) return 1;
-    if (s_screen == SCR_SHIPYARD && s_cursor < YARD_OFFERS) {
-        *mesh_seed = s_yard[s_cursor].seed;
-        *class_hint = s_yard[s_cursor].cls;
+    if (s_screen == SCR_SHIPYARD) {
+        if (s_cursor >= YARD_OFFERS) {        /* YOURS: your own hull */
+            *mesh_seed = g_player.hull_seed;
+            *class_hint = g_player.hull_id;
+        } else {
+            *mesh_seed = s_yard[s_cursor].seed;
+            *class_hint = s_yard[s_cursor].cls;
+        }
         return 2;
     }
     if (s_screen == SCR_STATUS) return 3;   /* own ship in the bay */
@@ -1050,15 +1055,12 @@ static void draw_shipyard(uint16_t *fb) {
         if (i == s_cursor) craft_font_draw(fb, ">", 2, y, COL_CUR);
         craft_font_draw(fb, s_yard[i].name, 8, y, c);
     }
-    {   /* YOUR ship: compare row, no purchase. */
-        uint16_t c = (s_cursor == YARD_OFFERS) ? COL_CUR
-                                               : RGB565C(95, 170, 190);
+    {   /* YOUR ship: compare row, no purchase — blue IS the label. */
+        uint16_t c = (s_cursor == YARD_OFFERS) ? RGB565C(120, 210, 235)
+                                               : RGB565C(80, 150, 175);
         if (s_cursor == YARD_OFFERS)
-            craft_font_draw(fb, ">", 2, y, COL_CUR);
-        char yb[20];
-        snprintf(yb, sizeof yb, "YOURS: %s",
-                 k_hulls[g_player.hull_id].name);
-        craft_font_draw(fb, yb, 8, y, c);
+            craft_font_draw(fb, ">", 2, y, c);
+        craft_font_draw(fb, k_hulls[g_player.hull_id].name, 8, y, c);
     }
     /* Selected offer: price + stat strip in the full-width footer. */
     const HullDef *sel = (s_cursor == YARD_OFFERS)
@@ -1066,11 +1068,14 @@ static void draw_shipyard(uint16_t *fb) {
                              : &k_hulls[s_yard[s_cursor].cls];
     hl(fb, 95, COL_GRID);
     char buf[36];
-    {
+    if (s_cursor == YARD_OFFERS) {
+        snprintf(buf, sizeof buf, "%s  YOUR SHIP",
+                 k_hulls[g_player.hull_id].name);
+    } else {
         int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
         int cost = sel->price - tradein;
         if (cost < 0) cost = 0;
-        snprintf(buf, sizeof buf, "%s COST %dCR", s_yard[s_cursor].name,
+        snprintf(buf, sizeof buf, "%s COST %d CR", s_yard[s_cursor].name,
                  cost);
     }
     craft_font_draw(fb, buf, 2, 98, COL_CRED);
