@@ -25,8 +25,9 @@ const WeaponDef k_weapons[WPN_COUNT] = {
     [WPN_ION]       = { "ION",     30, 0.45f, 8.0f,  340,  700,  0,   0, 2,  0, RGB565C(110, 160, 255) },
     [WPN_MINE]      = { "MINE",    45, 1.20f, 1.0f,    0,    0,  0,  18, 1,  6, RGB565C(255, 140,  70) },
     [WPN_TRACTOR]   = { "TRACTOR",  0, 0.10f, 0.6f,    0,  300,  0,   0, 1,  0, RGB565C(255, 215, 120) },
-    [WPN_MINING]    = { "MINING",   1, 0.09f, 1.4f,    0,  350,  0,   0, 1,  0, RGB565C(255, 200,  90) },
+    [WPN_MINING]    = { "MINING",   2, 0.09f, 1.4f,    0,  350,  0,   0, 1,  0, RGB565C(255, 200,  90) },
     [WPN_PLASMA]    = { "PLASMA",   7, 0.09f, 2.2f,  380,  700,  0,   0, 2,  0, RGB565C(120, 235, 255) },
+    [WPN_LANCE]     = { "P.LANCE", 18, 0.60f, 9.0f,    0,  600,  0,   0, 3,  0, RGB565C(190, 140, 255) },
 };
 
 const AffixDef k_affixes[AFX_COUNT] = {

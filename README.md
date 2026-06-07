@@ -16,8 +16,11 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 - **PLASMA cannon** (Z2, T6+, 2,400 cr): a rapid stream of energy
   bolts — autocannon tempo with no ammo bill, paid in heat, balls need
   leading
-- Mining laser is an industrial cutter, not a gun: ship damage cut to
-  a third (rock yield unchanged)
+- **PLASMA LANCE** (Z3, T11+, 6,400 cr): phases through shields
+  straight to hull — can crit a shielded target; the BULWARK-tank
+  killer, countered by thick armor
+- Mining laser rebalanced as a tool: weaker than a small laser but not
+  useless (ship DPS ~22 vs PULSE-S 56; rock yield unchanged)
 
 ### 1.22.1 (ThumbyOne v1.22.1)
 

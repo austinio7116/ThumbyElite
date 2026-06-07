@@ -546,19 +546,47 @@ int main(int argc, char **argv) {
             elite_game_tick(&b, 1.0f / 30.0f);
             g_ships[e2].pos = v3_add(pl->pos, v3(0, 0, 120));
         }
-        printf("[plasma] mining dps vs ship: %.0f dmg/s (want ~11)\n",
+        printf("[plasma] mining/frame-fire vs ship: %.0f (per-shot 2)\n",
                (m0 - g_ships[e2].shield));
+        /* P.LANCE: full shield must stay full while hull drops */
+        int e3 = ship_spawn(hull_mesh(0xCAFEu, 2),
+                            v3_add(pl->pos, v3(0, 0, 120)),
+                            TEAM_HOSTILE);
+        ship_set_tier(e3, 1, 2);
+        ship_fit_weapon(0, 0, WPN_LANCE);
+        pl->active_w = 0;
+        float s0 = g_ships[e3].shield, hl0 = g_ships[e3].hull;
+        for (int f = 0; f < 30; f++) {
+            pl->fire_cool = 0; pl->heat = 0;
+            b = none; b.a = true;
+            elite_game_tick(&b, 1.0f / 30.0f);
+            if (!g_ships[e3].alive) break;
+            g_ships[e3].pos = v3_add(pl->pos, v3(0, 0, 120));
+        }
+        printf("[plasma] LANCE: shield %.0f->%.0f hull %.0f->%.0f (%s)\n",
+               s0, g_ships[e3].alive ? g_ships[e3].shield : -1, hl0,
+               g_ships[e3].alive ? g_ships[e3].hull : -1,
+               (!g_ships[e3].alive ||
+                (g_ships[e3].shield >= s0 - 0.5f &&
+                 g_ships[e3].hull < hl0))
+                   ? "PHASES THROUGH" : "blocked");
         return 0;
     }
 
     /* Icon strip render (drone et al). */
     if (getenv("ELITE_ICONSHOT")) {
+        /* full armoury grid: every weapon at (col*21+2, row*12+2),
+         * 6 per row, enum order — the guide compositor crops these */
         memset(g_fb, 0, sizeof g_fb);
-        int types[6] = { EQ_DRONE, EQ_CHAFF, EQ_HEATSINK, EQ_TARGETCOMP,
-                         WPN_MINING, WPN_RAILGUN };
-        for (int i = 0; i < 6; i++)
-            icon_weapon(g_fb, 8 + i * 20, 60, types[i]);
-        dump_ppm("/tmp/icons.ppm");
+        for (int i = 0; i < WPN_COUNT; i++)
+            icon_weapon(g_fb, 2 + (i % 6) * 21, 2 + (i / 6) * 12, i);
+        dump_ppm("/tmp/icons_weapons.ppm");
+        memset(g_fb, 0, sizeof g_fb);
+        for (int i = WPN_COUNT; i < ITEM_COUNT; i++) {
+            int j = i - WPN_COUNT;
+            icon_weapon(g_fb, 2 + (j % 6) * 21, 2 + (j / 6) * 12, i);
+        }
+        dump_ppm("/tmp/icons_equip.ppm");
         return 0;
     }
 

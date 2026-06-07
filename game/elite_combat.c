@@ -154,7 +154,20 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
     s_regen_hold[victim] = v->shield_delay > 0 ? v->shield_delay
                                                : SHIELD_DELAY;
     bool had_shield = v->shield > 0.0f;
-    if (s_shot_type == WPN_ION) {
+    if (s_shot_type == WPN_LANCE) {
+        /* Plasma lance: phases clean through shields — all of it lands
+         * on hull (and can therefore crit a shielded target). The
+         * BULWARK tank's nightmare; raw armor is the counter. */
+        v->hull -= dmg;
+        if (v->hull > 0.0f && s_crit_cd[victim] <= 0.0f) {
+            int chance = 3 + (int)(dmg * 0.6f);
+            if (chance > 30) chance = 30;
+            if ((int)(frnd_pub() % 100u) < chance) {
+                s_crit_cd[victim] = 2.0f;
+                combat_roll_crit(victim, hit_pos);
+            }
+        }
+    } else if (s_shot_type == WPN_ION) {
         /* Ion: savage vs shields, feeble vs hull; a full strip
          * scrambles the target's systems. */
         if (v->shield > 0.0f) {
@@ -482,7 +495,7 @@ int combat_fire(int shooter, float spread, int target) {
             Vec3 rhit = v3_add(s->pos, v3_scale(dir, rt));
             fx_beam(muzzle, rhit, w->color);
             int is_miner = (wtype == WPN_MINING);
-            float rd = w->dmg * dmg_mult * (is_miner ? 12.0f : 1.0f);
+            float rd = w->dmg * dmg_mult * (is_miner ? 6.0f : 1.0f);
             if (rocks_damage(ri, rd, is_miner ? 1.0f : 0.45f, rhit) &&
                 shooter == PLAYER)
                 g_player.xp_tech += 1;

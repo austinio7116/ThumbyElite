@@ -115,6 +115,12 @@ void icon_weapon(uint16_t *fb, int x, int y, int wpn_type) {
         px(fb, x + 7, y + 4, hot); px(fb, x + 9, y + 1, hot);
         px(fb, x + 9, y + 5, hot);
         break;
+    case WPN_LANCE:
+        /* long violet lance with a phase shimmer */
+        hbar(fb, x, x + 2, y + 3, BODY);
+        hbar(fb, x + 3, x + 11, y + 3, hot);
+        px(fb, x + 6, y + 2, BODY2); px(fb, x + 9, y + 4, BODY2);
+        break;
     case WPN_PLASMA:
         /* stub barrel + three plasma balls streaming out */
         hbar(fb, x, x + 3, y + 3, BODY);
