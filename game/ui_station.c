@@ -590,7 +590,26 @@ static void outfit_action_a(int row) {
             return;
         }
         int slot = free_slot_for(sv->type);
-        if (slot < 0) { toast("NO FREE SLOT"); return; }
+        if (slot < 0) {
+            /* Full mounts: SWAP with the first size-compatible mount —
+             * the displaced gun takes this rack slot, so no free rack
+             * space is needed (user-caught lock: full mounts + full
+             * rack forced a sale). */
+            const HullDef *h = &k_hulls[g_player.hull_id];
+            int wsz = k_weapons[sv->type].size;
+            for (int i = 0; i < h->n_slots; i++)
+                if (h->slot_size[i] >= wsz &&
+                    g_player.mounts[i].in_use) { slot = i; break; }
+            if (slot < 0) { toast("NO FIT"); return; }
+            WeaponInst old2 = g_player.mounts[slot];
+            g_player.mounts[slot] = *sv;
+            *sv = old2;
+            player_load_mount_ammo(slot,
+                g_player.mounts[slot].integrity >= 100 ? 1.0f : 0.4f);
+            player_apply_to_ship();
+            toast("SWAPPED");
+            return;
+        }
         g_player.mounts[slot] = *sv;
         sv->in_use = 0;
         /* Factory-fresh (100%) racked guns come sealed with a full
@@ -786,17 +805,23 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
         break;
 
     case SCR_SHIPYARD:
+        /* Row YARD_OFFERS (the 6th) is YOUR ship — comparable in the
+         * detail cycle, never buyable (user req). */
         if (s_detail) {
-            if (rb_edge) s_cursor = (s_cursor + 1) % YARD_OFFERS;
-            if (lb_edge) s_cursor = (s_cursor + YARD_OFFERS - 1) % YARD_OFFERS;
-            if (a_edge) { shipyard_buy(s_cursor); s_detail = 0; }
+            if (rb_edge) s_cursor = (s_cursor + 1) % (YARD_OFFERS + 1);
+            if (lb_edge)
+                s_cursor = (s_cursor + YARD_OFFERS) % (YARD_OFFERS + 1);
+            if (a_edge && s_cursor < YARD_OFFERS) {
+                shipyard_buy(s_cursor);
+                s_detail = 0;
+            }
             if (b_edge || back) s_detail = 0;
             break;
         }
         if (up && s_cursor > 0) s_cursor--;
-        if (down && s_cursor < YARD_OFFERS - 1) s_cursor++;
+        if (down && s_cursor < YARD_OFFERS) s_cursor++;
         if (b_edge || lb_edge) s_detail = 1;
-        if (a_edge) shipyard_buy(s_cursor);
+        if (a_edge && s_cursor < YARD_OFFERS) shipyard_buy(s_cursor);
         if (back) { s_screen = SCR_HOME; s_cursor = 1; }
         break;
 
@@ -1025,8 +1050,20 @@ static void draw_shipyard(uint16_t *fb) {
         if (i == s_cursor) craft_font_draw(fb, ">", 2, y, COL_CUR);
         craft_font_draw(fb, s_yard[i].name, 8, y, c);
     }
+    {   /* YOUR ship: compare row, no purchase. */
+        uint16_t c = (s_cursor == YARD_OFFERS) ? COL_CUR
+                                               : RGB565C(95, 170, 190);
+        if (s_cursor == YARD_OFFERS)
+            craft_font_draw(fb, ">", 2, y, COL_CUR);
+        char yb[20];
+        snprintf(yb, sizeof yb, "YOURS: %s",
+                 k_hulls[g_player.hull_id].name);
+        craft_font_draw(fb, yb, 8, y, c);
+    }
     /* Selected offer: price + stat strip in the full-width footer. */
-    const HullDef *sel = &k_hulls[s_yard[s_cursor].cls];
+    const HullDef *sel = (s_cursor == YARD_OFFERS)
+                             ? &k_hulls[g_player.hull_id]
+                             : &k_hulls[s_yard[s_cursor].cls];
     hl(fb, 95, COL_GRID);
     char buf[36];
     {
@@ -1352,6 +1389,11 @@ void station_draw(uint16_t *fb) {
 
     /* Detail sheets replace the list view. */
     if (s_detail && s_screen == SCR_SHIPYARD) {
+        if (s_cursor == YARD_OFFERS) {       /* YOUR ship: comparison */
+            detail_draw_hull(fb, g_player.hull_id, -1,
+                             "LB/RB:NEXT B:BACK");
+            return;
+        }
         int cls = s_yard[s_cursor].cls;
         int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
         int cost = k_hulls[cls].price - tradein;
