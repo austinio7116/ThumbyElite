@@ -118,6 +118,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_DRONETEST") ||
         getenv("ELITE_PIRGEN") ||
         getenv("ELITE_JITTERTEST") ||
+        getenv("ELITE_ICONSHOT") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -496,6 +497,17 @@ int main(int argc, char **argv) {
         for (int f = 0; f < 12; f++) elite_game_tick(&none, 1.0f/30.0f);
         printf("[dash] resume: state=%d (0=FLIGHT)\n",
                elite_game_state());
+        return 0;
+    }
+
+    /* Icon strip render (drone et al). */
+    if (getenv("ELITE_ICONSHOT")) {
+        memset(g_fb, 0, sizeof g_fb);
+        int types[6] = { EQ_DRONE, EQ_CHAFF, EQ_HEATSINK, EQ_TARGETCOMP,
+                         WPN_MINING, WPN_RAILGUN };
+        for (int i = 0; i < 6; i++)
+            icon_weapon(g_fb, 8 + i * 20, 60, types[i]);
+        dump_ppm("/tmp/icons.ppm");
         return 0;
     }
 
