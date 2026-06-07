@@ -11,41 +11,73 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 
 ## Changelog
 
-### 1.22 (in development)
+### 1.22 (ThumbyOne v1.22)
+
+**The flight dashboard** — MENU no longer pauses: the real cockpit
+console slides up the screen (and back down on exit), scanner still
+live inside it, over two working MFD instruments — a mini galaxy chart
+with your jump ring and the system schematic with your anchor marked —
+plus STATUS/SETTINGS buttons. The sim keeps running inside every menu
+screen; there is deliberately no safety net. Escapes are decisions
+made under fire.
 
 **Critical hits** — MechWarrior-style: hull hits (shields down) can
 smash systems, rare and heavy, scaled by the blow. Player systems take
 −40 integrity per crit and go OFFLINE at zero (dead mounts won't fire,
 smashed generators stop regenerating, wrecked targetcomps lose the
-pip); engines −40% speed/turn for the fight, fixed free on docking,
-everything else repaired for credits. NPCs lose weapons, turrets,
-regen, engines and targeting the same way — a fully disarmed pirate
-turns and flees. Fights end in more states than "dead".
+pip); engine crits cut speed/turn 40% until you dock. NPCs lose
+weapons, turrets, regen, engines and targeting the same way — a fully
+disarmed pirate turns and flees.
+
+**Civilian traffic & distress calls** — green-blip miners work the
+belts (visible chip-beams) and cargo haulers run lanes. They shoot
+back, weakly. Attacking one = OFFENDER; destroying one = FUGITIVE,
+and its cargo spills as stolen contraband (black-market only, full
+police/pirate heat). Planets and beacons in dangerous space can show
+DISTRESS CALL! on the system map — a civilian under pirate attack;
+the wing fights them until you engage, then it's on you. Save the
+victim for credits + faction rep. Rescued ships are lockable (LB
+cycles neutral ships when no hostiles are about) and beyond-range
+contacts show as dim rim ticks instead of a flipping altitude stalk.
+
+**Galaxy chart data layers** — RB cycles SPECTRAL / THREAT (every
+star green→red by danger) / FACTION (territory by empire) / ECONOMY
+(one hue per type with an Ag·In·Hi·Ex·Re·To·Mi·Sv key; white = mixed
+ports, near-dark = no stations). Route planning without opening a
+single survey.
 
 **Trade economy pass** — market prices colour-code against galactic
-base (green = cheap here / gold = dear here: the trade matrix finally
-visible in the UI), bulk staples re-based so their margins mean
-something, and local price jitter widened ±12%. Galaxy chart gains RB data
-layers (THREAT heat-map / FACTION territory). Saves unchanged.
+base (cyan = cheap here / gold = dear here: the trade matrix finally
+visible at the counter), bulk staples re-based so their margins mean
+something, local price jitter widened ±12%. Saves unchanged.
 
-**The flight dashboard** — MENU no longer pauses: a dashboard slides up
-over the live game (top strip = mini scanner + bars, so you can watch
-trouble close in) with d-pad regions for GALAXY / SYSTEM / STATUS /
-SETTINGS. The sim keeps running inside every menu screen — picking an
-escape mid-dogfight is now a race, not a pause. No safety net by
-design.
+**Shipyard compare colours** — every spec-sheet stat colours against
+your CURRENT ship (bright green ≥+30% better → red ≤−30% worse, grey
+when matching; TIER/GUNS compare totals across slots). A yard reads
+in seconds.
 
-**Civilian traffic** — green-blip miners work the belts (visible
-chip-beams) and cargo haulers run lanes near stations. They shoot back,
-weakly. Attacking one = OFFENDER; destroying one = FUGITIVE, and its
-cargo spills as STOLEN contraband (black-market only, full police/
-pirate heat). Piracy is now a career with consequences.
+**Settings, properly wired** — VOLUME and BRIGHTNESS sliders in the
+dashboard settings, bridged to the ThumbyOne shared store: the lobby
+and every slot see the same values, applied live. (Volume was
+completely unwired before — the mixer had no master gain.)
 
-**Distress calls** — planets/beacons in dangerous space can show
-DISTRESS CALL! on the system map (red !). A civilian under pirate
-attack: the wing fights them until you engage, then it's on you. Save
-the victim for credits + faction rep; the kill tally stays honest
-(NPC-vs-NPC kills don't count toward your rank).
+**More planet colourways** — 22 realistic palettes across the six
+planet types (mercury greys, mars rusts, io sulfur, pluto cream,
+storm-navy oceans, saturn butterscotch…), same patterns.
+
+**Polish & fixes**
+- HUD left panel: three clean rows (the kills counter and chaff count
+  drew half off-screen); chaff lives top-left; SC HUD drops it
+- RANK + LEGAL standing on the status sheet's first screen
+- Auto-turrets fire on hostiles only (locking a civilian to find them
+  no longer lets your turret commit crimes)
+- Police kills still count toward rank; killing police pays nothing
+  and costs 2,300+ in fines
+- Mining: the tool is a real investment — crude blasting vaporizes
+  ~55% of ore; the MINING laser recovers all of it, 4× faster
+- LB double-tap window relaxed to 0.5 s (physical buttons missed it)
+- Per-economy trade bias table + expanded government/threat/factions
+  detail in the Pilot's Handbook
 
 ### 1.21 (ThumbyOne v1.21)
 
