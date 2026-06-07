@@ -114,6 +114,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_SIEGE") ||
         getenv("ELITE_TAPTEST") ||
         getenv("ELITE_DISTRESS") ||
+        getenv("ELITE_NEWDEATH") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -512,6 +513,33 @@ int main(int argc, char **argv) {
         for (int f = 0; f < 12; f++) elite_game_tick(&none, 1.0f/30.0f);
         printf("[dash] resume: state=%d (0=FLIGHT)\n",
                elite_game_state());
+        return 0;
+    }
+
+    /* Cross-campaign insurance guard: a NEW game dying pre-dock must
+     * respawn fresh, never load the previous campaign's save. */
+    if (getenv("ELITE_NEWDEATH")) {
+        /* fabricate an 'old campaign' save in another galaxy */
+        uint32_t cur = galaxy_get_seed();
+        galaxy_set_seed(cur ^ 0xDEADBEEF);
+        g_player.credits = 16000;
+        save_write((SysAddr){ 0, 0, 0 }, 0, 0);
+        galaxy_set_seed(cur);
+        g_player.credits = 1000;
+        printf("[newdeath] old-save galaxy differs, credits now %d\n",
+               g_player.credits);
+        /* die */
+        g_ships[0].hull = 0;
+        g_ships[0].alive = false;
+        CraftRawButtons none = {0};
+        for (int f = 0; f < 30 * 5; f++)
+            elite_game_tick(&none, 1.0f / 30.0f);
+        printf("[newdeath] after respawn: credits=%d galaxy=%s "
+               "state=%d (%s)\n", g_player.credits,
+               galaxy_get_seed() == cur ? "SAME" : "OLD CAMPAIGN!",
+               elite_game_state(),
+               (g_player.credits == 1000 && galaxy_get_seed() == cur)
+                   ? "FRESH RESPAWN" : "BODY-SNATCHED");
         return 0;
     }
 

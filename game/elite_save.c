@@ -80,6 +80,14 @@ bool save_write(SysAddr addr, int station, int kills) {
     return plat_save((const uint8_t *)&b, (int)sizeof b) != 0;
 }
 
+/* True if the stored save belongs to the given galaxy — insurance
+ * must NOT resurrect a pilot into a previous campaign (NEW GAME never
+ * deletes the old save; first dock of the new run overwrites it). */
+bool save_matches_galaxy(uint32_t seed) {
+    SaveBlob b;
+    return read_blob(&b) && b.p.galaxy_seed == seed;
+}
+
 bool save_load(SaveMeta *out) {
     SaveBlob b;
     if (!read_blob(&b)) return false;

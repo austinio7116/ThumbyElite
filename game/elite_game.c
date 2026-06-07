@@ -987,7 +987,9 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
             /* Insurance: revert to the last dock save (journey since is
              * lost). No save yet -> fresh hull at the local beacon. */
             SaveMeta meta;
-            if (save_exists() && save_load(&meta)) {
+            if (save_exists() &&
+                save_matches_galaxy(galaxy_get_seed()) &&
+                save_load(&meta)) {
                 combat_set_kills(meta.kills);
                 arrive_docked(&meta);
             } else {

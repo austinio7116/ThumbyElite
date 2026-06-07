@@ -21,5 +21,6 @@ bool save_exists(void);
 bool save_write(SysAddr addr, int station, int kills);
 /* Restores galaxy seed + player + missions + rep. Fills meta. */
 bool save_load(SaveMeta *out);
+bool save_matches_galaxy(uint32_t seed);
 
 #endif
