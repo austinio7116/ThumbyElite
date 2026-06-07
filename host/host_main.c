@@ -129,6 +129,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_CLOAKTEST") ||
         getenv("ELITE_ROCKCYCLE") ||
         getenv("ELITE_TAILTEST") ||
+        getenv("ELITE_TIERMOVIE") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -507,6 +508,89 @@ int main(int argc, char **argv) {
         for (int f = 0; f < 12; f++) elite_game_tick(&none, 1.0f/30.0f);
         printf("[dash] resume: state=%d (0=FLIGHT)\n",
                elite_game_state());
+        return 0;
+    }
+
+    /* Tier showcase movie: one duel per tier, captions in post. */
+    if (getenv("ELITE_TIERMOVIE")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        CraftRawButtons none = {0};
+        int frame = 0;
+        char fn[64];
+        #define TMV(btns) do { \
+            CraftRawButtons _b2 = (btns); \
+            elite_game_tick(&_b2, 1.0f / 30.0f); \
+            render_frame(); \
+            snprintf(fn, sizeof fn, "/tmp/tmovie/f_%05d.ppm", frame++); \
+            dump_ppm(fn); \
+        } while (0)
+        #define TMV_STEER(aimpt, rate) do { \
+            Vec3 _want = v3_norm(v3_sub((aimpt), pl->pos)); \
+            Vec3 _cur = pl->basis.r[2]; \
+            Vec3 _ax = v3_cross(_cur, _want); \
+            float _sa = v3_len(_ax); \
+            if (_sa > 1e-5f) { \
+                float _ang = asinf(_sa > 1.0f ? 1.0f : _sa); \
+                float _step = _ang < (rate) ? _ang : (rate); \
+                m3_rotate_world(&pl->basis, v3_scale(_ax, 1.0f / _sa), \
+                                _step); \
+                m3_orthonormalize(&pl->basis); \
+            } \
+        } while (0)
+        Ship *pl = &g_ships[0];
+        /* hero: a VIPER with one REINFORCED PULSE-M — fights last long
+         * enough to watch them fly */
+        g_player.hull_id = 3;
+        g_player.hull_seed = 0x77AA1u;
+        memset(g_player.mounts, 0, sizeof g_player.mounts);
+        g_player.mounts[0] = (WeaponInst){ .type = WPN_PULSE_S,
+            .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
+        g_player.ammo[0] = -1;
+        g_player.shield_eq = (WeaponInst){ .type = WPN_COUNT,
+            .quality = Q_MILITARY, .integrity = 100, .in_use = 1,
+            .tier = 2 };
+        player_apply_to_ship();
+        elite_game_debug_face_away_from_sun();
+        for (int tier = 0; tier <= 4; tier++) {
+            pl->hull = pl->hull_max;
+            pl->shield = pl->shield_max;
+            pl->vel = v3_scale(pl->basis.r[2], 20.0f);
+            int e = ship_spawn(hull_mesh(0xACE1u * (tier + 3), 1 + tier),
+                               v3_add(pl->pos,
+                                      v3_scale(pl->basis.r[2], 420.0f)),
+                               TEAM_HOSTILE);
+            if (e <= 0) break;
+            ship_set_tier(e, tier, 1 + tier);
+            printf("[tmovie] tier %d starts at frame %d\n", tier, frame);
+            CraftRawButtons bb = none;
+            bb.lb = true;
+            TMV(bb);                                  /* lock */
+            for (int f = 0; f < 30 * 26 && g_ships[e].alive; f++) {
+                Ship *t2 = &g_ships[e];
+                float d = v3_len(v3_sub(t2->pos, pl->pos));
+                /* tail them: aim with hitscan lead, manage throttle */
+                pl->throttle = (d > 250.0f) ? 1.0f
+                             : (d > 120.0f) ? 0.72f : 0.5f;
+                TMV_STEER(t2->pos, 0.07f);
+                Vec3 l = m3_mul_v3_t(&pl->basis,
+                                     v3_sub(t2->pos, pl->pos));
+                CraftRawButtons b3 = none;
+                /* mostly WATCH: 1.5s bursts, 6.5s of pure pursuit —
+                 * the showcase is how they fly, not how they die */
+                int watching = ((f + 180) % 240) >= 45;  /* pursue first */
+                if (!watching && l.z > 0 && d < 650.0f &&
+                    l.x * l.x + l.y * l.y < d * d * 0.018f)
+                    b3.a = true;
+                if (pl->shield < pl->shield_max * 0.3f)
+                    pl->shield = pl->shield_max;      /* camera rig armor */
+                TMV(b3);
+            }
+            printf("[tmovie] tier %d kill at frame %d\n", tier, frame);
+            for (int f = 0; f < 50; f++) TMV(none);   /* explosion linger */
+        }
+        printf("[tmovie] %d frames\n", frame);
+        #undef TMV
+        #undef TMV_STEER
         return 0;
     }
 
@@ -1215,8 +1299,8 @@ int main(int argc, char **argv) {
         g_player.hull_id = 5;                    /* MAULER */
         g_player.hull_seed = 0x5EED77u;
         g_player.credits = 30000;
-        g_player.mounts[0] = (WeaponInst){ .type = WPN_PULSE_M,
-            .quality = Q_REINFORCED, .integrity = 100, .in_use = 1 };
+        g_player.mounts[0] = (WeaponInst){ .type = WPN_PULSE_S,
+            .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
         g_player.mounts[1] = (WeaponInst){ .type = WPN_GAUSS,
             .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
         g_player.mounts[2] = (WeaponInst){ .type = WPN_HOMING,
