@@ -258,6 +258,39 @@ static void ai_ship(int idx, float dt) {
         }
         choose_weapon(s, dist);
         const WeaponDef *w = &k_weapons[s->weapons[s->active_w]];
+        /* RAILGUN telegraphs (user req: 0.6s kills were undodgeable):
+         * 0.9s charge with the player's own charge sfx + muzzle flare
+         * — hear it, see it, BREAK. Losing the cone aborts. */
+        static float s_rail_t[MAX_SHIPS];
+        if (s->weapons[s->active_w] == WPN_RAILGUN) {
+            int aligned = dist < w->range &&
+                          v3_dot(s->basis.r[2], dir) > k_cone[tier] &&
+                          combat_can_fire(s);
+            if (!aligned) {
+                s_rail_t[idx] = 0;
+            } else {
+                float t0 = s_rail_t[idx];
+                s_rail_t[idx] += dt;
+                if ((int)(t0 / 0.3f) != (int)(s_rail_t[idx] / 0.3f)) {
+                    sfx_charge_step((int)(s_rail_t[idx] / 0.3f));
+                    fx_spawn_spark(v3_add(s->pos,
+                                          v3_scale(s->basis.r[2],
+                                                   s->mesh->bound_r)),
+                                   s->vel);
+                }
+                if (s_rail_t[idx] >= 0.9f) {
+                    s_rail_t[idx] = 0;
+                    Vec3 latv = v3_sub(t->vel,
+                                       v3_scale(dir, v3_dot(t->vel, dir)));
+                    float sp = k_spread[tier] *
+                               (1.0f + v3_len(latv) / 90.0f);
+                    if (s->crits & CRIT_AIM) sp *= 2.2f;
+                    combat_fire(idx, sp, ti);
+                    s->fire_cool = k_refire[tier];
+                }
+            }
+            break;
+        }
         if (dist < w->range &&
             v3_dot(s->basis.r[2], dir) > k_cone[tier] &&
             combat_can_fire(s)) {

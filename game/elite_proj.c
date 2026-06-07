@@ -247,6 +247,29 @@ void proj_tick(float dt) {
             p->alive = false;
             continue;
         }
+        /* FLAK proximity fuse (user design B): pellets airburst near
+         * any ship that isn't the shooter's side — at shotgun range
+         * the whole cluster fuses on the target (devastating); at
+         * range the spread means most pellets pass wide (bad). */
+        if (p->type == WPN_FLAK) {
+            for (int v2 = 0; v2 < MAX_SHIPS; v2++) {
+                Ship *sv = &g_ships[v2];
+                if (!sv->alive || v2 == p->owner) continue;
+                if (p->owner == PLAYER && v2 == PLAYER) continue;
+                float rr = 13.0f + (sv->mesh ? sv->mesh->bound_r : 4.0f);
+                if (v3_len2(v3_sub(sv->pos, p->pos)) < rr * rr) {
+                    combat_set_shot_type(WPN_FLAK);
+                    combat_direct_damage(p->owner, v2,
+                                         k_weapons[WPN_FLAK].dmg *
+                                             p->dmg_mult, p->pos);
+                    fx_spawn_spark(p->pos, sv->vel);
+                    p->alive = false;
+                    break;
+                }
+            }
+            if (!p->alive) continue;
+        }
+
         if (hit >= 0) {
             /* Terminal evasion save (user spec: aces slip ~half of
              * seekers; chaff is the PRIMARY measure). NPC victims of

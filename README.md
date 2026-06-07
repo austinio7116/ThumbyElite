@@ -19,6 +19,10 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 - **PLASMA LANCE** (Z3, T11+, 6,400 cr): phases through shields
   straight to hull — can crit a shielded target; the BULWARK-tank
   killer, countered by thick armor
+- **FLAK reworked as a proximity shotgun** (airburst pellets:
+  devastating point-blank, wide at range); **BEAM buffed** (90/67
+  DPS); **NPC railguns telegraph** their 0.9s charge — hear the
+  tones, break (the instant 0.6s kills are gone)
 - **Kill report** — the death screen names your killer in full: rank,
   hull class, every gun, shield/armor variants, speed/turn/chaff;
   terrain deaths say so (A to claim insurance)
