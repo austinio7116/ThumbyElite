@@ -756,24 +756,30 @@ int main(int argc, char **argv) {
     /* Verify a weapon's sfx produces audio (non-silent render). */
     if (getenv("ELITE_SFXTEST")) {
         const char *nm = getenv("ELITE_SFXTEST");
-        int wt = WPN_BLASTER;
-        if (nm && nm[0]=='P') wt = WPN_PLASMA;
-        if (nm && nm[0]>='0' && nm[0]<='2') {
-            sfx_set_laser(nm[0]-'0'); wt = WPN_PULSE_S;
+        int wt = WPN_PULSE_S;
+        for (const char *c = nm; c && *c; c++) {
+            if (*c >= '0' && *c <= '2') sfx_set_laser(*c - '0');
+            else if (*c == 'P') wt = WPN_PLASMA;
+            else if (*c == 'L') wt = WPN_LANCE;
+            else if (*c == 'B') wt = WPN_BLASTER;
+            else if (*c == 'M') wt = WPN_PULSE_M;
+            else if (*c == 'G') wt = WPN_PULSE_L;
         }
         extern void sfx_weapon(int wpn_type, float amp);
         sfx_weapon(wt, 1.0f);
-        int16_t buf[512]; int peak = 0;
-        for (int b = 0; b < 20; b++) {
+        int16_t buf[512]; int peak = 0; int last_loud = 0;
+        for (int b = 0; b < 60; b++) {
             audio_render(buf, 512);
             for (int i = 0; i < 512; i++) {
                 int a = buf[i] < 0 ? -buf[i] : buf[i];
                 if (a > peak) peak = a;
+                if (a > 800) last_loud = b;
             }
         }
-        printf("[sfx] %s peak amplitude: %d (%s)\n",
-               wt == WPN_BLASTER ? "BLASTER" : "PLASMA", peak,
-               peak > 200 ? "AUDIBLE" : "SILENT");
+        printf("[sfx] tail: audible through block %d/60 (~%.2fs)\n",
+               last_loud, last_loud * 512.0f / 22050.0f);
+        printf("[sfx] wt=%d peak amplitude: %d (%s)\n",
+               wt, peak, peak > 200 ? "AUDIBLE" : "SILENT");
         return 0;
     }
 
