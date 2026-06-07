@@ -294,7 +294,17 @@ int main(int argc, char **argv) {
         if (elite_game_state() != 7) { printf("[yc] no dock\n"); return 1; }
         TY(down, 2);                      /* HOME -> SHIPYARD */
         TY(a, 6);
+        printf("[yc] own hull=%d\n", g_player.hull_id);
         TY(b, 8);                         /* detail on offer 0 */
+        /* the figure must compare a ship that ISN'T ours: cycle until
+         * the offer's class differs from the player's hull */
+        for (int tries = 0; tries < 6; tries++) {
+            extern int station_preview2(uint32_t *, int *);
+            uint32_t seed2; int cls2;
+            station_preview2(&seed2, &cls2);
+            if (cls2 != g_player.hull_id) break;
+            TY(rb, 8);
+        }
         for (int k = 0; k < 20; k++) elite_game_tick(&none, 1.0f/30.0f);
         render_frame(); dump_ppm("/tmp/yc_live_detail.ppm");
         TY(rb, 8);                        /* next offer */
