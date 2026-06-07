@@ -127,6 +127,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_PLASMATEST") ||
         getenv("ELITE_COLTEST") ||
         getenv("ELITE_CLOAKTEST") ||
+        getenv("ELITE_ROCKCYCLE") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -505,6 +506,47 @@ int main(int argc, char **argv) {
         for (int f = 0; f < 12; f++) elite_game_tick(&none, 1.0f/30.0f);
         printf("[dash] resume: state=%d (0=FLIGHT)\n",
                elite_game_state());
+        return 0;
+    }
+
+    /* Rock-mode target stepping (user: lock stuck on one rock). */
+    if (getenv("ELITE_ROCKCYCLE")) {
+        extern int elite_game_debug_rock_target(void);
+        rocks_spawn_field(0xBEEF, 6);
+        CraftRawButtons none = {0}, b;
+        /* LB double-tap twice: AUTO -> SALVAGE -> ROCKS */
+        for (int k = 0; k < 2; k++) {
+            b = none; b.lb = true;
+            elite_game_tick(&b, 1.0f / 30.0f);
+            elite_game_tick(&none, 1.0f / 30.0f);
+            b = none; b.lb = true;
+            elite_game_tick(&b, 1.0f / 30.0f);
+            for (int f = 0; f < 25; f++)   /* clear the double window */
+                elite_game_tick(&none, 1.0f / 30.0f);
+        }
+        {
+            extern const char *elite_game_debug_toast(void);
+            printf("[rockcycle] class toast: %s\n",
+                   elite_game_debug_toast());
+        }
+        int seen[6], n = 0;
+        for (int taps = 0; taps < 6; taps++) {
+            b = none; b.lb = true;
+            elite_game_tick(&b, 1.0f / 30.0f);
+            for (int f = 0; f < 20; f++)
+                elite_game_tick(&none, 1.0f / 30.0f);
+            seen[n++] = elite_game_debug_rock_target();
+        }
+        printf("[rockcycle] taps -> rocks: %d %d %d %d %d %d\n",
+               seen[0], seen[1], seen[2], seen[3], seen[4], seen[5]);
+        int distinct = 0;
+        for (int i = 0; i < n; i++) {
+            int dup = 0;
+            for (int j = 0; j < i; j++) if (seen[j] == seen[i]) dup = 1;
+            if (!dup && seen[i] >= 0) distinct++;
+        }
+        printf("[rockcycle] distinct rocks visited: %d (%s)\n", distinct,
+               distinct >= 3 ? "STEPPING" : "STUCK");
         return 0;
     }
 

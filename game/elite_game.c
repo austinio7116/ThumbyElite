@@ -83,6 +83,8 @@ static float s_scan_t;           /* manifest scan accumulator */
 static int   s_scan_done = -1;   /* target already read */
 static int   s_loot_target = -1; /* canister lock (no hostiles about) */
 static int   s_rock_target = -1; /* prospector lock (belt finding aid) */
+static int   s_prev_rock = -1;   /* last cycled rock (stepping state) */
+static int   s_prev_loot = -1;
 static uint32_t s_entry_salt;    /* per-system-entry, salts transient
                                     events (distress) so revisits differ */
 static int   s_distress_civ = -1; /* live distress event: the victim */
@@ -152,6 +154,7 @@ void elite_game_debug_jump(SysAddr addr) {
 
 int elite_game_debug_target(void) { return s_target; }
 bool elite_game_cloaked(void) { return s_cloak_t > 0.0f; }
+int elite_game_debug_rock_target(void) { return s_rock_target; }
 
 /* Debug: jump the anchor straight to POI n (harness only). */
 void elite_game_debug_goto_poi(int n) {
@@ -557,15 +560,41 @@ static void cycle_target(void) {
         s_station_lock = false;
         s_rock_target = -1;
         if (s_tgt_class == 1) {
-            s_loot_target = loot_nearest(pp, NULL);
-        } else {
-            Vec3 rk[8];
-            int nr = rocks_positions(rk, 8);
-            float bd2 = 1e30f;
-            for (int i = 0; i < nr; i++) {
-                float d2 = v3_len(v3_sub(rk[i], pp));
-                if (d2 < bd2) { bd2 = d2; s_rock_target = i; }
+            /* step to the next-farther canister; wrap to nearest
+             * (user report: the lock stuck on one target) */
+            Vec3 lp[6]; int lc[6];
+            int nl = loot_positions(lp, lc, 6);
+            float cur_d = (s_prev_loot >= 0 && s_prev_loot < nl)
+                              ? v3_len(v3_sub(lp[s_prev_loot], pp))
+                              : -1.0f;
+            int first = -1, next = -1;
+            float fd = 1e30f, nd = 1e30f;
+            for (int i = 0; i < nl; i++) {
+                float d = v3_len(v3_sub(lp[i], pp));
+                if (d < fd) { fd = d; first = i; }
+                if (cur_d >= 0 && d > cur_d && d < nd) { nd = d; next = i; }
             }
+            s_loot_target = (next >= 0) ? next : first;
+            s_prev_loot = s_loot_target;
+        } else {
+            /* same stepping for rocks */
+            float cur_d = -1.0f;
+            {
+                Vec3 cp; float cr;
+                if (s_prev_rock >= 0 && rocks_get(s_prev_rock, &cp, &cr))
+                    cur_d = v3_len(v3_sub(cp, pp));
+            }
+            int first = -1, next = -1;
+            float fd = 1e30f, nd = 1e30f;
+            for (int i = 0; i < 8; i++) {
+                Vec3 rp; float rr;
+                if (!rocks_get(i, &rp, &rr)) continue;
+                float d = v3_len(v3_sub(rp, pp));
+                if (d < fd) { fd = d; first = i; }
+                if (cur_d >= 0 && d > cur_d && d < nd) { nd = d; next = i; }
+            }
+            s_rock_target = (next >= 0) ? next : first;
+            s_prev_rock = s_rock_target;
         }
         return;
     }

@@ -110,9 +110,9 @@ void collide_tick(int station_alive, float station_r, int player_manual) {
             if (vi > COL_MIN_SPEED) {
                 float base = (vi - COL_MIN_SPEED) * COL_DMG_K;
                 collide_damage(i, base * (mr / (ms + mr)) * 2.0f);
-                /* ramming chips ore at crude yield — the bulldozer */
-                Vec3 hit = v3_sub(s->pos, v3_scale(n, sr));
-                rocks_damage(r, vi * 0.8f, 0.45f, hit);
+                /* no ore from ramming (user rule: no benefit for poor
+                 * flying) — just the dent and the bounce */
+                fx_spawn_spark(v3_sub(s->pos, v3_scale(n, sr)), s->vel);
                 if (i == PLAYER) sfx_hit_hull();
             }
         }
