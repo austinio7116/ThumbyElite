@@ -445,6 +445,188 @@ static int free_slot_for(int wpn_type) {
     return -1;
 }
 
+/* --- action popup (user design: A on an item opens its actions) ---- */
+enum { PACT_REPAIR, PACT_SWAP, PACT_UNFIT, PACT_SELL, PACT_FIT };
+static uint8_t s_pop_open, s_pop_n, s_pop_cur;
+static uint8_t s_pop_acts[4];
+static int s_pop_row;
+/* swap picker: choose the counterpart explicitly (never lose a gun
+ * to an implicit pick) */
+static uint8_t s_pick_open, s_pick_n, s_pick_cur;
+static int8_t s_pick_items[6];      /* mount idx or rack idx */
+static const char *pact_name(int a) {
+    switch (a) {
+    case PACT_REPAIR: return "REPAIR";
+    case PACT_SWAP:   return "SWAP";
+    case PACT_UNFIT:  return "UNFIT";
+    case PACT_SELL:   return "SELL";
+    default:          return "FIT";
+    }
+}
+
+/* Ammo-aware 1-1 exchange between a weapon mount and a rack slot. */
+static void swap_mount_rack(int mount, int rack) {
+    WeaponInst *mv = &g_player.mounts[mount];
+    WeaponInst *sv = &g_player.salvage[rack];
+    player_stash_mount_ammo(mount);     /* outgoing keeps its magazine */
+    WeaponInst tmp = *mv;
+    *mv = *sv;
+    *sv = tmp;
+    player_fit_restore_ammo(mount);     /* incoming brings its own */
+    player_apply_to_ship();
+    toast("SWAPPED");
+}
+
+/* Build the popup's action list for the cursor row. Returns false if
+ * the row has no popup (shop rows buy directly). */
+static bool popup_build(int row) {
+    if (row >= s_n_rows) return false;
+    const OutfitRow *r = &s_rows[row];
+    s_pop_n = 0;
+    switch (r->kind) {
+    case ROW_MOUNT: {
+        const WeaponInst *m = &g_player.mounts[r->index];
+        if (!m->in_use) return false;
+        if (m->integrity < 100) s_pop_acts[s_pop_n++] = PACT_REPAIR;
+        s_pop_acts[s_pop_n++] = PACT_SWAP;
+        s_pop_acts[s_pop_n++] = PACT_UNFIT;
+        s_pop_acts[s_pop_n++] = PACT_SELL;
+        break;
+    }
+    case ROW_EQUIP:
+    case ROW_UTIL:
+    case ROW_TURRET: {
+        const WeaponInst *e =
+            (r->kind == ROW_EQUIP) ? equip_slot(r->index)
+          : (r->kind == ROW_UTIL)  ? &g_player.util_eq[r->index]
+                                   : &g_player.turret_eq;
+        if (!e || !e->in_use) return false;
+        if (e->integrity < 100) s_pop_acts[s_pop_n++] = PACT_REPAIR;
+        s_pop_acts[s_pop_n++] = PACT_UNFIT;
+        s_pop_acts[s_pop_n++] = PACT_SELL;
+        break;
+    }
+    case ROW_SALV: {
+        const WeaponInst *sv = &g_player.salvage[r->index];
+        if (!sv->in_use) return false;
+        if (sv->type < WPN_COUNT) {
+            s_pop_acts[s_pop_n++] =
+                (free_slot_for(sv->type) >= 0) ? PACT_FIT : PACT_SWAP;
+        } else {
+            s_pop_acts[s_pop_n++] = PACT_FIT;   /* equip fit/swap path */
+        }
+        if (sv->integrity < 100) s_pop_acts[s_pop_n++] = PACT_REPAIR;
+        s_pop_acts[s_pop_n++] = PACT_SELL;
+        break;
+    }
+    default:
+        return false;
+    }
+    s_pop_row = row;
+    s_pop_cur = 0;
+    return s_pop_n > 0;
+}
+
+/* Build the swap counterpart list. Fitted mount -> compatible racked
+ * weapons; racked weapon -> occupied size-compatible mounts. */
+static void pick_build(void) {
+    const OutfitRow *r = &s_rows[s_pop_row];
+    const HullDef *h = &k_hulls[g_player.hull_id];
+    s_pick_n = 0;
+    s_pick_cur = 0;
+    if (r->kind == ROW_MOUNT) {
+        int ssz = h->slot_size[r->index];
+        for (int i = 0; i < MAX_SALVAGE && s_pick_n < 6; i++) {
+            const WeaponInst *sv = &g_player.salvage[i];
+            if (sv->in_use && sv->type < WPN_COUNT &&
+                k_weapons[sv->type].size <= ssz)
+                s_pick_items[s_pick_n++] = (int8_t)i;
+        }
+    } else {
+        int wsz = k_weapons[g_player.salvage[r->index].type].size;
+        for (int i = 0; i < h->n_slots && s_pick_n < 6; i++)
+            if (h->slot_size[i] >= wsz && g_player.mounts[i].in_use)
+                s_pick_items[s_pick_n++] = (int8_t)i;
+    }
+}
+
+static void outfit_action_a(int row);
+static void outfit_action_b(int row);
+
+/* Run the chosen popup action. REPAIR reuses the old A handlers; UNFIT
+ * and SELL reuse B-paths or sell directly; FIT is the old rack fit;
+ * SWAP opens the explicit counterpart picker. */
+static void popup_execute(void) {
+    const OutfitRow *r = &s_rows[s_pop_row];
+    int act = s_pop_acts[s_pop_cur];
+    s_pop_open = 0;
+    switch (act) {
+    case PACT_REPAIR:
+        if (r->kind == ROW_SALV) {
+            WeaponInst *sv = &g_player.salvage[r->index];
+            int cost = (int)((100 - sv->integrity) *
+                             instance_price(sv) / 100 *
+                             0.6f * skill_repair_mult()) + 1;
+            if (g_player.credits < cost) { toast("NO CREDITS"); return; }
+            g_player.credits -= cost;
+            sv->integrity = 100;
+            g_player.xp_tech += 1;
+            toast("REPAIRED");
+        } else {
+            outfit_action_a(s_pop_row);    /* old A = repair fitted */
+        }
+        break;
+    case PACT_UNFIT:
+        if (r->kind == ROW_MOUNT) player_stash_mount_ammo(r->index);
+        outfit_action_b(s_pop_row);        /* old B = unfit to rack */
+        break;
+    case PACT_SELL:
+        if (r->kind == ROW_SALV) {
+            outfit_action_b(s_pop_row);    /* old B on rack = sell */
+        } else if (r->kind == ROW_MOUNT) {
+            WeaponInst *m = &g_player.mounts[r->index];
+            player_stash_mount_ammo(r->index);
+            int v = (int)(instance_price(m) *
+                          (0.35f + 0.30f * m->integrity * 0.01f));
+            g_player.credits += v;
+            m->in_use = 0;
+            player_apply_to_ship();
+            toast("SOLD");
+        } else {
+            WeaponInst *e =
+                (r->kind == ROW_EQUIP) ? equip_slot(r->index)
+              : (r->kind == ROW_UTIL)  ? &g_player.util_eq[r->index]
+                                       : &g_player.turret_eq;
+            if (!e || !e->in_use) return;
+            int v = (int)(instance_price(e) *
+                          (0.35f + 0.30f * e->integrity * 0.01f));
+            g_player.credits += v;
+            e->in_use = 0;
+            player_apply_to_ship();
+            toast("SOLD");
+        }
+        break;
+    case PACT_FIT:
+        outfit_action_a(s_pop_row);        /* old A on rack = fit/swap */
+        break;
+    case PACT_SWAP:
+        pick_build();
+        if (s_pick_n == 0) {
+            if (r->kind == ROW_SALV) {
+                char tb[20];
+                snprintf(tb, sizeof tb, "NEEDS Z%d SLOT",
+                         k_weapons[g_player.salvage[r->index].type].size);
+                toast(tb);
+            } else {
+                toast("NOTHING RACKED");
+            }
+            return;
+        }
+        s_pick_open = 1;
+        break;
+    }
+}
+
 static void outfit_action_a(int row) {
     if (row >= s_n_rows) return;
     const OutfitRow *r = &s_rows[row];
@@ -596,38 +778,19 @@ static void outfit_action_a(int row) {
         }
         int slot = free_slot_for(sv->type);
         if (slot < 0) {
-            /* Full mounts: SWAP with the first size-compatible mount —
-             * the displaced gun takes this rack slot, so no free rack
-             * space is needed (user-caught lock: full mounts + full
-             * rack forced a sale). */
-            const HullDef *h = &k_hulls[g_player.hull_id];
-            int wsz = k_weapons[sv->type].size;
-            for (int i = 0; i < h->n_slots; i++)
-                if (h->slot_size[i] >= wsz &&
-                    g_player.mounts[i].in_use) { slot = i; break; }
-            if (slot < 0) {
-                char tb[20];
-                snprintf(tb, sizeof tb, "NEEDS Z%d SLOT",
-                         k_weapons[sv->type].size);
-                toast(tb);
-                return;
-            }
-            WeaponInst old2 = g_player.mounts[slot];
-            g_player.mounts[slot] = *sv;
-            *sv = old2;
-            player_load_mount_ammo(slot,
-                g_player.mounts[slot].integrity >= 100 ? 1.0f : 0.4f);
-            player_apply_to_ship();
-            toast("SWAPPED");
+            /* shouldn't happen via the popup (FIT is gated on a free
+             * slot; SWAP uses the picker) — safety toast only */
+            char tb[20];
+            snprintf(tb, sizeof tb, "NEEDS Z%d SLOT",
+                     k_weapons[sv->type].size);
+            toast(tb);
             return;
         }
         g_player.mounts[slot] = *sv;
         sv->in_use = 0;
-        /* Factory-fresh (100%) racked guns come sealed with a full
-         * magazine; battle salvage arrives part-loaded. */
-        player_load_mount_ammo(slot,
-                               g_player.mounts[slot].integrity >= 100
-                                   ? 1.0f : 0.4f);
+        /* Stored magazine if the instance carries one; factory rules
+         * otherwise (sealed = full, salvage = 40%). */
+        player_fit_restore_ammo(slot);
         player_apply_to_ship();
         toast("FITTED");
         break;
@@ -705,9 +868,10 @@ static void outfit_action_b(int row) {
         break;
     }
     case ROW_MOUNT: {
-        /* Unmount into the salvage rack. */
+        /* Unmount into the salvage rack (magazine rides along). */
         WeaponInst *m = &g_player.mounts[r->index];
         if (!m->in_use) return;
+        player_stash_mount_ammo(r->index);
         int sl = player_free_rack_slot();
         if (sl < 0 || player_cargo_total() >= player_cargo_cap()) {
             toast("NO RACK SPACE");
@@ -838,6 +1002,29 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
 
     case SCR_OUTFIT:
         outfit_build_rows();
+        if (s_pick_open) {
+            /* explicit swap counterpart picker */
+            if (up && s_pick_cur > 0) s_pick_cur--;
+            if (down && s_pick_cur < s_pick_n - 1) s_pick_cur++;
+            if (a_edge) {
+                const OutfitRow *r = &s_rows[s_pop_row];
+                int other = s_pick_items[s_pick_cur];
+                if (r->kind == ROW_MOUNT)
+                    swap_mount_rack(r->index, other);
+                else
+                    swap_mount_rack(other, r->index);
+                s_pick_open = 0;
+            }
+            if (b_edge || back) s_pick_open = 0;
+            break;
+        }
+        if (s_pop_open) {
+            if (up && s_pop_cur > 0) s_pop_cur--;
+            if (down && s_pop_cur < s_pop_n - 1) s_pop_cur++;
+            if (a_edge) popup_execute();
+            if (b_edge || back) s_pop_open = 0;
+            break;
+        }
         if (s_detail) {
             /* LB/RB loop through every row WITH a sheet, wrapping at
              * the ends (user req) — headers, empty mounts and bare
@@ -870,7 +1057,12 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
         if (s_cursor > s_scroll + 8) s_scroll = s_cursor - 8;
         if (lb_edge && row_detailable(&s_rows[s_cursor]))
             s_detail = 1;
-        if (a_edge) outfit_action_a(s_cursor);
+        if (a_edge) {
+            /* Items open their action popup (user design); shop rows
+             * still buy directly. */
+            if (popup_build(s_cursor)) s_pop_open = 1;
+            else outfit_action_a(s_cursor);
+        }
         if (b_edge) outfit_action_b(s_cursor);
         if (back) { s_screen = SCR_HOME; s_cursor = 2; }
         break;
@@ -1286,7 +1478,59 @@ static void draw_outfit(uint16_t *fb) {
         }
     }
     hl(fb, 113, COL_GRID);
-    craft_font_draw(fb, "A:ACT B:UNFIT/SELL LB:INFO", 2, 116, COL_DIM);
+    craft_font_draw(fb, "A:ACTIONS B:UNFIT/SELL LB:INFO", 2, 116,
+                    COL_DIM);
+    /* action popup */
+    if (s_pop_open) {
+        int ph = 14 + s_pop_n * 9;
+        int py0 = 56 - ph / 2;
+        for (int y = py0; y < py0 + ph; y++)
+            for (int x = 34; x < 94; x++)
+                fb[y * ELITE_FB_W + x] = RGB565C(8, 11, 20);
+        for (int x = 34; x < 94; x++) {
+            fb[py0 * ELITE_FB_W + x] = RGB565C(70, 86, 115);
+            fb[(py0 + ph - 1) * ELITE_FB_W + x] = RGB565C(70, 86, 115);
+        }
+        for (int y = py0; y < py0 + ph; y++) {
+            fb[y * ELITE_FB_W + 34] = RGB565C(70, 86, 115);
+            fb[y * ELITE_FB_W + 93] = RGB565C(70, 86, 115);
+        }
+        for (int i = 0; i < s_pop_n; i++) {
+            uint16_t c = (i == s_pop_cur) ? COL_CUR : COL_DIM;
+            if (i == s_pop_cur)
+                craft_font_draw(fb, ">", 39, py0 + 7 + i * 9, c);
+            craft_font_draw(fb, pact_name(s_pop_acts[i]), 46,
+                            py0 + 7 + i * 9, c);
+        }
+    }
+    /* swap counterpart picker */
+    if (s_pick_open) {
+        const OutfitRow *r = &s_rows[s_pop_row];
+        int ph = 22 + s_pick_n * 9;
+        int py0 = 56 - ph / 2;
+        for (int y = py0; y < py0 + ph; y++)
+            for (int x = 16; x < 112; x++)
+                fb[y * ELITE_FB_W + x] = RGB565C(8, 11, 20);
+        for (int x = 16; x < 112; x++) {
+            fb[py0 * ELITE_FB_W + x] = RGB565C(245, 200, 80);
+            fb[(py0 + ph - 1) * ELITE_FB_W + x] = RGB565C(245, 200, 80);
+        }
+        craft_font_draw(fb, "SWAP WITH:", 22, py0 + 4,
+                        RGB565C(245, 200, 80));
+        for (int i = 0; i < s_pick_n; i++) {
+            const WeaponInst *o =
+                (r->kind == ROW_MOUNT)
+                    ? &g_player.salvage[s_pick_items[i]]
+                    : &g_player.mounts[s_pick_items[i]];
+            uint16_t c = (i == s_pick_cur) ? COL_CUR : COL_DIM;
+            char nb[22];
+            snprintf(nb, sizeof nb, "%s %s",
+                     k_weapons[o->type].name, k_qtag[o->quality]);
+            if (i == s_pick_cur)
+                craft_font_draw(fb, ">", 20, py0 + 14 + i * 9, c);
+            craft_font_draw(fb, nb, 27, py0 + 14 + i * 9, c);
+        }
+    }
     craft_font_draw(fb, "MENU:BACK", 2, 123, COL_DIM);
 }
 

@@ -230,6 +230,34 @@ void player_rearm(void) {
     }
 }
 
+/* Write the live magazine into the instance before it leaves the
+ * mount (unfit / swap-out / sell). */
+void player_stash_mount_ammo(int mount) {
+    WeaponInst *m = &g_player.mounts[mount];
+    if (!m->in_use || !k_weapons[m->type].ammo_max) return;
+    int a = g_player.ammo[mount];
+    if (a < 0) a = 0;
+    if (a > 255) a = 255;
+    m->ammo_lo = (uint8_t)a;
+    m->ammo_flag = 1;
+}
+
+/* Fit-time load: stored magazine if the instance carries one,
+ * factory rules otherwise (sealed = full, battle salvage = 40%). */
+void player_fit_restore_ammo(int mount) {
+    WeaponInst *m = &g_player.mounts[mount];
+    int maxa = m->in_use ? k_weapons[m->type].ammo_max : 0;
+    if (!maxa) { g_player.ammo[mount] = -1; return; }
+    if (m->ammo_flag) {
+        int a = m->ammo_lo;
+        if (a > maxa) a = maxa;
+        g_player.ammo[mount] = (int16_t)a;
+    } else {
+        g_player.ammo[mount] =
+            (int16_t)(m->integrity >= 100 ? maxa : maxa * 2 / 5);
+    }
+}
+
 void player_load_mount_ammo(int mount, float fill01) {
     const WeaponInst *m = &g_player.mounts[mount];
     int maxa = m->in_use ? k_weapons[m->type].ammo_max : 0;

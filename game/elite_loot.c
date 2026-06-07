@@ -103,6 +103,11 @@ void loot_on_kill(Vec3 pos, Vec3 vel, int tier) {
                     c->comp.affix = AFX_TUNED;
             }
             c->comp.integrity = (uint8_t)(20 + rnd() % 55);
+            /* battle salvage arrives part-loaded, never sealed */
+            c->comp.ammo_flag = 1;
+            c->comp.ammo_lo = (uint8_t)(
+                (c->comp.type < WPN_COUNT
+                     ? k_weapons[c->comp.type].ammo_max : 0) * 2 / 5);
             c->comp.in_use = 1;
         } else {
             c->good = (uint8_t)(rnd() % 16u);   /* legal goods only */

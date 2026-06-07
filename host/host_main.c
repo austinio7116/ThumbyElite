@@ -119,6 +119,8 @@ int main(int argc, char **argv) {
         getenv("ELITE_PLANETSHEET") ||
         getenv("ELITE_STOLENTEST") ||
         getenv("ELITE_YARDCOLOR") ||
+        getenv("ELITE_SWAPTEST") ||
+        getenv("ELITE_POPSHOT") ||
         getenv("ELITE_SHOT")) {
         /* Harnesses start in-game: skip the title via NEW GAME. */
         remove("thumbyelite.sav");
@@ -192,6 +194,75 @@ int main(int argc, char **argv) {
             made++;
         }
         printf("[planets] wrote %d\n", made);
+        return 0;
+    }
+
+    /* Popup UI shots: A on the fitted mount, then SWAP's picker. */
+    if (getenv("ELITE_POPSHOT")) {
+        /* rack a second gun so SWAP has a counterpart */
+        g_player.salvage[0] = (WeaponInst){ .type = WPN_AUTOCANNON,
+            .quality = 2, .integrity = 90, .in_use = 1,
+            .ammo_flag = 1, .ammo_lo = 80 };
+        CraftRawButtons none = {0}, b;
+        #define TP(field, settle) do { \
+            b = none; b.field = true; \
+            elite_game_tick(&b, 1.0f / 30.0f); \
+            for (int k = 0; k < (settle); k++) \
+                elite_game_tick(&none, 1.0f / 30.0f); \
+        } while (0)
+        /* dock at the station (same dance as TRADETEST) */
+        for (int k = 0; k < 30; k++) elite_game_tick(&none, 1.0f/30.0f);
+        TP(menu, 12); TP(right, 3); TP(a, 4);
+        for (int i = 0; i < 5; i++) TP(down, 2);
+        TP(a, 4);
+        int f = 0;
+        while (elite_game_state() == 1 && f++ < 30 * 240)
+            elite_game_tick(&none, 1.0f / 30.0f);
+        b = none; b.lb = b.rb = true;
+        for (int k = 0; k < 8; k++) elite_game_tick(&b, 1.0f / 30.0f);
+        f = 0;
+        while (elite_game_state() == 6 && f++ < 200)
+            elite_game_tick(&none, 1.0f / 30.0f);
+        for (int k = 0; k < 12; k++) elite_game_tick(&none, 1.0f/30.0f);
+        if (elite_game_state() != 7) { printf("[pop] no dock\n"); return 1; }
+        TP(down, 2); TP(down, 2);            /* HOME -> OUTFITTING */
+        TP(a, 6);
+        TP(a, 4);                            /* popup on first mount */
+        render_frame(); dump_ppm("/tmp/pop_menu.ppm");
+        TP(down, 2);                         /* cursor to SWAP */
+        TP(a, 4);                            /* open picker */
+        render_frame(); dump_ppm("/tmp/pop_pick.ppm");
+        TP(a, 4);                            /* confirm swap */
+        render_frame(); dump_ppm("/tmp/pop_done.ppm");
+        printf("[pop] mount now=%d rack now=%d ammo=%d\n",
+               g_player.mounts[0].type, g_player.salvage[0].type,
+               g_player.ammo[0]);
+        return 0;
+    }
+
+    /* Magazine conservation through unfit/refit (the free-reload
+     * exploit): fit AC, fire it down, unfit, refit, count rounds. */
+    if (getenv("ELITE_SWAPTEST")) {
+        ship_fit_weapon(0, 0, WPN_AUTOCANNON);
+        g_player.mounts[0] = (WeaponInst){ .type = WPN_AUTOCANNON,
+            .quality = 1, .integrity = 100, .in_use = 1 };
+        player_fit_restore_ammo(0);
+        int full = g_player.ammo[0];
+        g_player.ammo[0] = 37;               /* fired most of the mag */
+        player_stash_mount_ammo(0);          /* unfit path stashes */
+        WeaponInst saved = g_player.mounts[0];
+        g_player.mounts[0].in_use = 0;
+        g_player.mounts[0] = saved;          /* refit the same gun */
+        player_fit_restore_ammo(0);
+        printf("[swap] full=%d fired-down=37 after-refit=%d (%s)\n",
+               full, g_player.ammo[0],
+               g_player.ammo[0] == 37 ? "CONSERVED" : "FREE RELOAD BUG");
+        /* factory gun still arrives sealed */
+        g_player.mounts[0] = (WeaponInst){ .type = WPN_AUTOCANNON,
+            .quality = 1, .integrity = 100, .in_use = 1 };
+        player_fit_restore_ammo(0);
+        printf("[swap] factory seal: %d/%d (%s)\n", g_player.ammo[0],
+               full, g_player.ammo[0] == full ? "SEALED" : "WRONG");
         return 0;
     }
 

@@ -26,7 +26,12 @@ typedef struct {
     uint8_t in_use;      /* slot occupied */
     uint8_t tier;        /* equipment size 1..3 (weapons: unused) */
     uint8_t affix;       /* Affix: factory modification (0 = none) */
-    uint8_t pad[2];
+    /* Magazine state rides with the instance (swapping a part-fired
+     * gun out and in must NOT refill it for free): ammo_flag 0 =
+     * factory-sealed (full load on fit), 1 = ammo_lo holds the stored
+     * round count. Same bytes as the old pad - no save change. */
+    uint8_t ammo_lo;
+    uint8_t ammo_flag;
 } WeaponInst;
 
 #define MAX_SALVAGE 10  /* array size; per-hull limit = HullDef.rack */
@@ -71,6 +76,9 @@ void player_sync_ammo(int ship_slot, int ammo);  /* combat writeback */
 int  player_rearm_cost(void);        /* full restock price */
 void player_rearm(void);             /* set all mounts to max */
 void player_load_mount_ammo(int mount, float fill01);
+/* Magazine bookkeeping for unfit/swap (rides in the instance). */
+void player_stash_mount_ammo(int mount);
+void player_fit_restore_ammo(int mount);
 
 /* Quality multipliers. */
 float quality_dmg_mult(int q);       /* 0.8 .. 1.35 */
