@@ -140,6 +140,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_DODGETEST") ||
         getenv("ELITE_BENDTEST") ||
         getenv("ELITE_SPEEDKILL") ||
+        getenv("ELITE_KILLSCREEN") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -573,6 +574,24 @@ int main(int argc, char **argv) {
             }
         printf("[orbit] outermost: avg=%.0f worst=%.0f Mm over %d\n",
                sum / (n ? n : 1), worst, n);
+        return 0;
+    }
+
+    /* Kill report screenshot. */
+    if (getenv("ELITE_KILLSCREEN")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Ship *pl = &g_ships[0];
+        int e = ship_spawn(hull_mesh(0xACE1u, 4),
+                           v3_add(pl->pos, v3(0, 0, 200)), TEAM_HOSTILE);
+        ship_set_tier(e, 3, 4);
+        pl->shield = 1; pl->hull = 1;
+        CraftRawButtons none = {0};
+        for (int f = 0; f < 30 * 12 && g_ships[0].alive; f++)
+            elite_game_tick(&none, 1.0f / 30.0f);
+        for (int f = 0; f < 50; f++)
+            elite_game_tick(&none, 1.0f / 30.0f);
+        render_frame();
+        dump_ppm("/tmp/killscreen.ppm");
         return 0;
     }
 
@@ -1480,8 +1499,13 @@ int main(int argc, char **argv) {
         g_ships[0].hull = 0;
         g_ships[0].alive = false;
         CraftRawButtons none = {0};
-        for (int f = 0; f < 30 * 5; f++)
+        for (int f = 0; f < 30 * 2; f++)
             elite_game_tick(&none, 1.0f / 30.0f);
+        {   /* kill screen waits for A now */
+            CraftRawButtons a = none; a.a = true;
+            for (int f = 0; f < 30; f++)
+                elite_game_tick(&a, 1.0f / 30.0f);
+        }
         printf("[newdeath] after respawn: credits=%d galaxy=%s "
                "state=%d (%s)\n", g_player.credits,
                galaxy_get_seed() == cur ? "SAME" : "OLD CAMPAIGN!",

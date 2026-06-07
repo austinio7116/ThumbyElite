@@ -19,6 +19,13 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 - **PLASMA LANCE** (Z3, T11+, 6,400 cr): phases through shields
   straight to hull — can crit a shielded target; the BULWARK-tank
   killer, countered by thick armor
+- **Kill report** — the death screen names your killer in full: rank,
+  hull class, every gun, shield/armor variants, speed/turn/chaff;
+  terrain deaths say so (A to claim insurance)
+- **Better attack runs** — fast tiers now break to RANGE (not time)
+  before wheeling in: proper boom-and-zoom passes; HARMLESS aim
+  tightened (less of a cliff below NOVICE); monotone AI skill tables;
+  ladder re-anchored
 - **PHOTON BLASTER** (Z2, T8+, 3,400 cr): slower plasma-style bolts
   that bend gently toward your lock — forgiveness, not homing (chaff
   ignores them)

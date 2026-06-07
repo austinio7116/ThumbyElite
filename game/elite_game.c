@@ -85,6 +85,13 @@ static int   s_loot_target = -1; /* canister lock (no hostiles about) */
 static int   s_rock_target = -1; /* prospector lock (belt finding aid) */
 static int   s_prev_rock = -1;   /* last cycled rock (stepping state) */
 static int   s_prev_loot = -1;
+static struct {
+    int valid, env;
+    uint8_t tier, cls, nw, wpn[3], shv, arv, chaff, turret, police;
+    float spd, trn, hull, shd;
+} s_kr;                          /* the kill report (death screen) */
+static bool  s_dead_latch;
+static float s_respawn_t;
 static uint32_t s_entry_salt;    /* per-system-entry, salts transient
                                     events (distress) so revisits differ */
 static int   s_distress_civ = -1; /* live distress event: the victim */
@@ -831,10 +838,10 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
     elite_input_update(btn, dt, &in);
 
     Ship *p = &g_ships[PLAYER];
-    static bool dead_latch = false;
-    static float respawn_t;
+    bool dead_latch = s_dead_latch;
+    (void)dead_latch;
     if (p->alive) {
-        dead_latch = false;
+        s_dead_latch = false;
 
         /* LB+RB chord near a station = engage docking computer. */
         if (btn->lb && btn->rb && can_dock()) {
@@ -1177,9 +1184,34 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
             last_rank = r;
         }
     } else {
-        if (!dead_latch) { dead_latch = true; respawn_t = 3.0f; }
-        respawn_t -= dt;
-        if (respawn_t <= 0.0f) {
+        if (!s_dead_latch) {
+            s_dead_latch = true;
+            s_respawn_t = 1.5f;
+            /* KILL REPORT (user req): who got you, in full. */
+            s_kr.valid = 0;
+            int kk = combat_pkiller();
+            s_kr.env = combat_pkiller_env();
+            if (s_kr.env == 0 && kk > 0 && kk < MAX_SHIPS) {
+                Ship *k = &g_ships[kk];
+                s_kr.valid = 1;
+                s_kr.tier = k->tier > 4 ? 4 : k->tier;
+                s_kr.cls = k->cls;
+                s_kr.nw = k->n_weapons > 3 ? 3 : k->n_weapons;
+                for (int i = 0; i < s_kr.nw; i++)
+                    s_kr.wpn[i] = k->weapons[i];
+                s_kr.shv = k->shield_var;
+                s_kr.arv = k->armor_var;
+                s_kr.chaff = k->chaff_n;
+                s_kr.turret = k->turret_type;
+                s_kr.spd = k->max_speed;
+                s_kr.trn = k->turn_rate;
+                s_kr.hull = k->hull_max;
+                s_kr.shd = k->shield_max;
+                s_kr.police = k->is_police;
+            }
+        }
+        s_respawn_t -= dt;
+        if (s_respawn_t <= 0.0f && btn->a) {
             /* Insurance: revert to the last dock save (journey since is
              * lost). No save yet -> fresh hull at the local beacon. */
             SaveMeta meta;
@@ -1267,6 +1299,7 @@ static void tick_supercruise(const CraftRawButtons *btn, float dt) {
             if (g_ships[PLAYER].heat > 100.0f) {
                 g_ships[PLAYER].heat = 100.0f + 0.0f;
                 g_ships[PLAYER].hull -= 5.0f * dt;     /* burning */
+                combat_note_env_hit(3);                /* the star */
                 snprintf(s_scoop_toast, sizeof s_scoop_toast,
                          "HULL BURNING!");
                 s_scoop_toast_t = 0.5f;
@@ -2199,9 +2232,53 @@ void elite_game_draw_overlay(uint16_t *fb) {
         else if (can_dock())
             craft_font_draw(fb, "LB+RB: DOCK", 42, 30, RGB565C(120, 230, 255));
     } else {
-        craft_font_draw_2x(fb, "SHIP LOST", 28, 52, RGB565C(255, 80, 60));
-        craft_font_draw(fb, "RETURNING TO BEACON", 26, 70,
-                        RGB565C(170, 170, 180));
+        /* THE KILL REPORT (user req): who got you, flying what. */
+        uint16_t hd = RGB565C(255, 90, 70);
+        uint16_t tx = RGB565C(210, 214, 222);
+        uint16_t dm = RGB565C(150, 156, 170);
+        uint16_t gd = RGB565C(245, 200, 80);
+        craft_font_draw_2x(fb, "SHIP LOST", 28, 16, hd);
+        char b[28];
+        if (s_kr.env) {
+            static const char *envn[4] = { "", "AN ASTEROID",
+                                           "THE STATION", "THE STAR" };
+            craft_font_draw(fb, "FLEW INTO", 12, 40, tx);
+            craft_font_draw(fb, envn[s_kr.env & 3], 12, 50, gd);
+        } else if (s_kr.valid) {
+            snprintf(b, sizeof b, "KILLED BY %s %s",
+                     s_kr.police ? "POLICE" : "PIRATE",
+                     k_tier_names[s_kr.tier]);
+            craft_font_draw(fb, b, 12, 38, gd);
+            snprintf(b, sizeof b, "%s CLASS RAIDER",
+                     k_hulls[s_kr.cls % N_HULLS].name);
+            craft_font_draw(fb, b, 12, 47, tx);
+            craft_font_draw(fb, "GUNS", 12, 59, dm);
+            int yy = 59;
+            for (int i = 0; i < s_kr.nw; i++) {
+                craft_font_draw(fb, k_weapons[s_kr.wpn[i]].name, 38, yy,
+                                tx);
+                yy += 9;
+            }
+            if (s_kr.turret) {
+                craft_font_draw(fb, "+TURRET", 38, yy, tx);
+                yy += 9;
+            }
+            yy += 2;
+            snprintf(b, sizeof b, "SHD %d %s", (int)s_kr.shd,
+                     k_shield_var_names[s_kr.shv & 3]);
+            craft_font_draw(fb, b, 12, yy, tx); yy += 9;
+            snprintf(b, sizeof b, "HUL %d %s", (int)s_kr.hull,
+                     k_armor_var_names[s_kr.arv & 3]);
+            craft_font_draw(fb, b, 12, yy, tx); yy += 9;
+            snprintf(b, sizeof b, "SPD %d  TRN %d.%d  CHAFF %d",
+                     (int)s_kr.spd, (int)s_kr.trn,
+                     (int)(s_kr.trn * 10) % 10, s_kr.chaff);
+            craft_font_draw(fb, b, 12, yy, tx);
+        } else {
+            craft_font_draw(fb, "CAUSE UNKNOWN", 12, 40, tx);
+        }
+        if (s_respawn_t <= 0)
+            craft_font_draw(fb, "A: INSURANCE CLAIM", 12, 116, gd);
     }
 
     if (s_state == ST_DASH) {

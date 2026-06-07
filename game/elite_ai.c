@@ -30,12 +30,12 @@ static const float k_fight_speed[5] = { 0.55f, 0.70f, 0.85f,
                                         0.95f, 1.00f };
 
 /* Per-tier trigger discipline. */
-static const float k_refire[5] = { 0.80f, 0.70f, 0.60f, 0.75f, 0.42f };
-/* Spread compensates PAYLOAD, not just tier — tier 3 packs gauss, so
- * its number sits wider than tier 2's; the curve that matters is the
- * siege-sim collapse times (target ~55/30/14/7/3s vs standard shield). */
-static const float k_spread[5] = { 0.024f, 0.020f, 0.016f, 0.024f, 0.0105f };
-static const float k_cone[5]   = { 0.970f, 0.978f, 0.984f, 0.988f, 0.992f };
+/* Monotone skill tables (the old T3 spread/refire degradation
+ * compensated its gauss payload; the kill matrix showed it inverting
+ * the ladder once geometry was fixed — k_npc_dmg carries balance now). */
+static const float k_refire[5] = { 0.80f, 0.70f, 0.60f, 0.50f, 0.42f };
+static const float k_spread[5] = { 0.021f, 0.020f, 0.016f, 0.013f, 0.0105f };
+static const float k_cone[5]   = { 0.975f, 0.978f, 0.984f, 0.988f, 0.992f };
 
 /* Steer s so its nose tips toward world-space dir (unit). */
 static void turn_toward(Ship *s, Vec3 dir, float dt) {
@@ -253,7 +253,7 @@ static void ai_ship(int idx, float dt) {
                           k_fight_speed[tier];
         if (dist < AI_BREAK_DIST) {
             s->ai_state = AI_BREAK;
-            s->ai_timer = AI_BREAK_TIME;
+            s->ai_timer = 4.0f;            /* safety cap only */
             break;
         }
         choose_weapon(s, dist);
@@ -272,13 +272,20 @@ static void ai_ship(int idx, float dt) {
         }
         break;
     }
-    case AI_BREAK:
+    case AI_BREAK: {
+        /* Break-until-RANGE, scaled by fighting speed (user-diagnosed
+         * from the kill matrix: fast tiers wheeled around while still
+         * on top of the prey — T3 was slower to kill than T2 with
+         * every weapon. Proper boom-and-zoom: extend, THEN turn in). */
+        float break_out = 150.0f + 200.0f * k_fight_speed[tier];
         turn_toward(s, v3_norm(v3_add(v3_scale(dir, -1.0f),
                                       v3_scale(s->basis.r[1], 0.8f))), dt);
         s->throttle = 1.0f;
         s->ai_timer -= dt;
-        if (s->ai_timer <= 0.0f) s->ai_state = AI_ATTACK;
+        if (dist > break_out || s->ai_timer <= 0.0f)
+            s->ai_state = AI_ATTACK;
         break;
+    }
     }
 }
 

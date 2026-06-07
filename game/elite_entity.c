@@ -105,6 +105,7 @@ void ship_set_tier(int idx, int tier, int hull_class) {
     s->armor_var = (tier >= 3 && (idx & 1)) ? ARV_REACTIVE : ARV_STANDARD;
     /* VETERAN+ carries chaff (user design: missile countermeasures) */
     s->chaff_n = (uint8_t)((tier >= 3) ? 1 + (idx & 1) : 0);
+    s->cls = (uint8_t)hull_class;
     /* Hauler-class pirates (big bound radius) carry a belly turret. */
     s->turret_type = (s->mesh->bound_r > 9.0f && tier >= 2)
                          ? (uint8_t)(WPN_PULSE_S + 1) : 0;

@@ -13,6 +13,7 @@
 #include "elite_rocks.h"
 #include "r3d_fx.h"
 #include "elite_audio.h"
+#include "elite_combat.h"
 #include <math.h>
 
 #define COL_MIN_SPEED 10.0f     /* gentler contact = scrape, no damage */
@@ -28,7 +29,10 @@ static float ship_mass(const Ship *s) {
 }
 
 /* Shield blocks it (user rule): hull only ever pays when unshielded. */
+static int s_env_kind = 0;     /* what the player is touching */
+
 static void collide_damage(int idx, float dmg) {
+    if (idx == PLAYER && s_env_kind) combat_note_env_hit(s_env_kind);
     Ship *s = &g_ships[idx];
     if (idx != PLAYER) dmg *= 0.6f;          /* NPCs scrape lighter */
     if (s->shield > 0.0f) {
@@ -59,6 +63,7 @@ static float bounce(Ship *a, Ship *b, Vec3 n, float overlap) {
 }
 
 void collide_tick(int station_alive, float station_r, int player_manual) {
+    s_env_kind = 0;            /* ship-vs-ship: a pilot, not terrain */
     /* --- ship vs ship --------------------------------------------------*/
     for (int i = 0; i < MAX_SHIPS; i++) {
         if (!g_ships[i].alive) continue;
@@ -85,6 +90,7 @@ void collide_tick(int station_alive, float station_r, int player_manual) {
         }
     }
 
+    s_env_kind = 1;
     /* --- ship vs rock ---------------------------------------------------*/
     for (int i = 0; i < MAX_SHIPS; i++) {
         Ship *s = &g_ships[i];
@@ -118,6 +124,7 @@ void collide_tick(int station_alive, float station_r, int player_manual) {
         }
     }
 
+    s_env_kind = 2;
     /* --- player vs station (manual flight only — autodock is exempt,
      * user rule). Torus shell: ring at 0.7R in the spin plane. ------- */
     if (station_alive && player_manual) {

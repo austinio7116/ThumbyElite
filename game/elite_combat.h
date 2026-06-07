@@ -19,6 +19,9 @@ int combat_fire(int shooter, float spread, int target);
 bool combat_can_fire(const Ship *s);
 
 /* Damage entry points (also used by the projectile pool). */
+int  combat_pkiller(void);
+int  combat_pkiller_env(void);
+void combat_note_env_hit(int kind);
 void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos);
 void combat_explosion_damage(int shooter, Vec3 centre, float radius,
                              float dmg);

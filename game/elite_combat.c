@@ -142,7 +142,17 @@ static void combat_roll_crit(int victim, Vec3 hit_pos) {
     /* else: deflected */
 }
 
+static int s_pkiller = -1;          /* last to damage the PLAYER */
+static int s_pkiller_env = 0;       /* 1 rock, 2 station, 3 sun */
+int combat_pkiller(void) { return s_pkiller; }
+int combat_pkiller_env(void) { return s_pkiller_env; }
+void combat_note_env_hit(int kind) { s_pkiller_env = kind; s_pkiller = -1; }
+
 void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
+    if (victim == PLAYER && shooter > 0 && dmg > 0) {
+        s_pkiller = shooter;
+        s_pkiller_env = 0;
+    }
     Ship *v = &g_ships[victim];
     if (!v->alive) return;
     /* PHASE shields: a slice of hits pass through harmlessly. */
@@ -342,8 +352,8 @@ int combat_fire(int shooter, float spread, int target) {
         /* NOT monotone — it compensates each tier's payload (t3 packs
          * PULSE-M streams, t2 often autocannon) so the COLLAPSE TIMES
          * are the smooth curve, not this table. */
-        static const float k_npc_dmg[5] = { 0.52f, 0.50f, 0.75f,
-                                            0.96f, 0.74f };
+        static const float k_npc_dmg[5] = { 0.52f, 0.46f, 0.88f,
+                                            0.40f, 0.74f };
         dmg_mult = k_npc_dmg[s->tier > 4 ? 4 : s->tier];
     }
     if (shooter == PLAYER) {
@@ -549,7 +559,7 @@ void combat_tick(float dt) {
                     }
                     else {
                         static const float k_td[5] = { 0.60f, 0.62f,
-                                                       0.80f, 0.80f,
+                                                       0.80f, 0.45f,
                                                        0.90f };
                         mult *= k_td[s->tier > 4 ? 4 : s->tier];
                     }
