@@ -938,21 +938,20 @@ int main(int argc, char **argv) {
          * the style the user liked): rows of [icon] NAME / tag, two
          * columns, paged into fb dumps for the compositor. */
         static const char *wtag[3] = { "Z1", "Z2", "Z3" };
+        /* one item per 25px row, single column — the compositor packs
+         * the cells into 3 columns */
         int item = 0, page = 0;
         while (item < WPN_COUNT) {
             memset(g_fb, 0, sizeof g_fb);
-            for (int row = 0; row < 5 && item < WPN_COUNT; row++)
-                for (int col = 0; col < 2 && item < WPN_COUNT; col++) {
-                    int x = col * 64, y = row * 25 + 2;
-                    icon_weapon_2x(g_fb, x + 1, y + 2, item);
-                    craft_font_draw(g_fb, k_weapons[item].name, x + 28,
-                                    y, 0xFFFF);
-                    craft_font_draw(g_fb,
-                                    wtag[k_weapons[item].size - 1],
-                                    x + 28, y + 9,
-                                    RGB565C(245, 200, 80));
-                    item++;
-                }
+            for (int row = 0; row < 5 && item < WPN_COUNT; row++) {
+                int y = row * 25 + 2;
+                icon_weapon_2x(g_fb, 1, y + 2, item);
+                craft_font_draw(g_fb, k_weapons[item].name, 28, y,
+                                0xFFFF);
+                craft_font_draw(g_fb, wtag[k_weapons[item].size - 1],
+                                28, y + 9, RGB565C(245, 200, 80));
+                item++;
+            }
             char nm[40];
             snprintf(nm, sizeof nm, "/tmp/armoury_w_%d.ppm", page++);
             dump_ppm(nm);
@@ -971,18 +970,16 @@ int main(int argc, char **argv) {
         item = 0; page = 0;
         while (item < ne) {
             memset(g_fb, 0, sizeof g_fb);
-            for (int row = 0; row < 5 && item < ne; row++)
-                for (int col = 0; col < 2 && item < ne; col++) {
-                    int x = col * 64, y = row * 25 + 2;
-                    icon_weapon_2x(g_fb, x + 1, y + 2, eq[item].type);
-                    craft_font_draw(g_fb,
-                                    k_equip[eq[item].type - WPN_COUNT]
-                                        .name,
-                                    x + 28, y, 0xFFFF);
-                    craft_font_draw(g_fb, eq[item].tag, x + 28, y + 9,
-                                    RGB565C(245, 200, 80));
-                    item++;
-                }
+            for (int row = 0; row < 5 && item < ne; row++) {
+                int y = row * 25 + 2;
+                icon_weapon_2x(g_fb, 1, y + 2, eq[item].type);
+                craft_font_draw(g_fb,
+                                k_equip[eq[item].type - WPN_COUNT].name,
+                                28, y, 0xFFFF);
+                craft_font_draw(g_fb, eq[item].tag, 28, y + 9,
+                                RGB565C(245, 200, 80));
+                item++;
+            }
             char nm[40];
             snprintf(nm, sizeof nm, "/tmp/armoury_e_%d.ppm", page++);
             dump_ppm(nm);
