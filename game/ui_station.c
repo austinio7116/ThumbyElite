@@ -605,7 +605,13 @@ static void outfit_action_a(int row) {
             for (int i = 0; i < h->n_slots; i++)
                 if (h->slot_size[i] >= wsz &&
                     g_player.mounts[i].in_use) { slot = i; break; }
-            if (slot < 0) { toast("NO FIT"); return; }
+            if (slot < 0) {
+                char tb[20];
+                snprintf(tb, sizeof tb, "NEEDS Z%d SLOT",
+                         k_weapons[sv->type].size);
+                toast(tb);
+                return;
+            }
             WeaponInst old2 = g_player.mounts[slot];
             g_player.mounts[slot] = *sv;
             *sv = old2;
