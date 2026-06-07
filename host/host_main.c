@@ -28,6 +28,7 @@
 #include "elite_rocks.h"
 #include "ui_icons.h"
 #include "elite_save.h"
+#include "elite_proj.h"
 #include "elite_loot.h"
 
 #include <SDL2/SDL.h>
@@ -136,6 +137,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_ARMOURYSHOT") ||
         getenv("ELITE_DPSTEST") ||
         getenv("ELITE_CMTEST") ||
+        getenv("ELITE_DODGETEST") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -569,6 +571,67 @@ int main(int argc, char **argv) {
             }
         printf("[orbit] outermost: avg=%.0f worst=%.0f Mm over %d\n",
                sum / (n ? n : 1), worst, n);
+        return 0;
+    }
+
+    /* Last-ditch break success rates (chaff stripped): want ~50%% at
+     * ELITE per user spec, worse below. */
+    if (getenv("ELITE_DODGETEST")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Ship *pl = &g_ships[0];
+        elite_game_debug_face_away_from_sun();
+        float launch_d = (float)atoi(getenv("ELITE_DODGETEST"));
+        if (launch_d < 50) launch_d = 350;
+        for (int tier = 2; tier <= 4; tier++) {
+            int hits = 0, shots = 20;
+            for (int n = 0; n < shots; n++) {
+                int e = ship_spawn(hull_mesh(0xACE1u + n, 1 + tier),
+                                   v3_add(pl->pos,
+                                          v3_scale(pl->basis.r[2],
+                                                   launch_d)),
+                                   TEAM_HOSTILE);
+                if (e <= 0) continue;
+                ship_set_tier(e, tier, 1 + tier);
+                Ship *t2 = &g_ships[e];
+                t2->chaff_n = 0;              /* isolate the run */
+                t2->n_weapons = 0;
+                /* realistic: already at fight speed, flying across */
+                t2->vel = v3_scale(t2->basis.r[2],
+                                   t2->max_speed * 0.6f);
+                float hp0 = t2->shield + t2->hull;
+                g_player.mounts[0] = (WeaponInst){
+                    .type = WPN_HOMING, .quality = Q_STANDARD,
+                    .integrity = 100, .in_use = 1 };
+                g_player.ammo[0] = 1;
+                player_apply_to_ship();
+                pl->active_w = 0;
+                pl->fire_cool = 0; pl->heat = 0;
+                combat_set_shot_type(WPN_HOMING);
+                combat_fire(0, 0, e);
+                CraftRawButtons none = {0};
+                for (int f = 0; f < 30 * 10; f++) {
+                    elite_game_tick(&none, 1.0f / 30.0f);
+                    pl->shield = pl->shield_max;
+                    pl->hull = pl->hull_max;
+                    if (getenv("ELITE_DODGEDBG") && n == 0 &&
+                        tier == 4 && (f % 15) == 0)
+                        printf("[ddbg] f=%d md=%.0f thr=%.2f spd=%.0f\n",
+                               f, proj_nearest_homing(e), t2->throttle,
+                               v3_len(t2->vel));
+                    if (!t2->alive) break;
+                    if (proj_nearest_homing(e) > 9e8f && f > 20) break;
+                }
+                if (!t2->alive || t2->shield + t2->hull < hp0 - 1.0f)
+                    hits++;
+                if (getenv("ELITE_DODGEDBG") && n < 3 && tier == 4)
+                    printf("[ddbg] n=%d hit=%d\n", n,
+                           (!t2->alive ||
+                            t2->shield + t2->hull < hp0 - 1.0f));
+                if (t2->alive) t2->alive = false;
+            }
+            printf("[dodge] tier %d: %d/%d hit (%d%%%% dodge)\n", tier,
+                   hits, shots, 100 - hits * 100 / shots);
+        }
         return 0;
     }
 

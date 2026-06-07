@@ -119,24 +119,40 @@ static void ai_ship(int idx, float dt) {
      * blue-zone slowdown decide who wins the corner); VETERAN+ pops
      * chaff when it closes — visible burst, finite charges. */
     if (tier >= 2 && s->team == TEAM_HOSTILE) {
+        /* Staged missile doctrine (user redesign — the old early
+         * diagonal was 'squirming' that never beat a seeker):
+         *   FAR:   run flat out, burn its lifetime (panic overrides
+         *          fight-speed confidence),
+         *   CHAFF: the PRIMARY measure when it closes (VETERAN+),
+         *   CLOSE: one last-ditch perpendicular break — the seeker's
+         *          ~100m turn radius can't make the corner. Timing is
+         *          rank: aces land ~half, CAPABLE fumbles more. */
+        static float s_react_t[MAX_SHIPS];
         float md = proj_nearest_homing(idx);
-        if (md < 400.0f) {
-            if (tier >= 3 && s->chaff_n > 0 && md < 150.0f) {
+        if (md < 9e8f) {
+            /* reaction time is rank: how long before they notice */
+            static const float k_react[5] = { 9e9f, 9e9f, 1.20f,
+                                              0.70f, 0.30f };
+            s_react_t[idx] += dt;
+            if (tier >= 3 && s->chaff_n > 0 && md < 170.0f) {
                 s->chaff_n--;
                 proj_break_locks(idx);
                 fx_chaff_burst(v3_sub(s->pos,
                                       v3_scale(s->basis.r[2], 4.0f)),
                                s->vel);
                 sfx_chaff();
-            } else {
-                /* hard lateral break across the seeker's nose */
-                Vec3 brk = v3_add(v3_scale(s->basis.r[0],
-                                           (idx & 1) ? 1.0f : -1.0f),
-                                  v3_scale(s->basis.r[1], 0.5f));
-                turn_toward(s, v3_norm(brk), dt);
-                s->throttle = 0.95f * k_fight_speed[tier];
+            } else if (s_react_t[idx] >= k_react[tier]) {
+                /* RUN: the seeker's 1100m leash dies behind a ship at
+                 * full burn — every moment of late reaction is range
+                 * the missile doesn't have to cover */
+                Vec3 away = v3_norm(v3_sub(s->pos,
+                                           proj_homing_pos(idx)));
+                turn_toward(s, away, dt);
+                s->throttle = 1.0f;     /* panic overrides confidence */
                 return;
             }
+        } else {
+            s_react_t[idx] = 0;
         }
     }
 

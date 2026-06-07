@@ -25,6 +25,7 @@ typedef struct {
     uint8_t type;
     int8_t owner;
     int8_t target;        /* homing only */
+    uint8_t save_rolled;  /* terminal evasion die cast (once) */
     Vec3  pos, vel;
     float life;
     float trail_accum;
@@ -71,6 +72,20 @@ float proj_nearest_homing(int victim) {
     return best;
 }
 
+/* Position of the nearest seeker homing on victim. */
+Vec3 proj_homing_pos(int victim) {
+    float best = 1e9f;
+    Vec3 out = g_ships[victim].pos;
+    for (int i = 0; i < MAX_PROJ; i++) {
+        Proj *p = &s_proj[i];
+        if (!p->alive || p->target != victim) continue;
+        if (k_weapons[p->type].turn <= 0) continue;
+        float d = v3_len(v3_sub(p->pos, g_ships[victim].pos));
+        if (d < best) { best = d; out = p->pos; }
+    }
+    return out;
+}
+
 int proj_break_locks(int victim) {
     int n = 0;
     for (int i = 0; i < MAX_PROJ; i++) {
@@ -110,6 +125,7 @@ void proj_spawn_ex(WeaponType type, int owner, int8_t target,
         p->type = (uint8_t)type;
         p->owner = (int8_t)owner;
         p->target = target;
+        p->save_rolled = 0;
         p->pos = pos;
         p->vel = v3_add(v3_scale(dir, w->speed), inherit_vel);
         p->life = w->range / w->speed;
@@ -228,6 +244,21 @@ void proj_tick(float dt) {
             continue;
         }
         if (hit >= 0) {
+            /* Terminal evasion save (user spec: aces slip ~half of
+             * seekers; chaff is the PRIMARY measure). NPC victims of
+             * HOMING roll by rank, once per missile: on a save the
+             * seeker loses the plot and sails past — no re-attack.
+             * The player gets no dice; you fly or you chaff. */
+            if (p->type == WPN_HOMING && hit != PLAYER &&
+                !p->save_rolled) {
+                p->save_rolled = 1;
+                int tier = g_ships[hit].tier > 4 ? 4 : g_ships[hit].tier;
+                static const int k_slip[5] = { 0, 0, 25, 35, 50 };
+                if ((int)(frnd_pub() % 100u) < k_slip[tier]) {
+                    p->target = -1;        /* spoofed: flies on blind */
+                    continue;
+                }
+            }
             p->pos = v3_add(p->pos, v3_scale(seg, best_t));
             combat_set_shot_type(p->type);
             if (w->aoe > 0) {
