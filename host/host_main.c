@@ -387,7 +387,10 @@ int main(int argc, char **argv) {
         int civ = -1, npir = 0;
         for (int i = 1; i < MAX_SHIPS; i++) {
             if (!g_ships[i].alive) continue;
-            if (g_ships[i].is_civilian) civ = i;
+            /* the distress victim FIGHTS (ai_target set); traffic
+             * civilians idle — pick the right one */
+            if (g_ships[i].is_civilian && g_ships[i].ai_target > 0 &&
+                civ < 0) civ = i;
             else if (g_ships[i].team == TEAM_HOSTILE &&
                      g_ships[i].ai_target > 0) npir++;
         }
@@ -401,6 +404,14 @@ int main(int argc, char **argv) {
                g_ships[civ].alive ? g_ships[civ].hull : -1.0f,
                (!g_ships[civ].alive || g_ships[civ].hull < h0) ? "YES"
                                                                : "no");
+        /* GRAZE the victim once (easy with flak mid-furball) — does
+         * the rescue still pay? */
+        if (getenv("ELITE_GRAZE")) {
+            combat_set_shot_type(WPN_PULSE_S);
+            combat_direct_damage(0, civ, 4.0f, g_ships[civ].pos);
+            printf("[distress] grazed victim: team=%d legal=%d\n",
+                   g_ships[civ].team, g_player.legal);
+        }
         /* player engages: wing must switch to us */
         for (int i = 1; i < MAX_SHIPS; i++)
             if (g_ships[i].alive && g_ships[i].team == TEAM_HOSTILE) {

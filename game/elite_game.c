@@ -182,6 +182,15 @@ void elite_game_debug_view_planet(int n) {
     s_scoop_toast_t = 0;                     /* clean frame */
 }
 
+/* Crossfire forgiveness: while the distress wing is still shooting at
+ * the victim, stray player hits on it don't flip it or flag you — it
+ * knows who the real enemy is. Normal crime rules resume once the
+ * wing is dead. */
+bool elite_game_distress_protected(int idx) {
+    return idx == s_distress_civ && s_distress_civ > 0 &&
+           !s_distress_paid && ships_alive_hostile() > 0;
+}
+
 /* The player damaged a hostile: any distress wing drops the civilian
  * and turns on the player (user spec: they fight us once engaged). */
 void elite_game_player_engaged(void) {
@@ -941,7 +950,10 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
         if (s_distress_civ > 0 && !s_distress_paid) {
             Ship *cv = &g_ships[s_distress_civ];
             if (!cv->alive) {
-                s_distress_civ = -1;       /* lost them */
+                s_distress_civ = -1;
+                snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                         "THE VICTIM IS LOST");
+                s_scoop_toast_t = 3.0f;
             } else if (ships_alive_hostile() == 0) {
                 s_distress_paid = true;
                 const SystemInfo *si3 = system_info();
@@ -952,7 +964,7 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
                     (int)system_faction(si3->addr), 2);
                 snprintf(s_scoop_toast, sizeof s_scoop_toast,
                          "\"THANK YOU CMDR\" +%dCR REP+", pay);
-                s_scoop_toast_t = 4.0f;
+                s_scoop_toast_t = 5.0f;
                 sfx_lock_acquire();
             }
         }
@@ -2068,6 +2080,13 @@ void elite_game_draw_overlay(uint16_t *fb) {
                     &fb[dtop * ELITE_FB_W],
                     (size_t)dash_h * ELITE_FB_W * 2);
             dash_draw_panels(fb, dtop - up + dash_h);
+            /* Toasts must survive the panels (rescue hails, warnings —
+             * the sim is live under here). */
+            if (s_scoop_toast_t > 0)
+                craft_font_draw(fb, s_scoop_toast,
+                                64 - craft_font_width(s_scoop_toast) / 2,
+                                dtop - up + dash_h + 2,
+                                RGB565C(255, 200, 60));
         }
         if (s_in_settings) dash_settings_overlay(fb);
     }

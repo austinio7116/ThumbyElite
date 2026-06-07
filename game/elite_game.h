@@ -46,6 +46,7 @@ void elite_game_poi_intel(const Poi *poi, PoiIntel *out);
 /* Combat callback: the player just damaged a hostile (distress wings
  * switch from the civilian onto the player). */
 void elite_game_player_engaged(void);
+bool elite_game_distress_protected(int idx);
 /* Combat callback: a critical hit landed (mine = it happened to me). */
 void elite_game_crit_toast(const char *msg, bool mine);
 void elite_game_debug_goto_poi(int n);

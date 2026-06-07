@@ -230,8 +230,12 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
             v->team = TEAM_HOSTILE;
         }
         if (v->is_police) v->team = TEAM_HOSTILE;
-        /* Firing on civilians: OFFENDER, and they defend themselves. */
-        if (v->is_civilian && v->team == TEAM_NEUTRAL) {
+        /* Firing on civilians: OFFENDER, and they defend themselves —
+         * EXCEPT crossfire on a distress victim while its attackers
+         * live (one stray flak pellet was flipping the rescue-ee
+         * hostile and silently voiding the reward; user-caught). */
+        if (v->is_civilian && v->team == TEAM_NEUTRAL &&
+            !elite_game_distress_protected(victim)) {
             if (g_player.legal < 1) g_player.legal = 1;
             g_player.fine += 250;
             v->team = TEAM_HOSTILE;     /* fights back (low tier) */
