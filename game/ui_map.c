@@ -283,20 +283,39 @@ static void draw_gmap_info(uint16_t *fb) {
         ((int)(s_hl_dist * 10)) % 10,
         sysaddr_eq(s_hl, s_cur_sys) ? " (HERE)"
         : (s_hl_dist <= s_range && s_hl_dist <= s_fuel) ? "" : " OUT!");
-    ROW("STAR", "%s", k_cls[si.star_class]);
-    ROW("GOV", "%s", k_gov[si.gov]);
+    /* Value colours mirror the chart's layer keys (user req): star =
+     * spectral, threat = the green->red ramp, faction = empire hue,
+     * stations = the economy hues. */
+    #define ROWC(label, col, fmt, ...) do { \
+        craft_font_draw(fb, label, 2, y, RGB565C(110, 116, 135)); \
+        snprintf(buf, sizeof buf, fmt, __VA_ARGS__); \
+        craft_font_draw(fb, buf, 52, y, col); \
+        y += 8; \
+    } while (0)
+    ROWC("STAR", si.star_color, "%s", k_cls[si.star_class]);
+    {
+        uint16_t gc = (si.gov == GOV_ANARCHY) ? RGB565C(255, 70, 50)
+                    : (si.gov <= GOV_DICTATOR) ? RGB565C(240, 150, 60)
+                                               : RGB565C(90, 180, 255);
+        ROWC("GOV", gc, "%s", k_gov[si.gov]);
+    }
     {
         static const char *k_threat[5] = { "SAFE", "LOW", "MEDIUM",
                                            "HIGH", "LETHAL" };
-        craft_font_draw(fb, "THREAT", 2, y, RGB565C(110, 116, 135));
-        snprintf(buf, sizeof buf, "%s", k_threat[si.threat > 4 ? 4
-                                                              : si.threat]);
-        craft_font_draw(fb, buf, 52, y,
-                        si.threat >= 3 ? RGB565C(255, 120, 70)
-                      : si.threat >= 2 ? RGB565C(255, 200, 60) : VAL);
-        y += 8;
+        static const uint16_t tcol[5] = {
+            RGB565C(70, 150, 110), RGB565C(110, 190, 90),
+            RGB565C(220, 190, 70), RGB565C(240, 130, 50),
+            RGB565C(255, 70, 50) };
+        int t = si.threat > 4 ? 4 : si.threat;
+        ROWC("THREAT", tcol[t], "%s", k_threat[t]);
     }
-    ROW("FACTION", "%s", k_faction_names[system_faction(s_hl)]);
+    {
+        static const uint16_t fcol[3] = {
+            RGB565C(90, 160, 255), RGB565C(255, 95, 120),
+            RGB565C(245, 200, 80) };
+        int f = (int)system_faction(s_hl);
+        ROWC("FACTION", fcol[f % 3], "%s", k_faction_names[f]);
+    }
     ROW("PLANETS", "%d", si.n_planets);
     if (econ_has_black_market(&si)) {
         craft_font_draw(fb, "BLACK MARKET", 2, y, RGB565C(220, 100, 200));
@@ -317,9 +336,17 @@ static void draw_gmap_info(uint16_t *fb) {
         snprintf(buf, sizeof buf, "%s", si.stations[i].name);
         craft_font_draw(fb, buf, 4, y, RGB565C(160, 170, 190));
         y += 7;
-        snprintf(buf, sizeof buf, " %s T%d", k_econ[si.stations[i].econ],
-                 si.stations[i].tech);
-        craft_font_draw(fb, buf, 4, y, RGB565C(110, 116, 135));
+        {
+            static const uint16_t ecol[8] = {
+                RGB565C(110, 210, 90), RGB565C(245, 150, 60),
+                RGB565C(90, 210, 255), RGB565C(190, 130, 80),
+                RGB565C(150, 160, 190), RGB565C(245, 120, 210),
+                RGB565C(255, 80, 70), RGB565C(150, 150, 150) };
+            snprintf(buf, sizeof buf, " %s T%d",
+                     k_econ[si.stations[i].econ], si.stations[i].tech);
+            craft_font_draw(fb, buf, 4, y,
+                            ecol[si.stations[i].econ & 7]);
+        }
         y += 9;
     }
 
