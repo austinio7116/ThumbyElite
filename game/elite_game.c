@@ -309,7 +309,7 @@ void elite_game_poi_intel(const Poi *poi, PoiIntel *out) {
     uint32_t dh = h ^ (s_entry_salt * 0x9E3779B9u) ^ 0xD157u;
     dh *= 2654435761u; dh ^= dh >> 15;
     out->distress = (poi->kind != POI_STATION) && si->threat >= 1 &&
-                    (dh % 100u) < 22;
+                    (dh % 100u) < 11;     /* was 22 — user: too many */
 }
 
 static void spawn_poi_content(void) {

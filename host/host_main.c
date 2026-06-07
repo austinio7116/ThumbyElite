@@ -565,22 +565,49 @@ int main(int argc, char **argv) {
             CraftRawButtons bb = none;
             bb.lb = true;
             TMV(bb);                                  /* lock */
+            /* ELITE_TIERMOVIE=2: HONEST HANDS (user req) — no basis
+             * surgery. D-pad only, 0.2s reaction lag, a deadband, one
+             * axis at a time: the way a thumb actually flies. Fights
+             * become joust-and-reacquire, like real play. */
+            int honest = atoi(getenv("ELITE_TIERMOVIE")) >= 2;
+            int lagN = 6;
+            float lag_x[8] = { 0 }, lag_y[8] = { 0 };
+            int li = 0;
             for (int f = 0; f < 30 * 26 && g_ships[e].alive; f++) {
                 Ship *t2 = &g_ships[e];
                 float d = v3_len(v3_sub(t2->pos, pl->pos));
-                /* tail them: aim with hitscan lead, manage throttle */
-                pl->throttle = (d > 250.0f) ? 1.0f
-                             : (d > 120.0f) ? 0.72f : 0.5f;
-                TMV_STEER(t2->pos, 0.07f);
+                CraftRawButtons b3 = none;
                 Vec3 l = m3_mul_v3_t(&pl->basis,
                                      v3_sub(t2->pos, pl->pos));
-                CraftRawButtons b3 = none;
-                /* mostly WATCH: 1.5s bursts, 6.5s of pure pursuit —
-                 * the showcase is how they fly, not how they die */
-                int watching = ((f + 180) % 240) >= 45;  /* pursue first */
-                if (!watching && l.z > 0 && d < 650.0f &&
-                    l.x * l.x + l.y * l.y < d * d * 0.018f)
-                    b3.a = true;
+                int watching = ((f + 180) % 240) >= 45;
+                if (honest) {
+                    /* see where it was lagN frames ago */
+                    lag_x[li % 8] = l.x; lag_y[li % 8] = l.y; li++;
+                    float sx = lag_x[(li + 8 - lagN) % 8];
+                    float sy = lag_y[(li + 8 - lagN) % 8];
+                    float dead = d * 0.06f + 2.0f;
+                    /* one axis at a time, biggest error first */
+                    if (l.z < 0) {
+                        /* behind us: pick a turn and hold it */
+                        b3.up = true;
+                    } else if (sx < -dead || sx > dead) {
+                        b3.left = sx < 0; b3.right = sx > 0;
+                    } else if (sy < -dead || sy > dead) {
+                        /* flight-stick: UP = nose DOWN */
+                        b3.up = sy > 0; b3.down = sy < 0;
+                    }
+                    pl->throttle = 0.85f;
+                    if (!watching && l.z > 0 && d < 500.0f &&
+                        l.x * l.x + l.y * l.y < d * d * 0.012f)
+                        b3.a = true;
+                } else {
+                    pl->throttle = (d > 250.0f) ? 1.0f
+                                 : (d > 120.0f) ? 0.72f : 0.5f;
+                    TMV_STEER(t2->pos, 0.07f);
+                    if (!watching && l.z > 0 && d < 650.0f &&
+                        l.x * l.x + l.y * l.y < d * d * 0.018f)
+                        b3.a = true;
+                }
                 if (pl->shield < pl->shield_max * 0.3f)
                     pl->shield = pl->shield_max;      /* camera rig armor */
                 TMV(b3);
