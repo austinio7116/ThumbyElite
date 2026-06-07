@@ -1373,6 +1373,9 @@ int main(int argc, char **argv) {
             render_frame(); dump_ppm("/tmp/chart_faction.ppm");
             b = none; b.rb = true; elite_game_tick(&b, 1.0f / 30.0f);
             b = none; elite_game_tick(&b, 1.0f / 30.0f);
+            render_frame(); dump_ppm("/tmp/chart_econ.ppm");
+            b = none; b.rb = true; elite_game_tick(&b, 1.0f / 30.0f);
+            b = none; elite_game_tick(&b, 1.0f / 30.0f);
         }
         /* Deterministic aim: find the nearest in-range neighbour and tap
          * its dominant axis (the snap wedge is +-60deg, so one tap lands

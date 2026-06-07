@@ -21,6 +21,7 @@ static int s_chart_layer;
 typedef struct {
     SysAddr a;
     int8_t gov, threat, fac;
+    int8_t econ;          /* -1 none, -2 multi, else EconType */
     uint8_t valid;
 } StarBrief;
 static StarBrief s_brief[96];
@@ -36,6 +37,16 @@ static const StarBrief *star_brief(SysAddr a) {
         b->gov = (int8_t)si.gov;
         b->threat = (int8_t)si.threat;
         b->fac = (int8_t)system_faction(a);
+        if (si.n_stations == 0) {
+            b->econ = -1;
+        } else {
+            b->econ = (int8_t)si.stations[0].econ;
+            for (int i = 1; i < si.n_stations; i++)
+                if ((int8_t)si.stations[i].econ != b->econ) {
+                    b->econ = -2;            /* MULTI */
+                    break;
+                }
+        }
         b->valid = 1;
     }
     return b;
@@ -177,7 +188,7 @@ MapAction map_galaxy_tick(const CraftRawButtons *btn, float dt,
     if (any) s_hold += dt; else { s_hold = 0; s_rep = 0; }
 
     if (JUST(btn, rb)) {
-        s_chart_layer = (s_chart_layer + 1) % 3;   /* data layers */
+        s_chart_layer = (s_chart_layer + 1) % 4;   /* data layers */
         sfx_ui_move();
     }
     if (JUST(btn, left))  gmap_snap(-1, 0);
@@ -410,6 +421,23 @@ void map_galaxy_draw(uint16_t *fb) {
                         RGB565C(245, 200, 80) };
                     const StarBrief *br = star_brief(a);
                     sc2 = fcol[br->fac % 3];
+                } else if (s_chart_layer == 3) {
+                    /* ECONOMY: one hue per type; white = mixed ports,
+                     * near-dark = no stations at all. */
+                    static const uint16_t ecol[8] = {
+                        RGB565C(110, 210, 90),    /* AGRI  green  */
+                        RGB565C(245, 150, 60),    /* INDUST orange*/
+                        RGB565C(90, 210, 255),    /* HITECH cyan  */
+                        RGB565C(190, 130, 80),    /* EXTRACT copper*/
+                        RGB565C(150, 160, 190),   /* REFINE steel */
+                        RGB565C(245, 120, 210),   /* TOURISM pink */
+                        RGB565C(255, 80, 70),     /* MILITARY red */
+                        RGB565C(150, 150, 150),   /* SERVICE grey */
+                    };
+                    const StarBrief *br = star_brief(a);
+                    sc2 = (br->econ == -1) ? RGB565C(45, 50, 62)
+                        : (br->econ == -2) ? RGB565C(255, 255, 255)
+                                           : ecol[br->econ & 7];
                 }
                 /* Dim halo for big stars, twinkle phase per star. */
                 uint32_t tw = nhash(sx * 31 + i, sy * 17);
@@ -476,9 +504,12 @@ void map_galaxy_draw(uint16_t *fb) {
     } else if (s_chart_layer == 1) {
         craft_font_draw(fb, "CHART: THREAT", 2, 2,
                         RGB565C(240, 140, 60));
-    } else {
+    } else if (s_chart_layer == 2) {
         craft_font_draw(fb, "CHART: FACTION", 2, 2,
                         RGB565C(120, 170, 255));
+    } else {
+        craft_font_draw(fb, "CHART: ECONOMY", 2, 2,
+                        RGB565C(245, 150, 60));
     }
     char buf[32];
     snprintf(buf, sizeof buf, "FUEL %d.%d LY", (int)s_fuel,
@@ -508,6 +539,19 @@ void map_galaxy_draw(uint16_t *fb) {
         craft_font_draw(fb, "COA", 70, 110, RGB565C(90, 160, 255));
         craft_font_draw(fb, "DOM", 90, 110, RGB565C(255, 95, 120));
         craft_font_draw(fb, "FRE", 110, 110, RGB565C(245, 200, 80));
+    } else if (s_chart_layer == 3) {
+        /* one coloured letter per economy + ? for mixed */
+        static const char k_el[9] = "AIHXRTMS?";
+        static const uint16_t k_ec[9] = {
+            RGB565C(110, 210, 90), RGB565C(245, 150, 60),
+            RGB565C(90, 210, 255), RGB565C(190, 130, 80),
+            RGB565C(150, 160, 190), RGB565C(245, 120, 210),
+            RGB565C(255, 80, 70), RGB565C(150, 150, 150),
+            RGB565C(255, 255, 255) };
+        for (int i = 0; i < 9; i++) {
+            char one[2] = { k_el[i], 0 };
+            craft_font_draw(fb, one, 64 + i * 7, 110, k_ec[i]);
+        }
     }
 }
 
