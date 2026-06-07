@@ -364,43 +364,74 @@ void ai_tick(float dt) {
             }
             /* Working traffic: miners hover by the rocks and chip them
              * (visible beams); cargo ships cruise a slow lane. */
+            /* Civilians fly like real ships: set throttle + heading and
+             * let ship_physics move them (the bug: they never set
+             * throttle, so the physics pinned them at 0 — user saw them
+             * totally static). assist on = clean velocity = throttle x
+             * nose. */
             Ship *cv = &g_ships[i];
+            cv->assist = 1;
             if (cv->civ_kind == 0) {
+                /* MINER: work a rock, then move to the next; orbit while
+                 * mining (never a dead hover). */
                 Vec3 rk[8];
                 int nr = rocks_positions(rk, 8);
                 if (nr > 0) {
-                    Vec3 want = v3_add(rk[i % nr], v3(30, 18, -25));
-                    Vec3 d2 = v3_sub(want, cv->pos);
-                    float dl = v3_len(d2);
-                    if (dl > 12.0f)
-                        cv->vel = v3_lerp(cv->vel,
-                                          v3_scale(d2, 14.0f / dl),
-                                          0.8f * dt);
-                    else
-                        cv->vel = v3_scale(cv->vel, 1.0f - 0.8f * dt);
-                    turn_toward(cv, v3_norm(v3_sub(rk[i % nr], cv->pos)),
-                                dt * 0.5f);
-                    cv->fire_cool -= dt;
-                    if (dl < 90.0f && cv->fire_cool <= 0.0f) {
-                        cv->fire_cool = 1.3f;
-                        Vec3 mz = v3_add(cv->pos,
-                                         v3_scale(cv->basis.r[2],
-                                                  cv->mesh->bound_r));
-                        fx_beam(mz, rk[i % nr],
-                                RGB565C(255, 200, 90));
+                    cv->civ_wp_t -= dt;
+                    if (cv->civ_wp_t <= 0.0f) {
+                        cv->civ_wp = (uint8_t)((cv->civ_wp + 1 + (i & 1))
+                                               % nr);
+                        cv->civ_wp_t = 10.0f + (float)(i % 5) * 2.0f;
+                    }
+                    Vec3 rock = rk[cv->civ_wp % nr];
+                    Vec3 to = v3_sub(rock, cv->pos);
+                    float dl = v3_len(to);
+                    if (dl > 80.0f) {
+                        turn_toward(cv, v3_norm(to), dt * 0.9f);
+                        cv->throttle = 0.6f;
+                    } else {
+                        /* orbit: nose along the tangent, slow */
+                        Vec3 tang = v3_norm(v3_cross(v3(0, 1, 0),
+                                                     v3_norm(to)));
+                        turn_toward(cv, tang, dt * 0.9f);
+                        cv->throttle = 0.28f;
+                        cv->fire_cool -= dt;
+                        if (cv->fire_cool <= 0.0f) {
+                            cv->fire_cool = 1.3f;
+                            Vec3 mz = v3_add(cv->pos,
+                                             v3_scale(cv->basis.r[2],
+                                                      cv->mesh->bound_r));
+                            fx_beam(mz, rock, RGB565C(255, 200, 90));
+                        }
                     }
                 } else {
-                    cv->vel = v3_scale(cv->vel, 1.0f - 0.4f * dt);
+                    cv->throttle = 0.5f;        /* cruise on */
                 }
             } else {
-                /* slow lane between two offsets */
-                m3_rotate_local(&cv->basis, 1, 0.04f * dt);
-                cv->vel = v3_lerp(cv->vel,
-                                  v3_scale(cv->basis.r[2], 22.0f),
-                                  0.4f * dt);
+                /* HAULER: straight-line traffic to a far waypoint, fresh
+                 * one on arrival — crosses the play area. */
+                if (cv->civ_wp_t <= 0.0f ||
+                    v3_len2(v3_sub(cv->civ_wp_pos, cv->pos)) <
+                        120.0f * 120.0f) {
+                    uint32_t h = (uint32_t)(i * 2654435761u) ^
+                                 (uint32_t)(cv->civ_wp * 40503u);
+                    h ^= h >> 13; h *= 1274126177u; h ^= h >> 16;
+                    float a = (float)(h & 0xFFFF) *
+                              (6.2831853f / 65535.0f);
+                    float r = 800.0f + (float)((h >> 16) % 700u);
+                    cv->civ_wp_pos = v3(cosf(a) * r,
+                                        (float)((int)((h >> 8) & 0xFF)
+                                                - 128) * 1.2f,
+                                        sinf(a) * r);
+                    cv->civ_wp++;
+                    cv->civ_wp_t = 60.0f;
+                }
+                cv->civ_wp_t -= dt;
+                Vec3 to = v3_sub(cv->civ_wp_pos, cv->pos);
+                turn_toward(cv, v3_norm(to), dt * 0.7f);
+                cv->throttle = 0.7f;
             }
-            cv->pos = v3_add(cv->pos, v3_scale(cv->vel, dt));
-            continue;
+            continue;        /* ship_physics integrates them */
         }
         if (g_ships[i].team == TEAM_NEUTRAL && g_ships[i].is_police) {
             /* Patrol drift: a slow circuit of the station approaches. */

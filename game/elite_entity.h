@@ -76,6 +76,9 @@ typedef struct {
     uint8_t tier;         /* AI skill 0..4 (HARMLESS..ELITE) */
     uint8_t chaff_n;       /* NPC countermeasure charges (tier 3+) */
     uint8_t cls;           /* hull class id (kill report) */
+    uint8_t civ_wp;        /* civilian waypoint index / rock target */
+    float   civ_wp_t;      /* time on current waypoint */
+    Vec3    civ_wp_pos;    /* hauler destination */
     uint8_t is_mark;      /* bounty-mission target */
     uint8_t ai_state;
     float   ai_timer;

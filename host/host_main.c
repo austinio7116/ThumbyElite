@@ -142,6 +142,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_SPEEDKILL") ||
         getenv("ELITE_KILLSCREEN") ||
         getenv("ELITE_FURBALL") ||
+        getenv("ELITE_CIVMOVE") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -575,6 +576,37 @@ int main(int argc, char **argv) {
             }
         printf("[orbit] outermost: avg=%.0f worst=%.0f Mm over %d\n",
                sum / (n ? n : 1), worst, n);
+        return 0;
+    }
+
+    /* Civilian motion: do they travel, or hover? */
+    if (getenv("ELITE_CIVMOVE")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        rocks_spawn_field(0xBEEF, 5);
+        Ship *pl = &g_ships[0];
+        int miner = ship_spawn(hull_mesh(0x11, 6),
+                               v3_add(pl->pos, v3(120, 0, 300)),
+                               TEAM_NEUTRAL);
+        g_ships[miner].is_civilian = 1; g_ships[miner].civ_kind = 0;
+        int haul = ship_spawn(hull_mesh(0x22, 7),
+                              v3_add(pl->pos, v3(-120, 0, 300)),
+                              TEAM_NEUTRAL);
+        g_ships[haul].is_civilian = 1; g_ships[haul].civ_kind = 1;
+        CraftRawButtons none = {0};
+        for (int k = 0; k < 5; k++) elite_game_tick(&none, 1.0f/30.0f);
+        Vec3 m0 = g_ships[miner].pos, h0 = g_ships[haul].pos;
+        float mpath = 0, hpath = 0;
+        Vec3 mp = m0, hp = h0;
+        for (int f = 0; f < 30 * 20; f++) {
+            elite_game_tick(&none, 1.0f / 30.0f);
+            mpath += v3_len(v3_sub(g_ships[miner].pos, mp));
+            hpath += v3_len(v3_sub(g_ships[haul].pos, hp));
+            mp = g_ships[miner].pos; hp = g_ships[haul].pos;
+        }
+        printf("[civ] miner: net %.0fm, path %.0fm, speed~%.0f\n",
+               v3_len(v3_sub(g_ships[miner].pos, m0)), mpath, mpath / 20);
+        printf("[civ] hauler: net %.0fm, path %.0fm, speed~%.0f\n",
+               v3_len(v3_sub(g_ships[haul].pos, h0)), hpath, hpath / 20);
         return 0;
     }
 
