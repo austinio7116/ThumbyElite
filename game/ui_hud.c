@@ -283,10 +283,10 @@ static void target_box(uint16_t *fb, int target) {
     char buf[24];
     float dist = v3_len(v3_sub(t->pos, p->pos));
     snprintf(buf, sizeof buf, "%dM", (int)dist);
-    craft_font_draw(fb, buf, 98, 12, bc);
-    bar(fb, 100, 20, 22, t->shield / (t->shield_max > 0 ? t->shield_max : 1),
+    craft_font_draw(fb, buf, 93, 2, bc);
+    bar(fb, 95, 10, 22, t->shield / (t->shield_max > 0 ? t->shield_max : 1),
         COL_SHIELD);
-    bar(fb, 100, 24, 22, t->hull / (t->hull_max > 0 ? t->hull_max : 1),
+    bar(fb, 95, 14, 22, t->hull / (t->hull_max > 0 ? t->hull_max : 1),
         COL_HULL);
     /* Two lines: WHO they are (faction colour), then how GOOD they
      * are (tier). All raiders are pirates by trade (user q). */
@@ -298,9 +298,9 @@ static void target_box(uint16_t *fb, int target) {
                      : (t->is_civilian && t->team == TEAM_NEUTRAL)
                            ? RGB565C(110, 230, 110)
                            : COL_TARGET;
-        craft_font_draw(fb, id, 98, 28, idc);
+        craft_font_draw(fb, id, 93, 18, idc);
         craft_font_draw(fb, k_tier_names[t->tier > 4 ? 4 : t->tier],
-                        98, 36, RGB565C(150, 156, 170));
+                        93, 26, RGB565C(150, 156, 170));
     }
 }
 
@@ -339,9 +339,9 @@ void ui_hud_draw(uint16_t *fb, const HudInfo *info) {
             snprintf(buf, sizeof buf, "%s", w->name);
         int wx = 64 - craft_font_width(buf) / 2 + 7;
         craft_font_draw(fb, buf, wx,
-                        10, (w->ammo_max && p->ammo[p->active_w] <= 0)
+                        2, (w->ammo_max && p->ammo[p->active_w] <= 0)
                                 ? COL_HULL : COL_NUM);
-        icon_weapon(fb, wx - 15, 9, p->weapons[p->active_w]);
+        icon_weapon(fb, wx - 15, 1, p->weapons[p->active_w]);
     }
 
     /* Left panel: THREE clean rows, nothing below y123 (the old loose

@@ -2097,8 +2097,8 @@ void elite_game_draw_overlay(uint16_t *fb) {
     if (g_player.show_fps) {
         char fbuf[12];
         snprintf(fbuf, sizeof fbuf, "%d FPS", (int)(s_fps + 0.5f));
-        craft_font_draw(fb, fbuf, 64 - craft_font_width(fbuf) / 2, 1,
-                        RGB565C(110, 255, 110));
+        craft_font_draw(fb, fbuf, 2, 1,
+                        RGB565C(110, 255, 110));   /* above the chaff */
     }
 
     /* s_time advances here (called once per frame, post-render). */
