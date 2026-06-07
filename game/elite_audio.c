@@ -107,6 +107,10 @@ void sfx_weapon(int t, float amp) {
     case WPN_MINE:
         play(W_NOISE, 600, 320, 0.18f * amp, 0.002f, 0.08f);
         break;
+    case WPN_PLASMA:
+        /* soft hollow whump per ball, doomy */
+        play(W_SQUARE, 320, 140, 0.16f * amp, 0.004f, 0.07f);
+        break;
     case WPN_MINING:
         /* gritty chisel buzz */
         play(W_NOISE, 1100, 850, 0.10f * amp, 0.002f, 0.05f);

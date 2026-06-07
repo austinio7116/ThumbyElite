@@ -19,6 +19,7 @@ static const int16_t k_wpn_base[WPN_COUNT] = {
     [WPN_AUTOCANNON] = 900, [WPN_MISSILE] = 1200, [WPN_HOMING] = 2800,
     [WPN_FLAK] = 1600, [WPN_RAILGUN] = 7800, [WPN_ION] = 3000,
     [WPN_MINE] = 1400, [WPN_TRACTOR] = 800, [WPN_MINING] = 700,
+    [WPN_PLASMA] = 2400,
 };
 
 void player_init(void) {

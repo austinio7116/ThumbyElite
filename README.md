@@ -11,6 +11,14 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 
 ## Changelog
 
+### 1.23 (in development)
+
+- **PLASMA cannon** (Z2, T6+, 2,400 cr): a rapid stream of energy
+  bolts — autocannon tempo with no ammo bill, paid in heat, balls need
+  leading
+- Mining laser is an industrial cutter, not a gun: ship damage cut to
+  a third (rock yield unchanged)
+
 ### 1.22.1 (ThumbyOne v1.22.1)
 
 - **Slot overflow fix** — the game had outgrown its 256 KB ThumbyOne

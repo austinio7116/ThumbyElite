@@ -29,6 +29,7 @@ typedef enum {
     WPN_MINE,          /* proximity mine dropped astern */
     WPN_TRACTOR,       /* salvage beam: reels locked canisters in */
     WPN_MINING,        /* mining laser: cracks asteroids into ore */
+    WPN_PLASMA,        /* rapid stream of energy plasma balls */
     WPN_COUNT,
     /* Equipment shares the instance/rack/icon machinery: */
     EQ_SHIELD = WPN_COUNT,

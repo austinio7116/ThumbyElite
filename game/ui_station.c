@@ -336,6 +336,7 @@ static void armory_build(void) {
     pool[pn++] = WPN_MISSILE;
     pool[pn++] = WPN_TRACTOR;
     pool[pn++] = WPN_MINING;
+    if (st->tech >= 6) pool[pn++] = WPN_PLASMA;
     if (st->tech >= 4) {
         pool[pn++] = WPN_FLAK;
         pool[pn++] = WPN_MINE;

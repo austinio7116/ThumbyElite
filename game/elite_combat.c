@@ -482,7 +482,7 @@ int combat_fire(int shooter, float spread, int target) {
             Vec3 rhit = v3_add(s->pos, v3_scale(dir, rt));
             fx_beam(muzzle, rhit, w->color);
             int is_miner = (wtype == WPN_MINING);
-            float rd = w->dmg * dmg_mult * (is_miner ? 4.0f : 1.0f);
+            float rd = w->dmg * dmg_mult * (is_miner ? 12.0f : 1.0f);
             if (rocks_damage(ri, rd, is_miner ? 1.0f : 0.45f, rhit) &&
                 shooter == PLAYER)
                 g_player.xp_tech += 1;

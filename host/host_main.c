@@ -119,6 +119,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_PIRGEN") ||
         getenv("ELITE_JITTERTEST") ||
         getenv("ELITE_ICONSHOT") ||
+        getenv("ELITE_PLASMATEST") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -497,6 +498,56 @@ int main(int argc, char **argv) {
         for (int f = 0; f < 12; f++) elite_game_tick(&none, 1.0f/30.0f);
         printf("[dash] resume: state=%d (0=FLIGHT)\n",
                elite_game_state());
+        return 0;
+    }
+
+    /* Plasma + mining-nerf verification. */
+    if (getenv("ELITE_PLASMATEST")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        int e = ship_spawn(hull_mesh(0xACE1u, 2),
+                           v3_add(g_ships[0].pos, v3(0, 0, 120)),
+                           TEAM_HOSTILE);
+        ship_set_tier(e, 0, 2);
+        g_ships[e].vel = v3(0, 0, 0);
+        elite_game_debug_face_away_from_sun();
+        Ship *pl = &g_ships[0];
+        /* face the target */
+        Vec3 f4 = v3_norm(v3_sub(g_ships[e].pos, pl->pos));
+        Vec3 u4 = v3(0, 1, 0);
+        Vec3 r4 = v3_norm(v3_cross(u4, f4));
+        pl->basis.r[0] = r4; pl->basis.r[1] = v3_cross(f4, r4);
+        pl->basis.r[2] = f4;
+        ship_fit_weapon(0, 0, WPN_PLASMA);
+        pl->active_w = 0;
+        CraftRawButtons none = {0}, b;
+        float h0 = g_ships[e].shield + g_ships[e].hull;
+        for (int f = 0; f < 90; f++) {
+            pl->fire_cool = 0; pl->heat = 0;
+            b = none; b.a = true;
+            elite_game_tick(&b, 1.0f / 30.0f);
+            g_ships[e].pos = v3_add(pl->pos, v3(0, 0, 120));
+            g_ships[e].vel = v3(0, 0, 0);
+        }
+        float h1 = g_ships[e].alive ? g_ships[e].shield + g_ships[e].hull
+                                    : -1;
+        printf("[plasma] target %0.f -> %.0f (%s)\n", h0, h1,
+               (h1 < h0) ? "BALLS CONNECT" : "no damage");
+        /* mining laser vs the same ship class: feeble */
+        int e2 = ship_spawn(hull_mesh(0xBEEFu, 2),
+                            v3_add(pl->pos, v3(0, 0, 120)),
+                            TEAM_HOSTILE);
+        ship_set_tier(e2, 0, 2);
+        ship_fit_weapon(0, 0, WPN_MINING);
+        pl->active_w = 0;
+        float m0 = g_ships[e2].shield;
+        for (int f = 0; f < 30; f++) {
+            pl->fire_cool = 0; pl->heat = 0;
+            b = none; b.a = true;
+            elite_game_tick(&b, 1.0f / 30.0f);
+            g_ships[e2].pos = v3_add(pl->pos, v3(0, 0, 120));
+        }
+        printf("[plasma] mining dps vs ship: %.0f dmg/s (want ~11)\n",
+               (m0 - g_ships[e2].shield));
         return 0;
     }
 
