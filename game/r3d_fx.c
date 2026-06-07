@@ -6,8 +6,8 @@
 #include "elite_types.h"
 #include <string.h>
 
-#define MAX_PARTICLES 320   /* human fire model = many more muzzle/impact sparks */
-#define MAX_BEAMS     8
+#define MAX_PARTICLES 1024  /* human fire model + lance rails: big pool ~37KB, ample slot headroom */
+#define MAX_BEAMS     24   /* many ships fire hitscan at once now */
 
 typedef struct {
     Vec3  pos, vel;
@@ -202,7 +202,7 @@ void fx_lance(Vec3 from, Vec3 to, uint16_t color) {
     Vec3 ref = (dir.y < 0.9f && dir.y > -0.9f) ? v3(0, 1, 0) : v3(1, 0, 0);
     Vec3 e1 = v3_norm(v3_cross(dir, ref));
     Vec3 e2 = v3_cross(dir, e1);
-    const float SPACING = 15.0f, RADIUS = 1.6f;  /* lean: ~70 motes at full range, leaves pool for impacts */
+    const float SPACING = 9.0f, RADIUS = 1.6f;   /* dense rails; pool is big now */
     for (float d = 0.0f; d <= len; d += SPACING) {
         Vec3 base = v3_add(from, v3_scale(dir, d));
         for (int k = 0; k < 4; k++) {            /* 4 parallel rails */
