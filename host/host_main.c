@@ -128,6 +128,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_COLTEST") ||
         getenv("ELITE_CLOAKTEST") ||
         getenv("ELITE_ROCKCYCLE") ||
+        getenv("ELITE_TAILTEST") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -506,6 +507,47 @@ int main(int argc, char **argv) {
         for (int f = 0; f < 12; f++) elite_game_tick(&none, 1.0f/30.0f);
         printf("[dash] resume: state=%d (0=FLIGHT)\n",
                elite_game_state());
+        return 0;
+    }
+
+    /* Dogfight rework: blue zone + tail responses. */
+    if (getenv("ELITE_TAILTEST")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Ship *pl = &g_ships[0];
+        /* envelope: turn authority at half vs full speed */
+        pl->vel = v3_scale(pl->basis.r[2], pl->max_speed * 0.4f);
+        float e_half = turn_envelope(pl);
+        pl->vel = v3_scale(pl->basis.r[2], pl->max_speed);
+        float e_full = turn_envelope(pl);
+        printf("[tail] envelope: 40%%spd=%.2f full=%.2f (blue zone %s)\n",
+               e_half, e_full,
+               (e_half == 1.0f && e_full < 0.65f) ? "OK" : "BUG");
+        /* tail a VETERAN: expect a throttle chop within 2s */
+        for (int tier = 1; tier <= 4; tier += 3) {
+            int e = ship_spawn(hull_mesh(0xACE1u, 1 + tier),
+                               v3_add(pl->pos,
+                                      v3_scale(pl->basis.r[2], 120.0f)),
+                               TEAM_HOSTILE);
+            ship_set_tier(e, tier, 1 + tier);
+            Ship *s2 = &g_ships[e];
+            s2->basis = pl->basis;           /* same heading: tailed */
+            s2->vel = v3_scale(pl->basis.r[2], 30.0f);
+            pl->vel = v3_scale(pl->basis.r[2], 30.0f);
+            float min_thr = 1.0f;
+            CraftRawButtons none = {0};
+            for (int f = 0; f < 60; f++) {
+                elite_game_tick(&none, 1.0f / 30.0f);
+                /* hold the tail geometry */
+                s2->pos = v3_add(pl->pos,
+                                 v3_scale(pl->basis.r[2], 120.0f));
+                if (s2->throttle < min_thr) min_thr = s2->throttle;
+            }
+            printf("[tail] tier %d tailed: min throttle %.2f (%s)\n",
+                   tier, min_thr,
+                   tier >= 3 ? (min_thr < 0.2f ? "CHOPS" : "no chop?")
+                             : (min_thr > 0.5f ? "runs/jinks" : "odd"));
+            s2->alive = false;
+        }
         return 0;
     }
 

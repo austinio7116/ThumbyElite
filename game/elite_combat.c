@@ -342,8 +342,8 @@ int combat_fire(int shooter, float spread, int target) {
         /* NOT monotone — it compensates each tier's payload (t3 packs
          * PULSE-M streams, t2 often autocannon) so the COLLAPSE TIMES
          * are the smooth curve, not this table. */
-        static const float k_npc_dmg[5] = { 0.60f, 0.62f, 0.95f,
-                                            0.38f, 0.74f };
+        static const float k_npc_dmg[5] = { 1.00f, 0.52f, 0.90f,
+                                            0.96f, 0.74f };
         dmg_mult = k_npc_dmg[s->tier > 4 ? 4 : s->tier];
     }
     if (shooter == PLAYER) {

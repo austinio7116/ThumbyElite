@@ -35,12 +35,13 @@ static void turn_toward(Ship *s, Vec3 dir, float dt) {
     float sin_a = v3_len(axis);
     if (sin_a < 1e-4f) {
         if (v3_dot(fwd, dir) < 0.0f)
-            m3_rotate_world(&s->basis, s->basis.r[1], s->turn_rate * dt);
+            m3_rotate_world(&s->basis, s->basis.r[1],
+                            s->turn_rate * turn_envelope(s) * dt);
         return;
     }
     float want = asinf(sin_a > 1.0f ? 1.0f : sin_a);
     if (v3_dot(fwd, dir) < 0.0f) want = 3.14159265f - want;
-    float step = s->turn_rate * dt;
+    float step = s->turn_rate * turn_envelope(s) * dt;
     if (step > want) step = want;
     m3_rotate_world(&s->basis, v3_scale(axis, 1.0f / sin_a), step);
     m3_orthonormalize(&s->basis);
@@ -104,6 +105,75 @@ static void ai_ship(int idx, float dt) {
     }
     int tier = s->tier > 4 ? 4 : s->tier;
 
+    /* THE TAIL FIGHT (user req: position should be earned and owned).
+     * When the target sits behind us with guns on, respond by tier:
+     * prey runs, CAPABLE jinks, VETERAN throttle-chops to force the
+     * overshoot (full agility at low speed — the blue zone cuts both
+     * ways), DEADLY mixes chops with scissors. */
+    {
+        static float s_chop_cd[MAX_SHIPS], s_chop_t[MAX_SHIPS];
+        static float s_scissor_t[MAX_SHIPS];
+        static int8_t s_scissor_side[MAX_SHIPS];
+        static float s_evade_t[MAX_SHIPS];
+        s_chop_cd[idx] -= dt;
+        int tailed = dist < 200.0f &&
+                     v3_dot(dir, s->basis.r[2]) < -0.35f &&
+                     v3_dot(t->basis.r[2], v3_scale(dir, -1.0f)) > 0.70f;
+        /* evasion has a clock: after ~2.2s of dancing they accept the
+         * duel and wheel back in (also stops a stationary gunline from
+         * reading as an eternal tail — the siege stalemate) */
+        if (tailed) {
+            s_evade_t[idx] += dt;
+            if (s_evade_t[idx] > 2.2f) {
+                tailed = 0;
+                if (s_evade_t[idx] > 3.6f) s_evade_t[idx] = 0;
+            }
+        } else if (s_evade_t[idx] > 0) {
+            s_evade_t[idx] -= dt * 2.0f;
+            if (s_evade_t[idx] < 0) s_evade_t[idx] = 0;
+        }
+        if (s_chop_t[idx] > 0.0f) {
+            /* mid-chop: dead slow, whip the nose around */
+            s_chop_t[idx] -= dt;
+            s->throttle = 0.10f;
+            turn_toward(s, dir, dt);
+            return;
+        }
+        if (tailed) {
+            if (tier <= 1) {
+                /* prey: run flat out with a shallow weave */
+                Vec3 weave = v3_scale(s->basis.r[0],
+                                      0.35f * sinf(s->ai_timer * 5.0f +
+                                                   (float)idx));
+                s->ai_timer += dt;
+                turn_toward(s, v3_norm(v3_add(v3_scale(dir, -1.0f),
+                                              weave)), dt);
+                s->throttle = 1.0f;
+                return;
+            }
+            if (tier >= 3 && s_chop_cd[idx] <= 0.0f) {
+                /* the ED move: chop throttle, force the overshoot */
+                s_chop_t[idx] = 1.1f;
+                s_chop_cd[idx] = 4.5f;
+                return;
+            }
+            /* jink / scissors: hard alternating lateral breaks */
+            s_scissor_t[idx] -= dt;
+            if (s_scissor_t[idx] <= 0.0f) {
+                s_scissor_t[idx] = (tier >= 4) ? 0.7f : 1.0f;
+                s_scissor_side[idx] = (s_scissor_side[idx] >= 0) ? -1 : 1;
+            }
+            Vec3 brk = v3_add(v3_scale(dir, -0.35f),
+                              v3_scale(s->basis.r[0],
+                                       (float)s_scissor_side[idx]));
+            brk = v3_add(brk, v3_scale(s->basis.r[1],
+                                       0.4f * (float)s_scissor_side[idx]));
+            turn_toward(s, v3_norm(brk), dt);
+            s->throttle = 0.85f;
+            return;
+        }
+    }
+
     /* Fully disarmed (all mounts critted): break and RUN — a fleeing
      * cripple is a story, and a free kill if you chase it down. */
     if (s->team == TEAM_HOSTILE && s->n_weapons > 0) {
@@ -124,7 +194,11 @@ static void ai_ship(int idx, float dt) {
         /* fallthrough */
     case AI_ATTACK: {
         turn_toward(s, dir, dt);
-        s->throttle = (dist > 220.0f) ? 1.0f : (dist > 90.0f ? 0.7f : 0.45f);
+        /* corner-speed combat (ED blue zone): full speed only to CLOSE,
+         * then fight slow enough to actually turn */
+        s->throttle = (dist > 400.0f) ? 1.0f
+                    : (dist > 150.0f) ? 0.68f
+                    : (dist > 90.0f)  ? 0.55f : 0.45f;
         if (dist < AI_BREAK_DIST) {
             s->ai_state = AI_BREAK;
             s->ai_timer = AI_BREAK_TIME;

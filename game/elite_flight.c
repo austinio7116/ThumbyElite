@@ -36,7 +36,7 @@ void flight_apply_input(const FlightInput *in, float dt) {
     Ship *p = &g_ships[PLAYER];
     if (!p->alive) return;
 
-    float tr = p->turn_rate * dt;
+    float tr = p->turn_rate * turn_envelope(p) * dt;
     float rp = chase(&s_vel_pitch,
                      in->pitch * ramp(&s_ramp_pitch, in->pitch, dt), dt);
     float ry = chase(&s_vel_yaw,

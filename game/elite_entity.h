@@ -84,6 +84,17 @@ extern Ship g_ships[MAX_SHIPS];
 
 void ships_init(void);
 /* Returns index or -1 (pool full). Slot 0 is reserved for the player. */
+/* ED-style blue zone (user req): turn authority is full at half max
+ * speed and bleeds to ~58% at full speed — hard turning means slowing
+ * down, so POSITION is earned and a tail can be owned. */
+static inline float turn_envelope(const Ship *s) {
+    float ms = s->max_speed > 1.0f ? s->max_speed : 1.0f;
+    float frac = v3_len(s->vel) / ms;
+    if (frac <= 0.5f) return 1.0f;
+    if (frac > 1.15f) frac = 1.15f;
+    return 1.0f - 0.84f * (frac - 0.5f);
+}
+
 int ship_spawn(const Mesh *mesh, Vec3 pos, uint8_t team);
 int ships_alive_hostile(void);
 /* Remove every NPC (anchor change: they live in the old local frame). */

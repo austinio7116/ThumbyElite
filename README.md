@@ -19,6 +19,11 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 - **PLASMA LANCE** (Z3, T11+, 6,400 cr): phases through shields
   straight to hull — can crit a shielded target; the BULWARK-tank
   killer, countered by thick armor
+- **Dogfight rework: the blue zone** — turn authority peaks at half
+  throttle for ALL ships; pirates fight at corner speed and answer a
+  tail by rank (run / jink / throttle-chop / scissors). Position is
+  earned and owned; jousting is over. Difficulty ladder re-anchored
+  (52/27/18/11/4s siege collapse)
 - **Collision physics** — ships, rocks and the station deflect and
   damage on contact: shields block hull entirely, size sets the split,
   autodock is exempt, rams chip ore, NPCs steer around boulders
