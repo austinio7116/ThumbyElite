@@ -578,6 +578,12 @@ int main(int argc, char **argv) {
     if (getenv("ELITE_DPSTEST")) {
         extern const Mesh *hull_mesh(uint32_t, int);
         Ship *pl = &g_ships[0];
+        /* ELITE_DPSTEST=<fps>: cooldowns quantize to frames, and the
+         * DEVICE runs 80-90fps uncapped (user) — 30fps rig numbers
+         * undersell fast weapons. */
+        int fps = atoi(getenv("ELITE_DPSTEST"));
+        if (fps < 30) fps = 30;
+        float rdt = 1.0f / (float)fps;
         elite_game_debug_face_away_from_sun();
         printf("[dps] %-9s %7s %9s\n", "WEAPON", "BURST", "SUSTAINED");
         for (int wt = 0; wt < WPN_COUNT; wt++) {
@@ -614,16 +620,16 @@ int main(int argc, char **argv) {
                 pl->heat = 0; pl->fire_cool = 0;
                 float d0 = t2->shield + t2->hull;
                 CraftRawButtons b = { 0 };
-                int frames = 30 * 8;
+                int frames = fps * 8;
                 for (int f = 0; f < frames; f++) {
                     /* charge weapons need press-release cycling */
                     if (wt == WPN_RAILGUN || wt == WPN_GAUSS)
-                        b.a = (f % 40) < 36;
+                        b.a = (f % (fps * 4 / 3)) < (fps * 6 / 5);
                     else
                         b.a = true;
                     if (mode == 0) pl->heat = 0;       /* burst */
                     if (k_weapons[wt].ammo_max) pl->ammo[0] = 500;
-                    elite_game_tick(&b, 1.0f / 30.0f);
+                    elite_game_tick(&b, rdt);
                     t2->pos = hold; t2->vel = v3(0, 0, 0);
                     t2->alive = true;
                     pl->vel = v3(0, 0, 0);
@@ -632,8 +638,8 @@ int main(int argc, char **argv) {
                 }
                 /* let projectiles in flight land */
                 b.a = false;
-                for (int f = 0; f < 45; f++) {
-                    elite_game_tick(&b, 1.0f / 30.0f);
+                for (int f = 0; f < fps * 3 / 2; f++) {
+                    elite_game_tick(&b, rdt);
                     t2->pos = hold; t2->vel = v3(0, 0, 0);
                     t2->alive = true;
                 }
