@@ -769,17 +769,50 @@ int main(int argc, char **argv) {
              * surgery. D-pad only, 0.2s reaction lag, a deadband, one
              * axis at a time: the way a thumb actually flies. Fights
              * become joust-and-reacquire, like real play. */
-            int honest = atoi(getenv("ELITE_TIERMOVIE")) >= 2;
+            int mode = atoi(getenv("ELITE_TIERMOVIE"));
+            int honest = mode == 2;
+            if (mode == 3) {
+                /* missile showcase: 10 rounds, one every 5s */
+                memset(g_player.mounts, 0, sizeof g_player.mounts);
+                g_player.mounts[0] = (WeaponInst){ .type = WPN_HOMING,
+                    .quality = Q_STANDARD, .integrity = 100,
+                    .in_use = 1 };
+                g_player.ammo[0] = 10;
+                player_apply_to_ship();
+                pl->active_w = 0;
+            }
             int lagN = 6;
             float lag_x[8] = { 0 }, lag_y[8] = { 0 };
             int li = 0;
-            for (int f = 0; f < 30 * 26 && g_ships[e].alive; f++) {
+            int fmax = 30 * ((atoi(getenv("ELITE_TIERMOVIE")) == 3)
+                                 ? 58 : 26);
+            for (int f = 0; f < fmax && g_ships[e].alive; f++) {
                 Ship *t2 = &g_ships[e];
                 float d = v3_len(v3_sub(t2->pos, pl->pos));
                 CraftRawButtons b3 = none;
                 Vec3 l = m3_mul_v3_t(&pl->basis,
                                      v3_sub(t2->pos, pl->pos));
                 int watching = ((f + 180) % 240) >= 45;
+                if (mode == 3) {
+                    /* film the missiles: gentle framing, volley every
+                     * 5s until the magazine runs dry */
+                    TMV_STEER(t2->pos, 0.05f);
+                    pl->throttle = (d > 320.0f) ? 0.9f
+                                 : (d > 140.0f) ? 0.5f : 0.25f;
+                    CraftRawButtons b4 = none;
+                    if (f % 150 == 20 && pl->ammo[0] > 0) {
+                        pl->fire_cool = 0;
+                        pl->heat = 0;
+                        b4.a = true;
+                    }
+                    if (pl->shield < pl->shield_max * 0.3f)
+                        pl->shield = pl->shield_max;
+                    TMV(b4);
+                    if (pl->ammo[0] <= 0 &&
+                        proj_nearest_homing(e) > 9e8f && (f % 150) > 120)
+                        break;             /* dry and nothing in flight */
+                    continue;
+                }
                 if (honest) {
                     /* see where it was lagN frames ago */
                     lag_x[li % 8] = l.x; lag_y[li % 8] = l.y; li++;
