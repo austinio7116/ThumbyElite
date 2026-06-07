@@ -34,7 +34,7 @@ static const float k_fight_speed[5] = { 0.55f, 0.70f, 0.85f,
  * compensated its gauss payload; the kill matrix showed it inverting
  * the ladder once geometry was fixed — k_npc_dmg carries balance now). */
 static const float k_refire[5] = { 0.90f, 0.75f, 0.60f, 0.50f, 0.42f };
-static const float k_spread[5] = { 0.052f, 0.038f, 0.025f, 0.016f, 0.0105f };
+static const float k_spread[5] = { 0.052f, 0.038f, 0.028f, 0.018f, 0.012f };
 
 /* The tier accuracy table, shared with the turret gunner. */
 float ai_tier_spread(int tier) {
@@ -314,7 +314,7 @@ static void ai_ship(int idx, float dt) {
                                (1.0f + v3_len(latv) / 90.0f);
                     if (s->crits & CRIT_AIM) sp *= 2.2f;
                     combat_fire(idx, sp, ti);
-                    s->fire_cool = k_refire[tier];
+                    s->fire_cool = w->cooldown;   /* rail cadence */
                 }
             }
             break;
@@ -322,14 +322,16 @@ static void ai_ship(int idx, float dt) {
         if (dist < w->range && dist < k_eng[tier] &&
             v3_dot(s->basis.r[2], dir) > k_cone[tier] &&
             combat_can_fire(s)) {
-            /* Evasion is real: target's lateral speed widens the
-             * effective spread — flying hard across the line of fire
-             * dodges; sitting still gets you hit (and killed). */
+            /* THE HUMAN FIRE MODEL (user design): fire at the WEAPON's
+             * own cadence while on target — a thumb holding A. Heat
+             * throttles streams exactly as it does for the player;
+             * rank lives ONLY in aim (spread/cone/range). More bullets,
+             * more battle. */
             Vec3 latv = v3_sub(t->vel, v3_scale(dir, v3_dot(t->vel, dir)));
             float sp = k_spread[tier] * (1.0f + v3_len(latv) / 90.0f);
             if (s->crits & CRIT_AIM) sp *= 2.2f;   /* targeting smashed */
             combat_fire(idx, sp, ti);
-            s->fire_cool = k_refire[tier];
+            s->fire_cool = w->cooldown;
         }
         break;
     }

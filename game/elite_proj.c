@@ -18,7 +18,7 @@
 #include "elite_audio.h"
 #include "elite_types.h"
 
-#define MAX_PROJ 28
+#define MAX_PROJ 72   /* streams from every gun now (human fire model) */
 
 typedef struct {
     bool  alive;

@@ -141,6 +141,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_BENDTEST") ||
         getenv("ELITE_SPEEDKILL") ||
         getenv("ELITE_KILLSCREEN") ||
+        getenv("ELITE_FURBALL") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -574,6 +575,30 @@ int main(int argc, char **argv) {
             }
         printf("[orbit] outermost: avg=%.0f worst=%.0f Mm over %d\n",
                sum / (n ? n : 1), worst, n);
+        return 0;
+    }
+
+    /* Furball: peak projectile + particle load with many shooters. */
+    if (getenv("ELITE_FURBALL")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Ship *pl = &g_ships[0];
+        pl->shield = 1e9f; pl->hull = 1e9f;   /* invincible observer */
+        for (int k = 0; k < 6; k++) {
+            int e = ship_spawn(hull_mesh(0xA0u + k, 2 + (k % 4)),
+                               v3_add(pl->pos,
+                                      v3(40 * (k - 3), 0, 180)),
+                               TEAM_HOSTILE);
+            ship_set_tier(e, 2 + (k % 3), 2 + (k % 4));
+        }
+        int peak = 0;
+        CraftRawButtons none = {0};
+        for (int f = 0; f < 30 * 8; f++) {
+            elite_game_tick(&none, 1.0f / 30.0f);
+            pl->shield = 1e9f; pl->hull = 1e9f;
+            int pc = proj_count();
+            if (pc > peak) peak = pc;
+        }
+        printf("[furball] 6 shooters, peak projectiles: %d / 72\n", peak);
         return 0;
     }
 

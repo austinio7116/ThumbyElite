@@ -6,7 +6,7 @@
 #include "elite_types.h"
 #include <string.h>
 
-#define MAX_PARTICLES 192
+#define MAX_PARTICLES 320   /* human fire model = many more muzzle/impact sparks */
 #define MAX_BEAMS     8
 
 typedef struct {
