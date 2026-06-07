@@ -134,6 +134,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_ORBITPROBE") ||
         getenv("ELITE_REDISTRESS") ||
         getenv("ELITE_ARMOURYSHOT") ||
+        getenv("ELITE_DPSTEST") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -567,6 +568,81 @@ int main(int argc, char **argv) {
             }
         printf("[orbit] outermost: avg=%.0f worst=%.0f Mm over %d\n",
                sum / (n ? n : 1), worst, n);
+        return 0;
+    }
+
+    /* Measured DPS rig (user req): every shot hits a huge stationary
+     * target 200m ahead. BURST = heat zeroed (cooldown-limited);
+     * SUSTAINED = real heat. Damage read off combined shield+hull
+     * delta so ION's split and P.LANCE's bypass both count. */
+    if (getenv("ELITE_DPSTEST")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Ship *pl = &g_ships[0];
+        elite_game_debug_face_away_from_sun();
+        printf("[dps] %-9s %7s %9s\n", "WEAPON", "BURST", "SUSTAINED");
+        for (int wt = 0; wt < WPN_COUNT; wt++) {
+            if (wt == WPN_MINE || wt == WPN_TRACTOR) continue;
+            float res[2] = { 0, 0 };
+            for (int mode = 0; mode < 2; mode++) {
+                int e = ship_spawn(hull_mesh(0xACE1u, 5),
+                                   v3_add(pl->pos,
+                                          v3_scale(pl->basis.r[2],
+                                                   200.0f)),
+                                   TEAM_HOSTILE);
+                if (e <= 0) continue;
+                ship_set_tier(e, 0, 5);
+                Ship *t2 = &g_ships[e];
+                t2->shield_max = 30000.0f; t2->shield = 30000.0f;
+                t2->hull_max = 30000.0f; t2->hull = 30000.0f;
+                t2->shield_regen = 0;
+                t2->n_weapons = 0;          /* the target doesn't shoot
+                                               back — an armed MAULER was
+                                               killing the RIG (insurance
+                                               respawn read as 7.5k dps) */
+                t2->turret_type = 0;
+                Vec3 hold = t2->pos;
+                /* a clean STANDARD 100% instance — dmg_mult reads the
+                 * PLAYER mount, not the ship slot */
+                memset(g_player.mounts, 0, sizeof g_player.mounts);
+                g_player.mounts[0] = (WeaponInst){ .type = (uint8_t)wt,
+                    .quality = Q_STANDARD, .integrity = 100,
+                    .in_use = 1 };
+                g_player.ammo[0] = k_weapons[wt].ammo_max
+                                       ? k_weapons[wt].ammo_max : -1;
+                player_apply_to_ship();
+                pl->active_w = 0;
+                pl->heat = 0; pl->fire_cool = 0;
+                float d0 = t2->shield + t2->hull;
+                CraftRawButtons b = { 0 };
+                int frames = 30 * 8;
+                for (int f = 0; f < frames; f++) {
+                    /* charge weapons need press-release cycling */
+                    if (wt == WPN_RAILGUN || wt == WPN_GAUSS)
+                        b.a = (f % 40) < 36;
+                    else
+                        b.a = true;
+                    if (mode == 0) pl->heat = 0;       /* burst */
+                    if (k_weapons[wt].ammo_max) pl->ammo[0] = 500;
+                    elite_game_tick(&b, 1.0f / 30.0f);
+                    t2->pos = hold; t2->vel = v3(0, 0, 0);
+                    t2->alive = true;
+                    pl->vel = v3(0, 0, 0);
+                    pl->shield = pl->shield_max;   /* rig armour */
+                    pl->hull = pl->hull_max;
+                }
+                /* let projectiles in flight land */
+                b.a = false;
+                for (int f = 0; f < 45; f++) {
+                    elite_game_tick(&b, 1.0f / 30.0f);
+                    t2->pos = hold; t2->vel = v3(0, 0, 0);
+                    t2->alive = true;
+                }
+                res[mode] = (d0 - (t2->shield + t2->hull)) / 8.0f;
+                t2->alive = false;
+            }
+            printf("[dps] %-9s %7.1f %9.1f\n", k_weapons[wt].name,
+                   res[0], res[1]);
+        }
         return 0;
     }
 

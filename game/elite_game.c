@@ -1507,6 +1507,9 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         audio_engine_set(0, 0);
         DockAction act = station_tick(btn, dt);
         if (act == DOCK_LAUNCH) {
+            /* Save on the way OUT too (user: otherwise you re-dock just
+             * to bank a good purchase). */
+            save_write(s_addr, s_anchor_poi.index, combat_kills());
             /* Emerge from the bay face (station +z, rotated by its spin),
              * nose out, gentle drift. */
             Ship *p = &g_ships[PLAYER];
