@@ -29,6 +29,7 @@
 #include "ui_icons.h"
 #include "elite_save.h"
 #include "elite_proj.h"
+#include "elite_input.h"
 #include "elite_loot.h"
 
 #include <SDL2/SDL.h>
@@ -108,14 +109,55 @@ int main(int argc, char **argv) {
                                : (uint32_t)time(NULL);
     printf("[elite] seed = %u\n", seed);
     elite_game_init(seed);
+    /* LB: taps cycle target, 3s STILL hold shifts mode, hold+roll rolls. */
+    if (getenv("ELITE_LBTEST")) {
+        FlightInput fi;
+        CraftRawButtons b;
+        int cyc = 0, mode = 0;
+        /* five quick taps */
+        for (int t = 0; t < 5; t++) {
+            b = (CraftRawButtons){0}; b.lb = true;
+            elite_input_update(&b, 1.0f/30.0f, &fi);
+            if (fi.tgt_class_cycle) mode++;
+            b = (CraftRawButtons){0};
+            for (int k=0;k<4;k++) {
+                elite_input_update(&b,1.0f/30.0f,&fi);
+                if (fi.cycle_target) cyc++;
+                if (fi.tgt_class_cycle) mode++;
+            }
+        }
+        printf("[lb] 5 quick taps: cycle=%d mode=%d (want 5/0)\n",
+               cyc, mode);
+        /* 3s still hold */
+        int mode2 = 0;
+        for (int f = 0; f < 30 * 4; f++) {
+            b = (CraftRawButtons){0}; b.lb = true;
+            elite_input_update(&b, 1.0f/30.0f, &fi);
+            if (fi.tgt_class_cycle) mode2++;
+        }
+        b = (CraftRawButtons){0}; elite_input_update(&b,1.0f/30.0f,&fi);
+        printf("[lb] 4s still hold: mode shifts=%d (want 1)\n", mode2);
+        /* 3s hold WHILE rolling (dpad) */
+        int mode3 = 0;
+        for (int f = 0; f < 30 * 4; f++) {
+            b = (CraftRawButtons){0}; b.lb = true; b.left = true;
+            elite_input_update(&b, 1.0f/30.0f, &fi);
+            if (fi.tgt_class_cycle) mode3++;
+        }
+        printf("[lb] 4s hold+roll: mode shifts=%d (want 0)\n", mode3);
+        return 0;
+    }
+
     /* 100-ship weapon census across all tiers/classes. */
     if (getenv("ELITE_SHIPCENSUS")) {
         extern const Mesh *hull_mesh(uint32_t, int);
         int wcount[WPN_COUNT];
         for (int i = 0; i < WPN_COUNT; i++) wcount[i] = 0;
         int nguns = 0, withturret = 0, ships = 0;
-        for (int n = 0; n < 100; n++) {
-            int tier = n % 5;               /* even spread of ranks */
+        int per_tier[5][WPN_COUNT];
+        for (int a=0;a<5;a++) for (int b=0;b<WPN_COUNT;b++) per_tier[a][b]=0;
+        for (int n = 0; n < 500; n++) {
+            int tier = n % 5;               /* 100 per tier */
             int cls = 1 + (n * 7 + tier) % 9;
             int e = ship_spawn(hull_mesh(0x1000u + n * 131u, cls),
                                v3(0, 0, 500), TEAM_HOSTILE);
@@ -126,16 +168,22 @@ int main(int argc, char **argv) {
             nguns += p->n_weapons;
             if (p->turret_type) withturret++;
             for (int w = 0; w < p->n_weapons; w++)
-                if (p->weapons[w] < WPN_COUNT) wcount[p->weapons[w]]++;
+                if (p->weapons[w] < WPN_COUNT) {
+                    wcount[p->weapons[w]]++;
+                    per_tier[tier][p->weapons[w]]++;
+                }
             p->alive = false;
         }
         printf("[census] %d ships, %d guns (%.1f avg), %d with turret\n",
                ships, nguns, (float)nguns / ships, withturret);
+        printf("[census] per-tier gun counts (100 ships each):\n");
+        printf("[census] %-9s  T0  T1  T2  T3  T4   ALL\n", "WEAPON");
         for (int i = 0; i < WPN_COUNT; i++)
             if (wcount[i])
-                printf("[census] %-9s %3d  (%.0f%% of guns)\n",
-                       k_weapons[i].name, wcount[i],
-                       100.0f * wcount[i] / nguns);
+                printf("[census] %-9s %3d %3d %3d %3d %3d  %4d\n",
+                       k_weapons[i].name, per_tier[0][i], per_tier[1][i],
+                       per_tier[2][i], per_tier[3][i], per_tier[4][i],
+                       wcount[i]);
         return 0;
     }
 

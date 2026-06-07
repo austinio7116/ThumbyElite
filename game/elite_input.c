@@ -83,10 +83,24 @@ void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) 
      * land 350-450ms apart and the tight window missed them (user
      * report). RB keeps the snappy window: it gates the deferred
      * assist-toggle latency. */
-    int lb_ev = mod_update(&s_lb, btn->lb, dpad, false, 0.50f, dt);
+    /* LB: every tap cycles the target (no double-tap consumed by the
+     * window now — you can rattle LB fast in a fight). Targeting-MODE
+     * shift is a 3s HOLD instead (user) — but only a STILL hold; if
+     * you're rolling (d-pad held) it stays a roll, never a mode flip. */
+    int lb_ev = mod_update(&s_lb, btn->lb, dpad, false, 0.0f, dt);
+    static bool s_lb_hold_dpad, s_lb_hold_fired;
+    if (btn->lb) {
+        if (dpad) s_lb_hold_dpad = true;
+        if (s_lb.held_s >= 3.0f && !s_lb_hold_fired && !s_lb_hold_dpad) {
+            out->tgt_class_cycle = true;
+            s_lb_hold_fired = true;
+        }
+    } else {
+        s_lb_hold_dpad = false;
+        s_lb_hold_fired = false;
+    }
     int rb_ev = mod_update(&s_rb, btn->rb, dpad, true, DOUBLE_MS, dt);
-    if (lb_ev == 2) out->tgt_class_cycle = true;
-    else if (lb_ev == 1) out->cycle_target = true;
+    if (lb_ev) out->cycle_target = true;
 
     /* RB tap action is deferred one double-tap window so a double-tap is
      * pure boost (no spurious assist toggle on the first tap). */

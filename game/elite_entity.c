@@ -67,6 +67,45 @@ void ship_fit_weapon(int idx, int mount, WeaponType w) {
     if (mount >= s->n_weapons) s->n_weapons = (uint8_t)(mount + 1);
 }
 
+/* WEAPON VARIETY (user: variety is key — all weapons at all tiers,
+ * weighted by rank). Each combat weapon has a grade 0 (light) .. 4
+ * (heavy); a pilot rolls a grade from a tier-biased distribution then
+ * picks a random weapon of that grade — so a HARMLESS pirate USUALLY
+ * has a peashooter but might surprise you, and an ELITE usually packs
+ * heavy iron but occasionally slums it. */
+static const uint8_t k_grade0[] = { WPN_PULSE_S, WPN_AUTOCANNON };
+static const uint8_t k_grade1[] = { WPN_PULSE_M, WPN_BLASTER,
+                                    WPN_MISSILE, WPN_FLAK };
+static const uint8_t k_grade2[] = { WPN_PULSE_L, WPN_BEAM, WPN_ION,
+                                    WPN_HOMING };
+static const uint8_t k_grade3[] = { WPN_PHOTON, WPN_PLASMA, WPN_GAUSS };
+static const uint8_t k_grade4[] = { WPN_RAILGUN, WPN_LANCE };
+static const struct { const uint8_t *w; int n; } k_grades[5] = {
+    { k_grade0, 2 }, { k_grade1, 4 }, { k_grade2, 4 },
+    { k_grade3, 3 }, { k_grade4, 2 },
+};
+/* per-tier grade probabilities x100 (rows sum to 100). */
+static const uint8_t k_gradeprob[5][5] = {
+    /* g0  g1  g2  g3  g4 */
+    {  70, 25,  5,  0,  0 },   /* T0 HARMLESS */
+    {  48, 35, 14,  3,  0 },   /* T1 NOVICE   */
+    {  24, 34, 28, 11,  3 },   /* T2 CAPABLE  */
+    {  10, 24, 34, 22, 10 },   /* T3 VETERAN  */
+    {   3, 12, 30, 35, 20 },   /* T4 DEADLY   */
+};
+static uint32_t s_wrng = 0x5151u;
+static WeaponType roll_weapon(int tier, uint32_t salt) {
+    s_wrng ^= salt * 2654435761u;
+    s_wrng ^= s_wrng << 13; s_wrng ^= s_wrng >> 17; s_wrng ^= s_wrng << 5;
+    int r = (int)(s_wrng % 100u);
+    const uint8_t *gp = k_gradeprob[tier > 4 ? 4 : tier];
+    int g = 0, acc = 0;
+    for (g = 0; g < 5; g++) { acc += gp[g]; if (r < acc) break; }
+    if (g > 4) g = 4;
+    s_wrng ^= s_wrng << 13; s_wrng ^= s_wrng >> 17; s_wrng ^= s_wrng << 5;
+    return (WeaponType)k_grades[g].w[s_wrng % (uint32_t)k_grades[g].n];
+}
+
 void ship_set_tier(int idx, int tier, int hull_class) {
     Ship *s = &g_ships[idx];
     if (tier < 0) tier = 0;
@@ -111,31 +150,15 @@ void ship_set_tier(int idx, int tier, int hull_class) {
                          ? (uint8_t)(WPN_PULSE_S + 1) : 0;
     s->turret_cool = 0;
     s->shield = s->shield_max;
-    /* Loadout by tier. */
+    /* Loadout: weighted variety (user). Gun count rises with rank;
+     * each mount rolls independently for genuine mixed arsenals. */
     s->n_weapons = 0;
     s->active_w = 0;
-    switch (tier) {
-    case 0:
-    case 1: ship_fit_weapon(idx, 0, WPN_PULSE_S); break;
-    case 2:
-        /* CAPABLE: one in three carries an ion blaster — shield strips
-         * start mattering mid-game. */
-        ship_fit_weapon(idx, 0, (idx % 3 == 0) ? WPN_ION
-                              : (idx & 1) ? WPN_AUTOCANNON : WPN_PULSE_M);
-        break;
-    case 3:
-        /* Skilled, not ace: autocannon streams are dodgeable in a way
-         * gauss sniping wasn't (gauss stays tier-4 territory). */
-        ship_fit_weapon(idx, 0, (idx % 3 == 0) ? WPN_FLAK : WPN_PULSE_M);
-        ship_fit_weapon(idx, 1, WPN_AUTOCANNON);
-        break;
-    default:
-        /* ELITE aces: heavy mains; some pack railguns or ion. */
-        ship_fit_weapon(idx, 0, (idx % 3 == 0) ? WPN_RAILGUN
-                                               : WPN_PULSE_L);
-        ship_fit_weapon(idx, 1, (idx & 1) ? WPN_PHOTON : WPN_ION);
-        break;
-    }
+    int nguns = (tier >= 3) ? 2 : (tier == 2 && (idx & 1)) ? 2 : 1;
+    for (int m = 0; m < nguns; m++)
+        ship_fit_weapon(idx, m,
+                        roll_weapon(tier, (uint32_t)(idx * 977 + m * 31
+                                                     + tier * 7)));
 }
 
 int ships_alive_hostile(void) {
