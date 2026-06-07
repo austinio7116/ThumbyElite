@@ -173,6 +173,13 @@ void icon_weapon(uint16_t *fb, int x, int y, int wpn_type) {
         px(fb, x + 5, y + 3, hot);
         px(fb, x + 4, y + 3, hot); px(fb, x + 6, y + 3, hot);
         break;
+    case EQ_DRONE:
+        /* little R2: dome + body + tool arm */
+        px(fb, x + 4, y, BODY2); px(fb, x + 5, y, BODY2);
+        hbar(fb, x + 3, x + 6, y + 1, BODY);
+        hbar(fb, x + 3, x + 6, y + 3, BODY);
+        px(fb, x + 8, y + 2, hot); px(fb, x + 7, y + 2, BODY2);
+        break;
     case EQ_CHAFF:
         /* burst spray */
         px(fb, x + 2, y + 3, BODY);

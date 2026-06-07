@@ -394,7 +394,7 @@ guns, and the occasional bargain-bin stock line:</p>
 
 <h3>Ammo</h3>
 <p>Ballistic weapons carry magazines. Rounds persist between fits — no
-free top-ups. <b>REARM is a station service</b> (next to REFUEL on the
+free top-ups. <b>SERVICE is a station facility</b> (next to REFUEL on the
 services menu, with a live price on the row): restocking charges per
 round — autocannon 1&nbsp;cr, gauss 8&nbsp;cr, missile 35&nbsp;cr, homing
 55&nbsp;cr. Nothing reloads automatically, so an empty gauss after a
@@ -458,7 +458,11 @@ fit there, never competing with guns or protection:</p>
 <tr><td class="tag">AB TANK</td><td>boost burn 2.2 → 4.0&nbsp;s</td><td class="y">1,800</td></tr>
 <tr><td class="tag">FUELSCOOP</td><td>skim close to a star in supercruise for free fuel — every ship heats near a star; past redline the hull burns (T7+ shops)</td><td class="y">2,600</td></tr>
 <tr><td class="tag">TARGETCOMP</td><td>+40% seeker agility + a <b class="g">lead pip</b> for ballistic guns: put the cross on the pip and the rounds connect (T9+)</td><td class="y">3,400</td></tr>
-<tr><td class="tag">CHAFF</td><td><span class="key">LB</span>+<span class="key">B</span> dumps chaff: every seeker tracking you goes blind. 4 charges, 20&nbsp;cr each at REARM (T5+)</td><td class="y">1,200</td></tr>
+<tr><td class="tag">RPR DRONE</td><td>an R2 unit in the bay: slowly
+patches your hull in flight (~1&nbsp;HP/s), then works through damaged
+systems one at a time — given enough time, a <b>critted mount comes
+back online mid-fight</b>. Watch the DRONE: toasts (T10+)</td><td class="y">3,600</td></tr>
+<tr><td class="tag">CHAFF</td><td><span class="key">LB</span>+<span class="key">B</span> dumps chaff: every seeker tracking you goes blind. 4 charges, 20&nbsp;cr each at SERVICE (T5+)</td><td class="y">1,200</td></tr>
 </table>
 
 <h3>The turret hardpoint</h3>
@@ -491,7 +495,7 @@ items (sell pays 35–65% of list by condition). <b>SWAP is an explicit
 1-for-1 exchange</b> — a picker names the counterpart before anything
 moves, and it needs no free hold space. <b>Magazines travel with the
 gun</b>: a part-fired weapon swapped to the hold and back keeps its
-round count (no free reloads — REARM is where ammunition comes from).
+round count (no free reloads — SERVICE is where ammunition comes from).
 The component rack is its own stowage — racked gear never takes trade
 cargo space.</p>
 <div class="tip"><b class="g">THE MERCENARY LOOP</b> — kill an ace, scoop
@@ -739,14 +743,16 @@ skill discounts everything you buy.</div>
 <span class="key">LB</span>+<span class="key">RB</span>. The docking
 computer takes over and glides you in. On arrival, the station:</p>
 <ul>
-<li><b>repairs and rearms nothing automatically</b> — REPAIR (outfitting), REARM and REFUEL are paid services you choose,</li>
+<li><b>repairs and rearms nothing automatically</b> — REPAIR (outfitting), SERVICE and REFUEL are paid facilities you choose,</li>
 <li>pays out any completed missions,</li>
 <li><b>saves your game</b> (this is the checkpoint system — see <a href="#crits">Crits</a><a href="#law">The Law</a><a href="#dash">Dashboard</a><a href="#traffic">Traffic</a><a href="#mining">Mining</a><a href="#rank">Rank</a><a href="#death">Death &amp; Saves</a><a href="#field">Flying Your Ship</a>).</li>
 </ul>
 <p>Services: <b>MARKET</b> (trade), <b>SHIPYARD</b> (hulls), <b>OUTFITTING</b>
 (the armoury — stock varies per terminal — plus equipment, repairs, salvage), <b>MISSIONS</b> (the board),
 <b>BAR</b> (rumours and local colour), <b>STATUS</b>, <b>REFUEL</b> and
-<b>REARM</b> (both with live prices on the menu).</p>
+<b>SERVICE</b> — magazines refilled <i>and</i> hull damage patched
+(~2&nbsp;cr per point, cheaper with Tech skill) in one bill, live price
+on the menu.</p>
 
 <!-- ============================================================ -->
 <h2 id="ships">Ships &amp; the Shipyard</h2>
@@ -772,7 +778,7 @@ computer takes over and glides you in. On arrival, the station:</p>
 <tr><td class="tag">TRN</td><td>Turn rate in radians/second. 2.0+ turns inside most pirates; under 1.4 you fly like a freighter (you are one).</td></tr>
 <tr><td class="tag">CRG</td><td>Cargo hold in tonnes — trade goods and scooped ore. Salvage components live in the separate rack.</td></tr>
 <tr><td class="tag">JMP</td><td>Hyperspace range in light-years per jump, fuel permitting (the tank holds 30&nbsp;ly for every hull).</td></tr>
-<tr><td class="tag">HUL</td><td>Hull hitpoints — the orange bar. What's left when shields fall; critical hits land while it's taking damage. Repaired at REARM.</td></tr>
+<tr><td class="tag">HUL</td><td>Hull hitpoints — the orange bar. What's left when shields fall; critical hits land while it's taking damage. Patched at the SERVICE desk, or slowly by a repair drone.</td></tr>
 <tr><td class="tag">SHD</td><td>Shield capacity — the blue bar. Regenerates after a delay out of fire; collapse leaves the hull (and your systems) bare.</td></tr>
 <tr><td class="tag">TIER</td><td>S#/H# — the maximum shield and hull <b>upgrade tier</b> the frame accepts at outfitting (each tier multiplies the base stat).</td></tr>
 <tr><td class="tag">GUNS / SL</td><td>Weapon mounts by size: Z1 light / Z2 medium / Z3 heavy. A weapon fits any slot its size or larger. In yard footers SL lists the sizes as digits (SL11 = two Z1 mounts).</td></tr>
@@ -1029,7 +1035,7 @@ burst blooms behind your ship with a sharp hiss, the toast confirms
 <span class="tag y">CHAFF! 2 LOCKS BROKEN</span>, and the <b>C#</b>
 counter on the dash ticks down. Blinded missiles don't vanish — they
 fly straight along their last heading, so step off that line. Four
-charges; REARM refills them at 20&nbsp;cr each.</p>
+charges; SERVICE refills them at 20&nbsp;cr each.</p>
 
 <h3><img class="fm" src="img/fm_tractor.png" alt="">Tractor beam — two tools</h3>
 <p><b>Grappling a ship:</b> lock a hostile (<span class="key">LB</span>),
@@ -1121,7 +1127,7 @@ kill your speed inside <b>600&nbsp;m</b>, and press
 docking computer takes the stick — hands off — and glides you in over a
 couple of seconds. On the pad, two things happen automatically:
 completed missions pay out, and the game <b>saves</b>. Everything else
-is a choice you pay for — REPAIR, REARM and REFUEL are priced line
+is a choice you pay for — REPAIR, SERVICE and REFUEL are priced line
 items in the services menu.</p>
 
 <h2>Quick-start: your first hour</h2>

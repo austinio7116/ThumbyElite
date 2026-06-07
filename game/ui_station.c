@@ -52,7 +52,7 @@ static int s_detail;       /* 0 = list, 1 = detail sheet open */
 #define HOME_ITEMS 10
 static const char *k_home[HOME_ITEMS] = {
     "MARKET", "SHIPYARD", "OUTFITTING", "MISSIONS", "BAR", "STATUS",
-    "REFUEL", "REARM", "PAY FINE", "LAUNCH",
+    "REFUEL", "SERVICE", "PAY FINE", "LAUNCH",
 };
 static Mission s_offers[MISSION_OFFERS];
 
@@ -170,15 +170,24 @@ static void try_refuel(void) {
     toast("REFUELLED");
 }
 
-static void try_rearm(void) {
-    int cost = player_rearm_cost();
-    if (cost <= 0) { toast("MAGAZINES FULL"); return; }
+static int service_hull_cost(void) {
+    Ship *p = &g_ships[PLAYER];
+    int missing = (int)(p->hull_max - p->hull);
+    if (missing <= 0) return 0;
+    return (int)(missing * 2.0f * skill_repair_mult()) + 1;
+}
+
+static void try_service(void) {
+    /* SERVICE = rearm + hull patch in one bill (user-renamed). */
+    int cost = player_rearm_cost() + service_hull_cost();
+    if (cost <= 0) { toast("SHIP SHAPE"); return; }
     if (g_player.credits < cost) { toast("NO CREDITS"); return; }
     g_player.credits -= cost;
     player_rearm();
+    g_ships[PLAYER].hull = g_ships[PLAYER].hull_max;
     player_apply_to_ship();
     char buf[24];
-    snprintf(buf, sizeof buf, "REARMED -%dCR", cost);
+    snprintf(buf, sizeof buf, "SERVICED -%dCR", cost);
     toast(buf);
 }
 
@@ -395,6 +404,8 @@ static void outfit_build_rows(void) {
             s_rows[s_n_rows++] = (OutfitRow){ ROW_UTILSHOP, 4, 0 }; /* tcomp */
         if (tech >= 5)
             s_rows[s_n_rows++] = (OutfitRow){ ROW_UTILSHOP, 5, 0 }; /* chaff */
+        if (tech >= 10)
+            s_rows[s_n_rows++] = (OutfitRow){ ROW_UTILSHOP, 6, 0 }; /* drone */
     }
 }
 
@@ -962,7 +973,7 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
             else if (s_cursor == 4) { s_screen = SCR_BAR; }
             else if (s_cursor == 5) { s_screen = SCR_STATUS; status_open(); }
             else if (s_cursor == 6) try_refuel();
-            else if (s_cursor == 7) try_rearm();
+            else if (s_cursor == 7) try_service();
             else if (s_cursor == 8) {
                 if (g_player.fine <= 0) toast("RECORD CLEAN");
                 else if (g_player.credits < g_player.fine)
@@ -1160,7 +1171,7 @@ static void draw_home(uint16_t *fb) {
                 craft_font_draw(fb, buf, hx, 23 + i * 9, COL_CRED);
             }
         } else if (i == 7) {
-            int rc = player_rearm_cost();
+            int rc = player_rearm_cost() + service_hull_cost();
             if (rc > 0) {
                 snprintf(buf, sizeof buf, "%d", rc);
                 craft_font_draw(fb, buf, hx, 23 + i * 9, COL_CRED);

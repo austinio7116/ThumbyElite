@@ -11,6 +11,20 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 
 ## Changelog
 
+### 1.22.1 (in development)
+
+- **SERVICE** (was REARM): one bill now refills magazines AND patches
+  hull damage (~2 cr/point, Tech-skill discounted) — current hull HP
+  was unrepairable anywhere, contrary to the guide
+- **REPAIR DRONE** (T10+ util, 3,600 cr): slowly patches hull in
+  flight, then works through damaged systems — a critted mount can
+  come back online mid-fight, with DRONE: toasts narrating
+- Cargo and component-rack pools separated (racked salvage no longer
+  eats trade capacity)
+- Insurance can no longer resurrect you into a PREVIOUS campaign
+  (NEW GAME + death before first dock loaded the old save — the
+  mysterious 16k)
+
 ### 1.22 (ThumbyOne v1.22)
 
 **The flight dashboard** — MENU no longer pauses: the real cockpit

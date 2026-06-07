@@ -40,6 +40,7 @@ typedef enum {
     EQ_FUELSCOOP,      /* skim stars in supercruise for free fuel */
     EQ_TARGETCOMP,     /* +40% seeker agility + ballistic lead reticle */
     EQ_CHAFF,          /* LB+B: break enemy missile locks (4 charges) */
+    EQ_DRONE,          /* repair drone: slowly fixes hull + items in flight */
     ITEM_COUNT
 } WeaponType;
 
@@ -80,7 +81,7 @@ typedef struct {
     const char *name;
     int16_t base_price;     /* tier 1; higher tiers scale x2 / x3.6 */
 } EquipDef;
-extern const EquipDef k_equip[8];
+extern const EquipDef k_equip[9];
 const char *item_name(int type);
 
 typedef struct {

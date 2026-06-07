@@ -115,6 +115,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_TAPTEST") ||
         getenv("ELITE_DISTRESS") ||
         getenv("ELITE_NEWDEATH") ||
+        getenv("ELITE_DRONETEST") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -513,6 +514,38 @@ int main(int argc, char **argv) {
         for (int f = 0; f < 12; f++) elite_game_tick(&none, 1.0f/30.0f);
         printf("[dash] resume: state=%d (0=FLIGHT)\n",
                elite_game_state());
+        return 0;
+    }
+
+    /* Repair drone: hull rises, critted mount returns to service. */
+    if (getenv("ELITE_DRONETEST")) {
+        g_player.util_eq[0] = (WeaponInst){ .type = EQ_DRONE,
+            .quality = 1, .integrity = 100, .in_use = 1 };
+        Ship *pl = &g_ships[0];
+        pl->hull = pl->hull_max * 0.5f;
+        g_player.mounts[0].integrity = 0;     /* critted: OFFLINE */
+        pl->active_w = 0;
+        pl->fire_cool = 0;
+        pl->heat = 0;
+        combat_set_shot_type(WPN_PULSE_S);
+        combat_fire(0, 0, -1);
+        printf("[drone] offline mount: heat after fire = %.1f "
+               "(want 0 = refused)\n", pl->heat);
+        float h0 = pl->hull;
+        CraftRawButtons none = {0};
+        for (int f = 0; f < 30 * 60; f++)      /* one minute of repairs */
+            elite_game_tick(&none, 1.0f / 30.0f);
+        printf("[drone] hull %.0f -> %.0f / %.0f\n", h0, pl->hull,
+               pl->hull_max);
+        for (int f = 0; f < 30 * 240 &&
+                        g_player.mounts[0].integrity < 100; f++)
+            elite_game_tick(&none, 1.0f / 30.0f);
+        pl->fire_cool = 0;
+        pl->heat = 0;
+        combat_fire(0, 0, -1);
+        printf("[drone] repaired mount: integrity=%d heat after "
+               "fire=%.1f (%s)\n", g_player.mounts[0].integrity,
+               pl->heat, pl->heat > 0 ? "FIRES AGAIN" : "still dead");
         return 0;
     }
 

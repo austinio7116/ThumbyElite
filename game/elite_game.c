@@ -946,6 +946,73 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
                 ambushed = false;
             }
         }
+        /* REPAIR DRONE (R2 unit): given time it patches the hull, then
+         * works through damaged items one by one — a critted mount can
+         * come back ONLINE mid-fight. Toasts on job start + finish. */
+        if (player_has_util(EQ_DRONE)) {
+            static float dr_acc;
+            static int dr_job = -1;       /* 0 hull, 1.. = item index */
+            WeaponInst *items[8];
+            const char *names[8];
+            int ni = 0;
+            for (int i = 0; i < HULL_SLOTS; i++) {
+                static char wn[3][8];
+                snprintf(wn[i], sizeof wn[i], "WPN %d", i + 1);
+                items[ni] = &g_player.mounts[i]; names[ni++] = wn[i];
+            }
+            items[ni] = &g_player.shield_eq; names[ni++] = "SHIELD GEN";
+            items[ni] = &g_player.armor_eq;  names[ni++] = "ARMOR";
+            items[ni] = &g_player.util_eq[0]; names[ni++] = "GADGET";
+            items[ni] = &g_player.util_eq[1]; names[ni++] = "GADGET";
+            int want = -1;
+            if (p->hull < p->hull_max - 0.5f) want = 0;
+            else
+                for (int i = 0; i < ni; i++)
+                    if (items[i]->in_use && items[i]->integrity < 100) {
+                        want = 1 + i;
+                        break;
+                    }
+            if (want != dr_job) {
+                dr_job = want;
+                dr_acc = 0;
+                if (want == 0) {
+                    snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                             "DRONE: REPAIRING HULL..");
+                    s_scoop_toast_t = 2.0f;
+                } else if (want > 0) {
+                    snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                             "DRONE: REPAIRING %s..", names[want - 1]);
+                    s_scoop_toast_t = 2.0f;
+                }
+            }
+            if (dr_job == 0) {
+                p->hull += 1.2f * dt;     /* slow: a full hull is minutes */
+                if (p->hull >= p->hull_max) {
+                    p->hull = p->hull_max;
+                    snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                             "DRONE: HULL REPAIRED");
+                    s_scoop_toast_t = 2.5f;
+                    dr_job = -1;
+                }
+            } else if (dr_job > 0) {
+                WeaponInst *it = items[dr_job - 1];
+                dr_acc += dt;
+                if (dr_acc >= 1.6f) {     /* +1 integrity / 1.6 s */
+                    dr_acc -= 1.6f;
+                    if (it->integrity < 100) it->integrity++;
+                    if (it->integrity >= 100) {
+                        snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                                 "DRONE: %s REPAIRED",
+                                 names[dr_job - 1]);
+                        s_scoop_toast_t = 2.5f;
+                        player_apply_to_ship();
+                        dr_job = -1;
+                    } else if ((it->integrity % 25) == 0) {
+                        player_apply_to_ship();   /* caps track repair */
+                    }
+                }
+            }
+        }
         /* Distress rescue: wing dead, victim alive -> hail + reward. */
         if (s_distress_civ > 0 && !s_distress_paid) {
             Ship *cv = &g_ships[s_distress_civ];
