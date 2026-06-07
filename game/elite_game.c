@@ -23,6 +23,7 @@
 #include "elite_proj.h"
 #include "elite_loot.h"
 #include "elite_rocks.h"
+#include "elite_collide.h"
 #include "mission.h"
 #include "elite_ai.h"
 #include "ui_hud.h"
@@ -76,6 +77,10 @@ static uint32_t s_hyper_seed;
 static Vec3    s_hyper_from_mm;   /* departure point: system recedes */
 
 static int   s_target = -1;      /* combat lock */
+static float s_cloak_t;          /* remaining cloak seconds */
+static uint8_t s_cloak_used;     /* one charge per launch (user spec) */
+static float s_scan_t;           /* manifest scan accumulator */
+static int   s_scan_done = -1;   /* target already read */
 static int   s_loot_target = -1; /* canister lock (no hostiles about) */
 static int   s_rock_target = -1; /* prospector lock (belt finding aid) */
 static uint32_t s_entry_salt;    /* per-system-entry, salts transient
@@ -146,6 +151,7 @@ void elite_game_debug_jump(SysAddr addr) {
 }
 
 int elite_game_debug_target(void) { return s_target; }
+bool elite_game_cloaked(void) { return s_cloak_t > 0.0f; }
 
 /* Debug: jump the anchor straight to POI n (harness only). */
 void elite_game_debug_goto_poi(int n) {
@@ -520,6 +526,8 @@ static void drop_anchor(Vec3 pos_mm, const Poi *poi) {
     loot_init();
     rocks_init();
     s_target = -1;
+    s_cloak_t = 0; s_cloak_used = 0;
+    s_scan_t = 0; s_scan_done = -1;
     s_tgt_class = 0;                 /* fresh site, AUTO priorities */
 }
 
@@ -817,6 +825,69 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
         }
         if (in.secondary && p->n_weapons > 1)       /* B = next weapon */
             p->active_w = (uint8_t)((p->active_w + 1) % p->n_weapons);
+        /* MANIFEST SCANNER: hold a lock on a civilian to read its hold. */
+        if (player_has_util(EQ_MANIFEST) && s_target > 0 &&
+            g_ships[s_target].alive && g_ships[s_target].is_civilian &&
+            s_target != s_scan_done &&
+            v3_len2(v3_sub(g_ships[s_target].pos, p->pos)) <
+                350.0f * 350.0f) {
+            s_scan_t += dt;
+            if (s_scan_t >= 2.5f) {
+                s_scan_done = s_target;
+                s_scan_t = 0;
+                uint32_t mh = (uint32_t)(s_target * 2654435761u) ^
+                              g_ships[s_target].civ_kind * 977u;
+                mh ^= mh >> 13;
+                if (g_ships[s_target].civ_kind == 0) {     /* miner */
+                    snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                             "MANIFEST: %u MINERALS %u METALS",
+                             2 + (mh % 5u), 1 + ((mh >> 4) % 4u));
+                } else {
+                    int g1 = (int)(mh % 16u);
+                    snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                             "MANIFEST: %u %s", 3 + ((mh >> 8) % 7u),
+                             k_goods[g1].name);
+                }
+                s_scoop_toast_t = 3.0f;
+                sfx_lock_acquire();
+            }
+        } else if (s_target != s_scan_done) {
+            s_scan_t = 0;
+        }
+
+        if (in.cloak && player_has_util(EQ_CLOAK)) {
+            if (s_cloak_t > 0) {
+                /* manual decloak refunds nothing */
+                s_cloak_t = 0;
+                snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                         "CLOAK DISENGAGED");
+                s_scoop_toast_t = 2.0f;
+            } else if (s_cloak_used) {
+                snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                         "CLOAK SPENT - RECHARGES IN DOCK");
+                s_scoop_toast_t = 2.0f;
+            } else {
+                s_cloak_used = 1;
+                s_cloak_t = 8.0f;
+                s_target = -1;            /* your own lock drops too */
+                snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                         "CLOAK ENGAGED");
+                s_scoop_toast_t = 2.0f;
+                sfx_sc_engage();
+            }
+        }
+        if (s_cloak_t > 0) {
+            s_cloak_t -= dt;
+            p->heat += 28.0f * dt;        /* outruns dissipation (22/s):
+                                             net +6/s — 8s of veil costs
+                                             half the heat bar */
+            if (in.fire) {                /* firing tears the veil */
+                s_cloak_t = 0;
+                snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                         "CLOAK BROKEN");
+                s_scoop_toast_t = 2.0f;
+            }
+        }
         if (in.chaff && player_has_util(EQ_CHAFF) &&
             g_player.chaff_charges > 0) {
             g_player.chaff_charges--;
@@ -1078,6 +1149,13 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
     combat_crit_cooldown_tick(dt);
     fx_tick(dt);
     rocks_tick(dt);
+    /* Collisions (user spec): everything deflects; shields block hull
+     * damage; size sets the split; station bites only in MANUAL flight
+     * near an anchored station. */
+    collide_tick(s_anchor_has_poi && s_anchor_poi.kind == POI_STATION &&
+                     s_station_mesh != NULL,
+                 s_station_mesh ? s_station_mesh->bound_r : 0.0f,
+                 s_state == ST_FLIGHT);
 
     /* Overheat klaxon (repeats while hot) + throttle-following hum. */
     {
@@ -2044,6 +2122,13 @@ void elite_game_draw_overlay(uint16_t *fb) {
             .show_perf = 0,   /* perf validated on device; readout off */
         };
         ui_hud_draw(fb, &info);
+        if (s_cloak_t > 0) {
+            /* cyan veil readout: label + draining bar */
+            craft_font_draw(fb, "CLOAKED", 46, 14, RGB565C(90, 230, 255));
+            int w = (int)(36.0f * (s_cloak_t / 8.0f));
+            for (int x = 0; x < w; x++)
+                fb[46 + x + 22 * 128] = RGB565C(60, 170, 200);
+        }
         if (s_scoop_toast_t > 0)
             craft_font_draw(fb, s_scoop_toast,
                             64 - craft_font_width(s_scoop_toast) / 2, 38,

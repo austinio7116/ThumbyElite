@@ -18,5 +18,6 @@ int  rocks_ray(Vec3 o, Vec3 dir, float max_t, float *t_out);
  * crude weapons ~0.45 — blasting vaporizes ore). True if destroyed. */
 bool rocks_damage(int idx, float dmg, float yield_mult, Vec3 hit_pos);
 int  rocks_positions(Vec3 *out, int max);
+int  rocks_get(int idx, Vec3 *pos, float *radius);   /* alive? */
 
 #endif

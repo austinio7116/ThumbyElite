@@ -8,6 +8,7 @@
  * careless owners at point blank).
  */
 #include "elite_proj.h"
+#include "elite_game.h"
 #include "elite_rocks.h"
 #include "elite_player.h"
 #include "elite_entity.h"
@@ -63,6 +64,7 @@ int proj_break_locks(int victim) {
         Proj *p = &s_proj[i];
         if (!p->alive || p->target != victim) continue;
         if (k_weapons[p->type].turn <= 0) continue;
+        if (p->target == 0 && elite_game_cloaked()) continue; /* blind */
         p->target = -1;            /* flies straight into the chaff */
         n++;
     }

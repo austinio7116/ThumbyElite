@@ -109,6 +109,7 @@ add_executable(thumbyelite
     ${GAME}/elite_proj.c
     ${GAME}/elite_loot.c
     ${GAME}/elite_rocks.c
+    ${GAME}/elite_collide.c
     ${GAME}/mission.c
     ${GAME}/elite_audio.c
     ${GAME}/elite_save.c

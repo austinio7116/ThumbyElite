@@ -41,7 +41,7 @@ const AffixDef k_affixes[AFX_COUNT] = {
     [AFX_TUNED]       = { "TUNED",      "TN", 1.10f, 1.00f, 1.00f, 1.00f, 1.80f },
 };
 
-const EquipDef k_equip[9] = {
+const EquipDef k_equip[11] = {
     { "SHIELD", 1400 },
     { "ARMOR", 1100 },
     { "HEATSINK", 2200 },
@@ -51,6 +51,8 @@ const EquipDef k_equip[9] = {
     { "TARGETCOMP", 3400 },
     { "CHAFF", 1200 },
     { "RPR DRONE", 3600 },
+    { "CLOAK", 5800 },
+    { "MANIFEST", 2200 },
 };
 
 const char *k_shield_var_names[4] = { "", "REGEN", "BULWARK", "PHASE" };

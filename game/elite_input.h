@@ -26,6 +26,7 @@ typedef struct {
     bool  fire;           /* held */
     bool  secondary;      /* just pressed */
     bool  chaff;          /* LB held + B tap: countermeasures */
+    bool  cloak;          /* RB held + B tap: engage cloak */
     bool  cycle_target;   /* event */
     bool  tgt_class_cycle; /* LB double-tap: demote the lock class */
     bool  assist_toggle;  /* event */

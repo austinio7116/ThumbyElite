@@ -19,6 +19,13 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 - **PLASMA LANCE** (Z3, T11+, 6,400 cr): phases through shields
   straight to hull — can crit a shielded target; the BULWARK-tank
   killer, countered by thick armor
+- **Collision physics** — ships, rocks and the station deflect and
+  damage on contact: shields block hull entirely, size sets the split,
+  autodock is exempt, rams chip ore, NPCs steer around boulders
+- **CLOAK** (T9+, 5,800 cr): RB+B, 8s invisible, one charge per
+  launch, heat climbs, firing breaks it
+- **MANIFEST SCANNER** (T7+, 2,200 cr): hold a lock on a civilian to
+  read its cargo before you commit to the crime
 - Mining laser rebalanced as a tool: weaker than a small laser but not
   useless (ship DPS ~22 vs PULSE-S 56; rock yield unchanged)
 

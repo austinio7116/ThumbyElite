@@ -442,6 +442,10 @@ static void outfit_build_rows(void) {
             s_rows[s_n_rows++] = (OutfitRow){ ROW_UTILSHOP, 5, 0 }; /* chaff */
         if (tech >= 10)
             s_rows[s_n_rows++] = (OutfitRow){ ROW_UTILSHOP, 6, 0 }; /* drone */
+        if (tech >= 9)
+            s_rows[s_n_rows++] = (OutfitRow){ ROW_UTILSHOP, 7, 0 }; /* cloak */
+        if (tech >= 7)
+            s_rows[s_n_rows++] = (OutfitRow){ ROW_UTILSHOP, 8, 0 }; /* manifest */
     }
 }
 

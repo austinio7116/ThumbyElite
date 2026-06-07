@@ -9,6 +9,7 @@
  */
 #include "elite_ai.h"
 #include "elite_rocks.h"
+#include "elite_game.h"
 #include "elite_types.h"
 #include "elite_entity.h"
 #include "elite_combat.h"
@@ -72,10 +73,35 @@ static void ai_ship(int idx, float dt) {
         ti = PLAYER;
     Ship *t = &g_ships[ti];
     if (!t->alive) { s->throttle = 0.25f; return; }
+    /* Cloaked player: invisible to everyone beyond knife range. */
+    if (ti == PLAYER && elite_game_cloaked() &&
+        v3_len2(v3_sub(t->pos, s->pos)) > 80.0f * 80.0f) {
+        s->throttle = 0.35f;
+        return;
+    }
 
     Vec3 rel = v3_sub(t->pos, s->pos);
     float dist = v3_len(rel);
     Vec3 dir = (dist > 1e-3f) ? v3_scale(rel, 1.0f / dist) : s->basis.r[2];
+
+    /* Rocks are solid now: steer off any boulder filling the windscreen
+     * (cheap avoidance — without it belt fights grind NPCs to dust). */
+    for (int rk = 0; rk < 8; rk++) {
+        Vec3 rp; float rrad;
+        if (!rocks_get(rk, &rp, &rrad)) continue;
+        Vec3 toR = v3_sub(rp, s->pos);
+        float rd = v3_len(toR);
+        float danger = rrad + 18.0f;
+        if (rd > danger * 2.2f || rd < 1e-3f) continue;
+        Vec3 rdir = v3_scale(toR, 1.0f / rd);
+        if (v3_dot(rdir, s->basis.r[2]) < 0.55f) continue;  /* not ahead */
+        /* push the steering goal away from the rock centre */
+        Vec3 away = v3_sub(dir, v3_scale(rdir,
+                                         1.6f * (1.0f - rd /
+                                                 (danger * 2.2f))));
+        float al = v3_len(away);
+        if (al > 1e-3f) dir = v3_scale(away, 1.0f / al);
+    }
     int tier = s->tier > 4 ? 4 : s->tier;
 
     /* Fully disarmed (all mounts critted): break and RUN — a fleeing

@@ -186,6 +186,22 @@ void icon_weapon(uint16_t *fb, int x, int y, int wpn_type) {
         px(fb, x + 5, y + 3, hot);
         px(fb, x + 4, y + 3, hot); px(fb, x + 6, y + 3, hot);
         break;
+    case EQ_CLOAK:
+        /* fading ship outline: solid nose, dissolving tail */
+        px(fb, x + 9, y + 3, BODY); px(fb, x + 8, y + 2, BODY);
+        px(fb, x + 8, y + 4, BODY); px(fb, x + 6, y + 3, BODY2);
+        px(fb, x + 4, y + 2, BODY2); px(fb, x + 2, y + 4, hot);
+        px(fb, x, y + 2, hot);
+        break;
+    case EQ_MANIFEST:
+        /* clipboard: frame + scan lines */
+        hbar(fb, x + 2, x + 9, y, BODY);
+        hbar(fb, x + 2, x + 9, y + 6, BODY);
+        px(fb, x + 2, y + 2, BODY); px(fb, x + 2, y + 4, BODY);
+        px(fb, x + 9, y + 2, BODY); px(fb, x + 9, y + 4, BODY);
+        hbar(fb, x + 4, x + 7, y + 2, hot);
+        hbar(fb, x + 4, x + 6, y + 4, BODY2);
+        break;
     case EQ_DRONE:
         /* little R2: dome + body + tool arm */
         px(fb, x + 4, y, BODY2); px(fb, x + 5, y, BODY2);

@@ -43,6 +43,8 @@ typedef enum {
     EQ_TARGETCOMP,     /* +40% seeker agility + ballistic lead reticle */
     EQ_CHAFF,          /* LB+B: break enemy missile locks (4 charges) */
     EQ_DRONE,          /* repair drone: slowly fixes hull + items in flight */
+    EQ_CLOAK,          /* one charge per launch: 8s scanner-invisible */
+    EQ_MANIFEST,       /* manifest scanner: lock a civilian to read cargo */
     ITEM_COUNT
 } WeaponType;
 
@@ -83,7 +85,7 @@ typedef struct {
     const char *name;
     int16_t base_price;     /* tier 1; higher tiers scale x2 / x3.6 */
 } EquipDef;
-extern const EquipDef k_equip[9];
+extern const EquipDef k_equip[11];
 const char *item_name(int type);
 
 typedef struct {

@@ -24,6 +24,11 @@
 #include "craft_buttons.h"
 #include "elite_platform.h"
 #include "elite_audio.h"
+#include "elite_collide.h"
+#include "elite_rocks.h"
+#include "ui_icons.h"
+#include "elite_save.h"
+#include "elite_loot.h"
 
 #include <SDL2/SDL.h>
 #include <stdio.h>
@@ -120,6 +125,8 @@ int main(int argc, char **argv) {
         getenv("ELITE_JITTERTEST") ||
         getenv("ELITE_ICONSHOT") ||
         getenv("ELITE_PLASMATEST") ||
+        getenv("ELITE_COLTEST") ||
+        getenv("ELITE_CLOAKTEST") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -498,6 +505,86 @@ int main(int argc, char **argv) {
         for (int f = 0; f < 12; f++) elite_game_tick(&none, 1.0f/30.0f);
         printf("[dash] resume: state=%d (0=FLIGHT)\n",
                elite_game_state());
+        return 0;
+    }
+
+    /* Cloak: engage, heat climb, AI blind, expiry, one-use. */
+    if (getenv("ELITE_CLOAKTEST")) {
+        g_player.util_eq[0] = (WeaponInst){ .type = EQ_CLOAK,
+            .quality = 1, .integrity = 100, .in_use = 1 };
+        Ship *pl = &g_ships[0];
+        CraftRawButtons none = {0}, b;
+        elite_game_debug_face_away_from_sun();
+        float h0 = pl->heat;
+        b = none; b.rb = true; b.b = true;
+        elite_game_tick(&b, 1.0f / 30.0f);
+        printf("[cloak] engaged: %s\n",
+               elite_game_cloaked() ? "YES" : "NO");
+        for (int f = 0; f < 60; f++) elite_game_tick(&none, 1.0f/30.0f);
+        printf("[cloak] heat %.0f -> %.0f (climbing: %s) still on: %s\n",
+               h0, pl->heat, pl->heat > h0 + 5 ? "YES" : "no",
+               elite_game_cloaked() ? "YES" : "no");
+        for (int f = 0; f < 30 * 7; f++)
+            elite_game_tick(&none, 1.0f / 30.0f);
+        printf("[cloak] after 9s: %s\n",
+               elite_game_cloaked() ? "still on (BUG)" : "EXPIRED");
+        b = none; b.rb = true; b.b = true;
+        elite_game_tick(&b, 1.0f / 30.0f);
+        printf("[cloak] re-engage same flight: %s (one-use: %s)\n",
+               elite_game_cloaked() ? "ON (BUG)" : "refused",
+               elite_game_cloaked() ? "NO" : "YES");
+        return 0;
+    }
+
+    /* Collision physics: bounce, shield-block, size split, ram-mining.
+     * Unit-style: drive collide_tick directly (the flight sim's assist
+     * and AI evasion mask contacts in a scripted scenario). */
+    if (getenv("ELITE_COLTEST")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Ship *pl = &g_ships[0];
+        int e = ship_spawn(hull_mesh(0xACE1u, 1),
+                           v3_add(pl->pos, v3(0, 0, 8)), TEAM_HOSTILE);
+        ship_set_tier(e, 0, 1);
+        pl->vel = v3(0, 0, 14); g_ships[e].vel = v3(0, 0, -14);
+        float ps0 = pl->shield, ph0 = pl->hull;
+        float es0 = g_ships[e].shield, eh0 = g_ships[e].hull;
+        collide_tick(0, 0, 1);
+        printf("[col] head-on 28m/s: me S%.0f->%.0f H%.0f->%.0f | "
+               "them S%.0f->%.0f H%.0f->%.0f\n",
+               ps0, pl->shield, ph0, pl->hull, es0, g_ships[e].shield,
+               eh0, g_ships[e].alive ? g_ships[e].hull : -1);
+        printf("[col] shield blocked hull: %s | deflected: me vz %.0f "
+               "them vz %.0f | size split (smaller hurt worse): %s\n",
+               (pl->hull >= ph0 - 0.01f && pl->shield < ps0) ? "YES"
+                                                             : "NO",
+               pl->vel.z, g_ships[e].vel.z,
+               (es0 - g_ships[e].shield) > (ps0 - pl->shield) ? "YES"
+                                                              : "no");
+        if (g_ships[e].alive) g_ships[e].alive = false;
+        /* unshielded ram into a rock: hull pays + ore chips */
+        rocks_spawn_field(0xBEEF, 4);
+        Vec3 rp = v3(0,0,0); float rrad = 0;
+        for (int r = 0; r < 8; r++)
+            if (rocks_get(r, &rp, &rrad)) break;
+        pl->shield = 0;
+        pl->pos = v3_add(rp, v3(0, 0, -(rrad + 2)));
+        pl->vel = v3(0, 0, 45);
+        float h1 = pl->hull;
+        collide_tick(0, 0, 1);
+        printf("[col] rock ram 45m/s: hull %.0f -> %.0f (%s) vz %.0f\n",
+               h1, pl->hull, pl->hull < h1 ? "HULL PAYS" : "no damage",
+               pl->vel.z);
+        /* autodock exemption: pressing INTO the ring tube, manual=0 */
+        pl->pos = v3(0.70f * 100.0f + 6.0f, 0, 0);  /* 100m station */
+        pl->vel = v3(-30, 0, 0);
+        pl->hull = 50;
+        collide_tick(1, 100.0f, 0);
+        float ha = pl->hull;
+        pl->shield = 0;
+        collide_tick(1, 100.0f, 1);
+        printf("[col] station: autodock immune %s | manual contact %s\n",
+               (ha >= 50) ? "YES" : "NO",
+               (pl->hull < ha || pl->vel.x > -29.9f) ? "YES" : "no");
         return 0;
     }
 

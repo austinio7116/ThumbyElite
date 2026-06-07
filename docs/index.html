@@ -287,6 +287,18 @@ you linger.</div>
 <li><b class="r">! INCOMING !</b> flashing + urgent two-beeps = a seeker is tracking you. Chaff it (<span class="key">LB</span>+<span class="key">B</span>), outrun it, or out-turn it.</li>
 <li><b class="c">SYSTEMS SCRAMBLED</b> = an ion strip got you: weapons dead for 2.5&nbsp;s, blue arcs on your hull. Run cold until it clears.</li>
 </ul>
+<h3>Collisions</h3>
+<p>Space is solid now. Ships, asteroids and the station all carry real
+contact physics: everything <b>deflects</b>, and a shielded impact
+costs shield only — hull never pays while the bar is up. Unshielded,
+the damage splits by <b>size</b>: the skiff comes off far worse than
+the dreadnought it grazed. Gentle contact under ~10&nbsp;m/s is a
+harmless scrape; a boost-speed ram can be lethal — in both directions.
+Ramming a rock chips ore loose (at crude-blasting yield), and the
+station only bites when you're flying manually: the docking computer's
+approach is exempt. NPCs steer around boulders, so belt fights stay
+fights.</p>
+
 <h3>Heat</h3>
 <p>Every weapon adds heat per shot (the <b class="y">T</b> bar). Past the
 red line a klaxon sounds; at the top, weapons refuse to fire until things
@@ -473,6 +485,8 @@ fit there, never competing with guns or protection:</p>
 <tr><td class="tag">AB TANK</td><td>boost burn 2.2 → 4.0&nbsp;s</td><td class="y">1,800</td></tr>
 <tr><td class="tag">FUELSCOOP</td><td>skim close to a star in supercruise for free fuel — every ship heats near a star; past redline the hull burns (T7+ shops)</td><td class="y">2,600</td></tr>
 <tr><td class="tag">TARGETCOMP</td><td>+40% seeker agility + a <b class="g">lead pip</b> for ballistic guns: put the cross on the pip and the rounds connect (T9+)</td><td class="y">3,400</td></tr>
+<tr><td class="tag">CLOAK</td><td><span class="key">RB</span>+<span class="key">B</span>: 8 seconds invisible — every lock drops, seekers go blind, pirates lose you beyond knife range. Firing breaks it; heat climbs the whole time. <b>One charge per launch</b>, recharged in dock (T9+)</td><td class="y">5,800</td></tr>
+<tr><td class="tag">MANIFEST</td><td>Hold a lock on a civilian for 2.5&nbsp;s within 350&nbsp;m and its cargo manifest reads out — case the job before you commit to it (T7+)</td><td class="y">2,200</td></tr>
 <tr><td class="tag">RPR DRONE</td><td>an R2 unit in the bay: slowly
 patches your hull in flight (~1&nbsp;HP/s), then works through damaged
 systems one at a time — given enough time, a <b>critted mount comes

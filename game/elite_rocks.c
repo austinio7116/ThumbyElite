@@ -217,6 +217,13 @@ bool rocks_damage(int idx, float dmg, float yield_mult, Vec3 hit_pos) {
     return false;
 }
 
+int rocks_get(int idx, Vec3 *pos, float *radius) {
+    if (idx < 0 || idx >= MAX_ROCKS || !s_rocks[idx].alive) return 0;
+    if (pos) *pos = s_rocks[idx].pos;
+    if (radius) *radius = s_rocks[idx].radius;
+    return 1;
+}
+
 int rocks_positions(Vec3 *out, int max) {
     int n = 0;
     for (int i = 0; i < MAX_ROCKS && n < max; i++)
