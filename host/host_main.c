@@ -242,6 +242,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_KILLSCREEN") ||
         getenv("ELITE_FURBALL") ||
         getenv("ELITE_CIVMOVE") ||
+        getenv("ELITE_LANCESHOT") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -730,6 +731,28 @@ int main(int argc, char **argv) {
             if (pc > peak) peak = pc;
         }
         printf("[furball] 6 shooters, peak projectiles: %d / 72\n", peak);
+        return 0;
+    }
+
+    /* Lance visual shot. */
+    if (getenv("ELITE_LANCESHOT")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Ship *pl = &g_ships[0];
+        elite_game_debug_face_away_from_sun();
+        int e = ship_spawn(hull_mesh(0xACE1u, 4),
+                           v3_add(pl->pos, v3_scale(pl->basis.r[2], 280.0f)),
+                           TEAM_HOSTILE);
+        ship_set_tier(e, 3, 4);
+        g_player.mounts[0] = (WeaponInst){ .type = WPN_LANCE,
+            .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
+        player_apply_to_ship();
+        pl->active_w = 0; pl->fire_cool = 0; pl->heat = 0;
+        combat_set_shot_type(WPN_LANCE);
+        combat_fire(0, 0, e);
+        CraftRawButtons none = {0};
+        elite_game_tick(&none, 1.0f / 60.0f);   /* one short tick */
+        render_frame();
+        dump_ppm("/tmp/lanceshot.ppm");
         return 0;
     }
 

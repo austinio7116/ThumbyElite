@@ -189,6 +189,32 @@ void fx_engine_trail(Vec3 rear_pos, Vec3 ship_vel, float throttle, float dt) {
     }
 }
 
+/* PLASMA LANCE (user): a thick purple shaft with STRAIGHT parallel
+ * particle streaks running alongside it — railgun heft, no corkscrew.
+ * The beam itself is the core; four lines of motes ring the axis at a
+ * fixed small radius, drifting gently outward as they fade. */
+void fx_lance(Vec3 from, Vec3 to, uint16_t color) {
+    fx_beam(from, to, color);                    /* the bright core */
+    Vec3 axis = v3_sub(to, from);
+    float len = v3_len(axis);
+    if (len < 1e-3f) return;
+    Vec3 dir = v3_scale(axis, 1.0f / len);
+    Vec3 ref = (dir.y < 0.9f && dir.y > -0.9f) ? v3(0, 1, 0) : v3(1, 0, 0);
+    Vec3 e1 = v3_norm(v3_cross(dir, ref));
+    Vec3 e2 = v3_cross(dir, e1);
+    const float SPACING = 15.0f, RADIUS = 1.6f;  /* lean: ~70 motes at full range, leaves pool for impacts */
+    for (float d = 0.0f; d <= len; d += SPACING) {
+        Vec3 base = v3_add(from, v3_scale(dir, d));
+        for (int k = 0; k < 4; k++) {            /* 4 parallel rails */
+            float ang = (float)k * 1.5707963f;   /* 90 deg apart, FIXED */
+            Vec3 off = v3_add(v3_scale(e1, cosf(ang) * RADIUS),
+                              v3_scale(e2, sinf(ang) * RADIUS));
+            spawn(v3_add(base, off), v3_scale(off, 1.4f), 0.45f,
+                  RGB565C(220, 180, 255), RGB565C(80, 30, 150));
+        }
+    }
+}
+
 void fx_beam(Vec3 from, Vec3 to, uint16_t color) {
     for (int i = 0; i < MAX_BEAMS; i++) {
         if (s_beams[i].life > 0) continue;

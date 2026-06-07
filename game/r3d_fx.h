@@ -27,6 +27,7 @@ void fx_spawn_spark(Vec3 pos, Vec3 base_vel);
 void fx_engine_trail(Vec3 rear_pos, Vec3 ship_vel, float throttle, float dt);
 /* A laser shot: visible for a few frames. */
 void fx_beam(Vec3 from, Vec3 to, uint16_t color);
+void fx_lance(Vec3 from, Vec3 to, uint16_t color);
 
 /* Project everything into the scene (camera-relative). Call between
  * r3d_scene_begin and rasterisation, on core0. cam_vel drives the

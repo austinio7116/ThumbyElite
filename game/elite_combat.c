@@ -514,7 +514,8 @@ int combat_fire(int shooter, float spread, int target) {
     }
     Vec3 end = v3_add(s->pos, v3_scale(dir,
                       best >= 0 ? best_t : w->range * range_mult));
-    fx_beam(muzzle, end, w->color);
+    if (wtype == WPN_LANCE) fx_lance(muzzle, end, w->color);
+    else fx_beam(muzzle, end, w->color);
     combat_set_shot_type(wtype);
     if (best >= 0)
         combat_direct_damage(shooter, best, w->dmg * dmg_mult, end);
