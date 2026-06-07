@@ -829,6 +829,31 @@ int main(int argc, char **argv) {
         pl->heat = 0;
         combat_set_shot_type(WPN_PULSE_S);
         combat_fire(0, 0, -1);
+        /* used-market drone must NOT self-repair (user report) */
+        g_player.util_eq[0].integrity = 80;
+        {
+            CraftRawButtons n2 = {0};
+            for (int f = 0; f < 90; f++) elite_game_tick(&n2, 1.0f/30.0f);
+            extern const char *elite_game_debug_toast(void);
+            printf("[drone] self-repair check: integ=%d toast='%s' (%s)\n",
+                   g_player.util_eq[0].integrity,
+                   elite_game_debug_toast(),
+                   g_player.util_eq[0].integrity == 80 ? "LEAVES ITSELF"
+                                                       : "self-licking");
+            /* damaged chaff in bay 2: must announce BY NAME */
+            g_ships[0].hull = g_ships[0].hull_max;   /* hull job done */
+            for (int m = 0; m < HULL_SLOTS; m++)
+                if (g_player.mounts[m].in_use)
+                    g_player.mounts[m].integrity = 100;
+            g_player.shield_eq.integrity = 100;
+            g_player.armor_eq.integrity = 100;
+            g_player.util_eq[1] = (WeaponInst){ .type = EQ_CHAFF,
+                .quality = 1, .integrity = 60, .in_use = 1 };
+            for (int f = 0; f < 90; f++) elite_game_tick(&n2, 1.0f/30.0f);
+            printf("[drone] named toast: '%s'\n",
+                   elite_game_debug_toast());
+            g_player.util_eq[1].in_use = 0;
+        }
         printf("[drone] offline mount: heat after fire = %.1f "
                "(want 0 = refused)\n", pl->heat);
         float h0 = pl->hull;

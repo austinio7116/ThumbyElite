@@ -1063,8 +1063,16 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
             items[ni] = &g_player.shield_eq; names[ni++] = "SHIELD GEN";
             items[ni] = &g_player.armor_eq;  names[ni++] = "ARMOR";
             for (int u = 0; u < 4; u++) {
-                items[ni] = &g_player.util_eq[u];
-                names[ni++] = "GADGET";
+                WeaponInst *ue = &g_player.util_eq[u];
+                /* never the drone itself (user report: a used-market
+                 * drone under 100% announced REPAIRING GADGET forever
+                 * — it was licking its own wounds) */
+                if (ue->in_use && ue->type == EQ_DRONE) continue;
+                items[ni] = ue;
+                names[ni++] = (ue->in_use && ue->type >= WPN_COUNT &&
+                               ue->type < ITEM_COUNT)
+                                  ? k_equip[ue->type - WPN_COUNT].name
+                                  : "GADGET";
             }
             int want = -1;
             if (p->hull < p->hull_max - 0.5f) want = 0;
