@@ -131,7 +131,13 @@ void galaxy_generate(SysAddr a, SystemInfo *out) {
     for (int i = 0; i < out->n_planets; i++) {
         PlanetInfo *p = &out->planets[i];
         p->orbit_mm = orbit;
-        orbit *= srng_f(&r, 1.5f, 2.1f);
+        /* Titius-Bode-ish, but the unbounded 1.5-2.1x compounding made
+         * outer worlds a 400,000 Mm slog (user: boring to travel) —
+         * gentler ratio + an absolute step cap pulls the far systems
+         * in while leaving inner spacing untouched. */
+        float step = orbit * srng_f(&r, 0.45f, 0.85f);
+        if (step > 22000.0f) step = 22000.0f;
+        orbit += step;
         p->orbit_phase = srng_f(&r, 0.0f, 6.2831853f);
         p->tex_seed = srng_u32(&r);
         p->station = -1;

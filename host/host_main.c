@@ -130,6 +130,8 @@ int main(int argc, char **argv) {
         getenv("ELITE_ROCKCYCLE") ||
         getenv("ELITE_TAILTEST") ||
         getenv("ELITE_TIERMOVIE") ||
+        getenv("ELITE_FINETEST") ||
+        getenv("ELITE_ORBITPROBE") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -508,6 +510,42 @@ int main(int argc, char **argv) {
         for (int f = 0; f < 12; f++) elite_game_tick(&none, 1.0f/30.0f);
         printf("[dash] resume: state=%d (0=FLIGHT)\n",
                elite_game_state());
+        return 0;
+    }
+
+    /* Orbit spread probe. */
+    if (getenv("ELITE_ORBITPROBE")) {
+        float worst = 0, sum = 0; int n = 0;
+        for (int sx = -3; sx <= 3; sx++)
+            for (int sy = -3; sy <= 3; sy++) {
+                SysAddr a = { (int16_t)sx, (int16_t)sy, 0 };
+                SystemInfo si;
+                galaxy_generate(a, &si);
+                if (si.n_planets < 2) continue;
+                float o = si.planets[si.n_planets - 1].orbit_mm;
+                if (o > worst) worst = o;
+                sum += o; n++;
+            }
+        printf("[orbit] outermost: avg=%.0f worst=%.0f Mm over %d\n",
+               sum / (n ? n : 1), worst, n);
+        return 0;
+    }
+
+    /* Paying the fine must calm hostile police. */
+    if (getenv("ELITE_FINETEST")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        int e = ship_spawn(hull_mesh(0xC0Bu, 3),
+                           v3_add(g_ships[0].pos, v3(0, 0, 300)),
+                           TEAM_HOSTILE);
+        ship_set_tier(e, 2, 3);
+        g_ships[e].is_police = 1;
+        g_ships[e].ai_target = 0;
+        g_player.legal = 1; g_player.fine = 500;
+        elite_game_police_stand_down();      /* what PAY FINE now calls */
+        printf("[fine] after stand-down: team=%d (%s) ai_target=%d\n",
+               g_ships[e].team,
+               g_ships[e].team == TEAM_NEUTRAL ? "CALMED" : "STILL HOSTILE",
+               g_ships[e].ai_target);
         return 0;
     }
 

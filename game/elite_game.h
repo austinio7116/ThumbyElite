@@ -50,6 +50,7 @@ bool elite_game_distress_protected(int idx);
 /* Combat callback: a critical hit landed (mine = it happened to me). */
 void elite_game_crit_toast(const char *msg, bool mine);
 bool elite_game_cloaked(void);
+void elite_game_police_stand_down(void);
 void elite_game_debug_goto_poi(int n);
 void elite_game_debug_jump(SysAddr addr);
 void elite_game_debug_view_planet(int n);

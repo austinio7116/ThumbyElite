@@ -154,6 +154,17 @@ void elite_game_debug_jump(SysAddr addr) {
 
 int elite_game_debug_target(void) { return s_target; }
 bool elite_game_cloaked(void) { return s_cloak_t > 0.0f; }
+
+/* Paying your fine calls off the law (user bug: police kept shooting
+ * a CLEAN pilot — the flip to hostile outlived the record). */
+void elite_game_police_stand_down(void) {
+    for (int i = 1; i < MAX_SHIPS; i++) {
+        Ship *sp = &g_ships[i];
+        if (!sp->alive || !sp->is_police) continue;
+        sp->team = TEAM_NEUTRAL;
+        sp->ai_target = 0;
+    }
+}
 int elite_game_debug_rock_target(void) { return s_rock_target; }
 
 /* Debug: jump the anchor straight to POI n (harness only). */

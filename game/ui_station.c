@@ -1021,6 +1021,7 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
                     g_player.credits -= g_player.fine;
                     g_player.fine = 0;
                     g_player.legal = 0;
+                    elite_game_police_stand_down();
                     toast("RECORD CLEARED");
                 }
             }
