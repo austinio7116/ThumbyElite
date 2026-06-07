@@ -20,6 +20,12 @@
                                    (user report); real pilots joust */
 #define AI_BREAK_TIME  1.5f     /* quick turnaround between passes */
 
+/* Confidence is speed (user design): weak pilots FIGHT slow — fast
+ * means they can't turn (blue zone). Closing from range is always
+ * full throttle; these scale everything done inside the fight. */
+static const float k_fight_speed[5] = { 0.55f, 0.70f, 0.85f,
+                                        0.95f, 1.00f };
+
 /* Per-tier trigger discipline. */
 static const float k_refire[5] = { 0.80f, 0.70f, 0.60f, 0.75f, 0.42f };
 /* Spread compensates PAYLOAD, not just tier — tier 3 packs gauss, so
@@ -148,7 +154,7 @@ static void ai_ship(int idx, float dt) {
                 s->ai_timer += dt;
                 turn_toward(s, v3_norm(v3_add(v3_scale(dir, -1.0f),
                                               weave)), dt);
-                s->throttle = 1.0f;
+                s->throttle = 0.6f + 0.4f * k_fight_speed[tier];
                 return;
             }
             if (tier >= 3 && s_chop_cd[idx] <= 0.0f) {
@@ -169,7 +175,7 @@ static void ai_ship(int idx, float dt) {
             brk = v3_add(brk, v3_scale(s->basis.r[1],
                                        0.4f * (float)s_scissor_side[idx]));
             turn_toward(s, v3_norm(brk), dt);
-            s->throttle = 0.85f;
+            s->throttle = 0.85f * k_fight_speed[tier];
             return;
         }
     }
@@ -195,10 +201,11 @@ static void ai_ship(int idx, float dt) {
     case AI_ATTACK: {
         turn_toward(s, dir, dt);
         /* corner-speed combat (ED blue zone): full speed only to CLOSE,
-         * then fight slow enough to actually turn */
+         * then fight at the pace this pilot can handle */
         s->throttle = (dist > 400.0f) ? 1.0f
-                    : (dist > 150.0f) ? 0.68f
-                    : (dist > 90.0f)  ? 0.55f : 0.45f;
+                    : ((dist > 150.0f) ? 0.68f
+                     : (dist > 90.0f)  ? 0.55f : 0.45f) *
+                          k_fight_speed[tier];
         if (dist < AI_BREAK_DIST) {
             s->ai_state = AI_BREAK;
             s->ai_timer = AI_BREAK_TIME;

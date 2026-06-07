@@ -19,6 +19,10 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 - **PLASMA LANCE** (Z3, T11+, 6,400 cr): phases through shields
   straight to hull — can crit a shielded target; the BULWARK-tank
   killer, countered by thick armor
+- **Confidence is speed** — pilot tier sets fighting pace
+  (HARMLESS ~55% of envelope up to DEADLY at 100%): green pilots are
+  slow, trackable prey; aces duel at the edge. Distress call rate
+  halved
 - **Dogfight rework: the blue zone** — turn authority peaks at half
   throttle for ALL ships; pirates fight at corner speed and answer a
   tail by rank (run / jink / throttle-chop / scissors). Position is
