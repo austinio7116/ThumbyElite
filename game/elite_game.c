@@ -1620,7 +1620,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             static bool pu2, pd2, pb2, pl3, pr3;
             if (btn->up && !pu2 && s_settings_cursor > 0)
                 s_settings_cursor--;
-            if (btn->down && !pd2 && s_settings_cursor < 3)
+            if (btn->down && !pd2 && s_settings_cursor < 4)
                 s_settings_cursor++;
             pu2 = btn->up; pd2 = btn->down;
             int dir = 0;
@@ -1632,8 +1632,16 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
                     g_player.invert_y = !g_player.invert_y;
                 else if (s_settings_cursor == 1)
                     g_player.show_fps = !g_player.show_fps;
+                else if (s_settings_cursor == 4)
+                    dir = 1;                 /* A cycles the sfx */
                 else
                     dir = 1;                 /* A nudges sliders up */
+            }
+            if (dir && s_settings_cursor == 4) {
+                int v = (g_player.laser_sfx + (dir > 0 ? 1 : 2)) % 3;
+                g_player.laser_sfx = (uint8_t)v;
+                sfx_set_laser(v);
+                sfx_weapon(WPN_PULSE_S, 1.0f);   /* preview */
             }
             if (dir && s_settings_cursor == 2) {
                 int v = plat_setting_get(0) + dir * 2;     /* 0..20 */
@@ -2117,7 +2125,7 @@ static void dash_draw_panels(uint16_t *fb, int y0) {
 }
 
 static void dash_settings_overlay(uint16_t *fb) {
-    for (int y = 38; y < 112; y++)
+    for (int y = 36; y < 116; y++)
         for (int x = 14; x < 114; x++)
             fb[y * ELITE_FB_W + x] = RGB565C(8, 11, 20);
     craft_font_draw(fb, "SETTINGS", 33, 42, RGB565C(200, 210, 225));
@@ -2126,19 +2134,21 @@ static void dash_settings_overlay(uint16_t *fb) {
              plat_setting_get(0) * 5);
     snprintf(brow, sizeof brow, "BRIGHT    %3d%%",
              (plat_setting_get(1) * 100) / 255);
-    const char *si2[4] = {
+    static const char *lz[3] = { "LASER SFX: A", "LASER SFX: B",
+                                 "LASER SFX: C" };
+    const char *si2[5] = {
         g_player.invert_y ? "INVERT Y: ON" : "INVERT Y: OFF",
         g_player.show_fps ? "SHOW FPS: ON" : "SHOW FPS: OFF",
-        vrow, brow,
+        vrow, brow, lz[g_player.laser_sfx % 3],
     };
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         uint16_t c = (i == s_settings_cursor) ? RGB565C(120, 255, 120)
                                               : RGB565C(120, 126, 145);
         if (i == s_settings_cursor)
             craft_font_draw(fb, ">", 20, 56 + i * 9, c);
         craft_font_draw(fb, si2[i], 27, 56 + i * 9, c);
     }
-    craft_font_draw(fb, "</>:ADJUST B:BACK", 20, 100,
+    craft_font_draw(fb, "</>:ADJUST B:BACK", 20, 104,
                     RGB565C(95, 110, 140));
 }
 

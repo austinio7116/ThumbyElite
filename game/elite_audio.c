@@ -60,6 +60,9 @@ static void play(Wave w, float f0, float f1, float amp, float attack,
 }
 
 /* --- SFX recipes -------------------------------------------------------*/
+static int s_laser_sfx;     /* 0 A / 1 B / 2 C — firing-sound variant */
+void sfx_set_laser(int v) { s_laser_sfx = v < 0 ? 0 : v > 2 ? 2 : v; }
+
 void sfx_weapon(int t, float amp) {
     if (amp < 0.05f) return;
     switch (t) {
@@ -67,16 +70,37 @@ void sfx_weapon(int t, float amp) {
      * instead of a chirp (user feedback). Sweeps stay >=300 Hz (the
      * speaker's passband floor). */
     case WPN_PULSE_S:
-        play(W_SQUARE, 1000, 330, 0.26f * amp, 0.002f, 0.09f);
-        play(W_NOISE, 2600, 900, 0.16f * amp, 0.001f, 0.030f);
+        if (s_laser_sfx == 1) {            /* B: clean retro 'pew' */
+            play(W_SINE, 1500, 480, 0.30f * amp, 0.001f, 0.10f);
+        } else if (s_laser_sfx == 2) {     /* C: punchy zap, no chirp */
+            play(W_SAW, 760, 300, 0.28f * amp, 0.001f, 0.07f);
+            play(W_NOISE, 3200, 1200, 0.12f * amp, 0.001f, 0.02f);
+        } else {                           /* A: square body + crack */
+            play(W_SQUARE, 1000, 330, 0.26f * amp, 0.002f, 0.09f);
+            play(W_NOISE, 2600, 900, 0.16f * amp, 0.001f, 0.030f);
+        }
         break;
     case WPN_PULSE_M:
-        play(W_SQUARE, 780, 310, 0.32f * amp, 0.002f, 0.12f);
-        play(W_NOISE, 2200, 700, 0.20f * amp, 0.001f, 0.040f);
+        if (s_laser_sfx == 1) {
+            play(W_SINE, 1150, 380, 0.34f * amp, 0.001f, 0.13f);
+        } else if (s_laser_sfx == 2) {
+            play(W_SAW, 600, 280, 0.34f * amp, 0.001f, 0.09f);
+            play(W_NOISE, 2800, 1000, 0.14f * amp, 0.001f, 0.025f);
+        } else {
+            play(W_SQUARE, 780, 310, 0.32f * amp, 0.002f, 0.12f);
+            play(W_NOISE, 2200, 700, 0.20f * amp, 0.001f, 0.040f);
+        }
         break;
     case WPN_PULSE_L:
-        play(W_SQUARE, 580, 300, 0.38f * amp, 0.003f, 0.16f);
-        play(W_NOISE, 1800, 500, 0.24f * amp, 0.001f, 0.060f);
+        if (s_laser_sfx == 1) {
+            play(W_SINE, 850, 300, 0.40f * amp, 0.002f, 0.17f);
+        } else if (s_laser_sfx == 2) {
+            play(W_SAW, 460, 260, 0.40f * amp, 0.001f, 0.12f);
+            play(W_NOISE, 2200, 700, 0.16f * amp, 0.001f, 0.035f);
+        } else {
+            play(W_SQUARE, 580, 300, 0.38f * amp, 0.003f, 0.16f);
+            play(W_NOISE, 1800, 500, 0.24f * amp, 0.001f, 0.060f);
+        }
         break;
     case WPN_BEAM:
         play(W_SAW, 980, 860, 0.15f * amp, 0.001f, 0.07f);

@@ -39,7 +39,8 @@ typedef struct {
 typedef struct {
     int32_t credits;
     uint8_t hull_id;        /* class (stats row) */
-    uint8_t pad_a[3];
+    uint8_t laser_sfx;      /* 0..2 firing-sound variant (was pad) */
+    uint8_t pad_a[2];
     uint32_t hull_seed;     /* the LOOK — rolled by the selling dockyard */
     uint8_t cargo[N_GOODS];
     float   fuel;

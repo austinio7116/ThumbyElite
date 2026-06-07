@@ -244,6 +244,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_CIVMOVE") ||
         getenv("ELITE_LANCESHOT") ||
         getenv("ELITE_SFXTEST") ||
+        getenv("ELITE_SETSHOT") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -735,11 +736,31 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    /* Settings overlay screenshot (laser-sfx row). */
+    if (getenv("ELITE_SETSHOT")) {
+        CraftRawButtons none = {0}, b;
+        for (int k=0;k<10;k++) elite_game_tick(&none,1.0f/30.0f);
+        b=none; b.menu=true; elite_game_tick(&b,1.0f/30.0f);  /* dash */
+        for (int k=0;k<20;k++) elite_game_tick(&none,1.0f/30.0f);
+        /* navigate dash to SETTINGS + open: down+down, A */
+        b=none; b.right=true; elite_game_tick(&b,1.0f/30.0f);
+        elite_game_tick(&none,1.0f/30.0f);
+        b=none; b.down=true; elite_game_tick(&b,1.0f/30.0f);
+        elite_game_tick(&none,1.0f/30.0f);
+        b=none; b.a=true; elite_game_tick(&b,1.0f/30.0f);
+        for (int k=0;k<10;k++) elite_game_tick(&none,1.0f/30.0f);
+        render_frame(); dump_ppm("/tmp/setshot.ppm");
+        return 0;
+    }
+
     /* Verify a weapon's sfx produces audio (non-silent render). */
     if (getenv("ELITE_SFXTEST")) {
         const char *nm = getenv("ELITE_SFXTEST");
         int wt = WPN_BLASTER;
         if (nm && nm[0]=='P') wt = WPN_PLASMA;
+        if (nm && nm[0]>='0' && nm[0]<='2') {
+            sfx_set_laser(nm[0]-'0'); wt = WPN_PULSE_S;
+        }
         extern void sfx_weapon(int wpn_type, float amp);
         sfx_weapon(wt, 1.0f);
         int16_t buf[512]; int peak = 0;
