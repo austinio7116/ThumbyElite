@@ -291,16 +291,25 @@ void detail_draw_hull(uint16_t *fb, int hull_id, int cost,
            (int)h->hull_base);
     HSTATC("SHD", CMPC(h->shield_base, cur->shield_base), "%d",
            (int)h->shield_base);
-    /* TIER + GUNS compare TOTALS across slots (user spec). */
+    /* TIER + GUNS: colour compares TOTALS across slots, but the text
+     * stays in its original form (user spec). */
     {
         int nt = h->max_shield_tier + h->max_hull_tier;
         int ct = cur->max_shield_tier + cur->max_hull_tier;
-        HSTATC("TIER", CMPC(nt, ct), "%d (S%d H%d)", nt,
+        HSTATC("TIER", CMPC(nt, ct), "S%d H%d",
                h->max_shield_tier, h->max_hull_tier);
         int ng = 0, cg = 0;
         for (int i = 0; i < h->n_slots; i++) ng += h->slot_size[i];
         for (int i = 0; i < cur->n_slots; i++) cg += cur->slot_size[i];
-        HSTATC("GUNS", CMPC(ng, cg), "%d (X%d)", ng, h->n_slots);
+        char slots[12];
+        int sl = 0;
+        for (int i = 0; i < h->n_slots; i++) {
+            slots[sl++] = 'Z';
+            slots[sl++] = (char)('0' + h->slot_size[i]);
+            slots[sl++] = ' ';
+        }
+        slots[sl] = 0;
+        HSTATC("GUNS", CMPC(ng, cg), "%s", slots);
     }
     #undef HSTATC
     #undef CMPC
@@ -309,10 +318,10 @@ void detail_draw_hull(uint16_t *fb, int hull_id, int cost,
     if (cost < 0)
         craft_font_draw(fb, "OWNED", 2, 99, COL_CRED);
     else {
-        snprintf(buf, sizeof buf, "COST %dCR (TRADE-IN)", cost);
+        snprintf(buf, sizeof buf, "COST %d CR (TRADE-IN)", cost);
         craft_font_draw(fb, buf, 2, 99, COL_CRED);
     }
-    snprintf(buf, sizeof buf, "LIST %dCR", h->price);
+    snprintf(buf, sizeof buf, "LIST %d CR", h->price);
     craft_font_draw(fb, buf, 2, 107, COL_DIM);
     hl(fb, 118, COL_GRID);
     craft_font_draw(fb, footer, 2, 121, COL_DIM);
