@@ -133,6 +133,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_FINETEST") ||
         getenv("ELITE_ORBITPROBE") ||
         getenv("ELITE_REDISTRESS") ||
+        getenv("ELITE_ARMOURYSHOT") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -932,6 +933,64 @@ int main(int argc, char **argv) {
     }
 
     /* Icon strip render (drone et al). */
+    if (getenv("ELITE_ARMOURYSHOT")) {
+        /* The guide's armoury sheets, in-engine (game font + icons,
+         * the style the user liked): rows of [icon] NAME / tag, two
+         * columns, paged into fb dumps for the compositor. */
+        static const char *wtag[3] = { "Z1", "Z2", "Z3" };
+        int item = 0, page = 0;
+        while (item < WPN_COUNT) {
+            memset(g_fb, 0, sizeof g_fb);
+            for (int row = 0; row < 5 && item < WPN_COUNT; row++)
+                for (int col = 0; col < 2 && item < WPN_COUNT; col++) {
+                    int x = col * 64, y = row * 25 + 2;
+                    icon_weapon_2x(g_fb, x + 1, y + 2, item);
+                    craft_font_draw(g_fb, k_weapons[item].name, x + 28,
+                                    y, 0xFFFF);
+                    craft_font_draw(g_fb,
+                                    wtag[k_weapons[item].size - 1],
+                                    x + 28, y + 9,
+                                    RGB565C(245, 200, 80));
+                    item++;
+                }
+            char nm[40];
+            snprintf(nm, sizeof nm, "/tmp/armoury_w_%d.ppm", page++);
+            dump_ppm(nm);
+        }
+        /* equipment + gadgets page */
+        static const struct { int type; const char *tag; } eq[] = {
+            { WPN_COUNT + 0, "Z1-Z3" },   /* shield */
+            { WPN_COUNT + 1, "Z1-Z3" },   /* armor */
+            { EQ_HEATSINK, "UTIL" }, { EQ_SCANNER, "UTIL" },
+            { EQ_TANK, "UTIL" }, { EQ_FUELSCOOP, "UTIL" },
+            { EQ_TARGETCOMP, "UTIL" }, { EQ_CHAFF, "UTIL" },
+            { EQ_DRONE, "UTIL" }, { EQ_CLOAK, "UTIL" },
+            { EQ_MANIFEST, "UTIL" },
+        };
+        int ne = (int)(sizeof eq / sizeof eq[0]);
+        item = 0; page = 0;
+        while (item < ne) {
+            memset(g_fb, 0, sizeof g_fb);
+            for (int row = 0; row < 5 && item < ne; row++)
+                for (int col = 0; col < 2 && item < ne; col++) {
+                    int x = col * 64, y = row * 25 + 2;
+                    icon_weapon_2x(g_fb, x + 1, y + 2, eq[item].type);
+                    craft_font_draw(g_fb,
+                                    k_equip[eq[item].type - WPN_COUNT]
+                                        .name,
+                                    x + 28, y, 0xFFFF);
+                    craft_font_draw(g_fb, eq[item].tag, x + 28, y + 9,
+                                    RGB565C(245, 200, 80));
+                    item++;
+                }
+            char nm[40];
+            snprintf(nm, sizeof nm, "/tmp/armoury_e_%d.ppm", page++);
+            dump_ppm(nm);
+        }
+        printf("[armoury] done\n");
+        return 0;
+    }
+
     if (getenv("ELITE_ICONSHOT")) {
         /* full armoury grid: every weapon at (col*21+2, row*12+2),
          * 6 per row, enum order — the guide compositor crops these */
