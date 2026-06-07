@@ -11,8 +11,11 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 
 ## Changelog
 
-### 1.22.1 (in development)
+### 1.22.1 (ThumbyOne v1.22.1)
 
+- **Slot overflow fix** — the game had outgrown its 256 KB ThumbyOne
+  partition (blank boot); the slot now builds size-optimised (95 KB
+  headroom) and the build hard-fails if it ever overflows again
 - **Every hull is an individual** — stats roll ±8–15% around class
   book values, weapon-slot layouts vary, utility bays run 1/2–4/3–4 by
   class, and used ships arrive with rolled part-worn kit. Spec sheets
