@@ -7,3 +7,5 @@
 void ai_tick(float dt);
 
 #endif
+
+float ai_tier_spread(int tier);

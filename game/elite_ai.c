@@ -33,8 +33,19 @@ static const float k_fight_speed[5] = { 0.55f, 0.70f, 0.85f,
 /* Monotone skill tables (the old T3 spread/refire degradation
  * compensated its gauss payload; the kill matrix showed it inverting
  * the ladder once geometry was fixed — k_npc_dmg carries balance now). */
-static const float k_refire[5] = { 0.80f, 0.70f, 0.60f, 0.50f, 0.42f };
-static const float k_spread[5] = { 0.021f, 0.020f, 0.016f, 0.013f, 0.0105f };
+static const float k_refire[5] = { 0.90f, 0.75f, 0.60f, 0.50f, 0.42f };
+static const float k_spread[5] = { 0.052f, 0.038f, 0.025f, 0.016f, 0.0105f };
+
+/* The tier accuracy table, shared with the turret gunner. */
+float ai_tier_spread(int tier) {
+    return k_spread[tier > 4 ? 4 : tier];
+}
+
+/* Engagement range: greens hold fire until CLOSE (spread x distance
+ * decides hits, so discipline about range IS accuracy); aces snipe.
+ * This keeps low-tier damage above the shield-regen floor regardless
+ * of orbit geometry (user: '>60s does not make good reading'). */
+static const float k_eng[5] = { 180.0f, 240.0f, 330.0f, 500.0f, 900.0f };
 static const float k_cone[5]   = { 0.975f, 0.978f, 0.984f, 0.988f, 0.992f };
 
 /* Steer s so its nose tips toward world-space dir (unit). */
@@ -251,10 +262,27 @@ static void ai_ship(int idx, float dt) {
                     : ((dist > 150.0f) ? 0.68f
                      : (dist > 90.0f)  ? 0.55f : 0.45f) *
                           k_fight_speed[tier];
-        if (dist < AI_BREAK_DIST) {
-            s->ai_state = AI_BREAK;
-            s->ai_timer = 4.0f;            /* safety cap only */
-            break;
+        /* Pursuit floor (all tiers): corner-speed fighting never means
+         * LOSING the chase — throttle at least matches the target plus
+         * a small overtake. Greens reach the stern band this way and
+         * become eventually-lethal with no synthetic behavior. */
+        {
+            float vt = v3_len(t->vel) + 12.0f;
+            float fl = vt / (s->max_speed > 1.0f ? s->max_speed : 1.0f);
+            if (fl > 1.0f) fl = 1.0f;
+            if (s->throttle < fl) s->throttle = fl;
+        }
+        /* Rookies PARK and plink (they need sustained close time for
+         * their spray to add up past shield regen); pros boom-and-zoom.
+         * The break trigger shrinks with rank. */
+        {
+            static const float k_brk[5] = { 55.0f, 70.0f, 110.0f,
+                                            120.0f, 120.0f };
+            if (dist < k_brk[tier]) {
+                s->ai_state = AI_BREAK;
+                s->ai_timer = 4.0f;        /* safety cap only */
+                break;
+            }
         }
         choose_weapon(s, dist);
         const WeaponDef *w = &k_weapons[s->weapons[s->active_w]];
@@ -263,7 +291,7 @@ static void ai_ship(int idx, float dt) {
          * — hear it, see it, BREAK. Losing the cone aborts. */
         static float s_rail_t[MAX_SHIPS];
         if (s->weapons[s->active_w] == WPN_RAILGUN) {
-            int aligned = dist < w->range &&
+            int aligned = dist < w->range && dist < k_eng[tier] &&
                           v3_dot(s->basis.r[2], dir) > k_cone[tier] &&
                           combat_can_fire(s);
             if (!aligned) {
@@ -291,7 +319,7 @@ static void ai_ship(int idx, float dt) {
             }
             break;
         }
-        if (dist < w->range &&
+        if (dist < w->range && dist < k_eng[tier] &&
             v3_dot(s->basis.r[2], dir) > k_cone[tier] &&
             combat_can_fire(s)) {
             /* Evasion is real: target's lateral speed widens the

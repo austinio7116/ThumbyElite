@@ -352,9 +352,9 @@ int combat_fire(int shooter, float spread, int target) {
         /* NOT monotone — it compensates each tier's payload (t3 packs
          * PULSE-M streams, t2 often autocannon) so the COLLAPSE TIMES
          * are the smooth curve, not this table. */
-        static const float k_npc_dmg[5] = { 0.52f, 0.46f, 0.88f,
-                                            0.40f, 0.74f };
-        dmg_mult = k_npc_dmg[s->tier > 4 ? 4 : s->tier];
+        dmg_mult = 1.0f;   /* NPC guns hit for REAL damage (user design:
+                              rank lives in accuracy + flying, not in a
+                              hidden scalar) */
     }
     if (shooter == PLAYER) {
         const WeaponInst *wi = player_mount_for_ship_slot(s->active_w);
@@ -557,27 +557,25 @@ void combat_tick(float dt) {
                         if (g_player.turret_eq.integrity == 0) continue;
                         mult *= mount_dmg_mult(&g_player.turret_eq);
                     }
-                    else {
-                        static const float k_td[5] = { 0.60f, 0.62f,
-                                                       0.80f, 0.45f,
-                                                       0.90f };
-                        mult *= k_td[s->tier > 4 ? 4 : s->tier];
-                    }
+                    /* NPC turret: full hardware damage; tier-spread
+                     * applied at aim below (rank = accuracy). */
                     /* Lead the target. */
                     float tt = tw->speed > 0 ? dist / tw->speed : 0;
                     Vec3 aim = v3_add(g_ships[tgt].pos,
                                       v3_scale(v3_sub(g_ships[tgt].vel,
                                                       s->vel), tt));
                     if (npc) {
-                        /* spread: reuse the ai jitter scale ~tier 2 */
+                        /* turret gunner shares the pilot's rank:
+                         * tier spread, not a fixed jitter */
+                        float tsp = ai_tier_spread(s->tier) * 2.2f;
                         uint32_t r2 = (uint32_t)(s->pos.x * 57.0f)
                                       ^ (uint32_t)(s->heat * 977.0f) ^ i;
                         r2 ^= r2 << 13; r2 ^= r2 >> 17; r2 ^= r2 << 5;
-                        float ja = ((r2 & 0xFF) / 255.0f - 0.5f) * 0.05f
+                        float ja = ((r2 & 0xFF) / 255.0f - 0.5f) * tsp
                                    * dist;
                         r2 ^= r2 << 13; r2 ^= r2 >> 17; r2 ^= r2 << 5;
                         float jb = (((r2 >> 8) & 0xFF) / 255.0f - 0.5f)
-                                   * 0.05f * dist;
+                                   * tsp * dist;
                         aim = v3_add(aim, v3_add(v3_scale(s->basis.r[0],
                                                           ja),
                                                  v3_scale(s->basis.r[1],
