@@ -983,8 +983,12 @@ static void draw_market(uint16_t *fb) {
              * here), gold = well over (sell here). The trade matrix,
              * finally visible in the UI. */
             int base = (int)k_goods[i].base;
+            /* Good-buy is CYAN: the old green vanished into the green
+             * cursor highlight (user report). Cool cyan = bargain in,
+             * warm gold = payout out — distinct from each other and
+             * from the cursor. */
             uint16_t bc = (buy * 100 < base * 95)
-                              ? RGB565C(110, 220, 110) : c;
+                              ? RGB565C(90, 200, 255) : c;
             uint16_t sc2 = (sell * 100 > base * 108)
                                ? RGB565C(245, 200, 80) : c;
             snprintf(buf, sizeof buf, "%d", buy);
