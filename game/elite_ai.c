@@ -280,8 +280,38 @@ static void ai_ship(int idx, float dt) {
     {
         float radii = (s->mesh ? s->mesh->bound_r : 4.0f) +
                       (t->mesh ? t->mesh->bound_r : 4.0f);
-        if (s->ai_state != AI_BREAK && dist < radii + 28.0f &&
-            v3_dot(s->basis.r[2], dir) > -0.1f) {
+        /* CPA (closest-point-of-approach) avoidance: predict where the
+         * two will be nearest; if that miss is inside the danger radius
+         * and coming SOON, steer aside EARLY (while there's time to
+         * turn) — widening the miss. Only fires on a real collision
+         * course, so normal firing approaches are untouched. This is
+         * the proper anti-ram (user: avoid the crash, not paper it). */
+        Vec3 rel = dir;                          /* unit toward target */
+        Vec3 rv = v3_sub(s->vel, t->vel);        /* our closing vel */
+        float rv2 = v3_dot(rv, rv);
+        if (rv2 > 1.0f) {
+            Vec3 relv = v3_sub(t->pos, s->pos);
+            float tcpa = v3_dot(relv, rv) / rv2; /* >0 approaching */
+            if (tcpa > 0.0f && tcpa < 3.0f) {
+                Vec3 cpa = v3_sub(relv, v3_scale(rv, tcpa));
+                float miss = v3_len(cpa);
+                float danger = radii + 32.0f;
+                if (miss < danger) {
+                    /* steer AWAY from where the target will be at
+                     * closest approach (-cpa widens the miss) */
+                    Vec3 away = (miss > 1e-3f)
+                                    ? v3_scale(cpa, -1.0f / miss)
+                                    : s->basis.r[0];
+                    float urg = (1.0f - miss / danger) *
+                                (1.0f - tcpa / 3.0f);
+                    dir = v3_norm(v3_add(rel,
+                                         v3_scale(away, 3.0f * urg)));
+                }
+            }
+        }
+        /* last-ditch hard peel if something still gets very close */
+        if (s->ai_state != AI_BREAK && dist < radii + 24.0f &&
+            v3_dot(s->vel, dir) > 0.0f) {
             s->ai_state = AI_BREAK;
             s->ai_timer = 3.0f;
         }

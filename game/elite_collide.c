@@ -31,7 +31,7 @@ static float ship_mass(const Ship *s) {
 /* Shield blocks it (user rule): hull only ever pays when unshielded. */
 static int s_env_kind = 0;     /* what the player is touching */
 
-static void collide_damage(int idx, float dmg) {
+static void collide_damage(int idx, float dmg, int by) {
     if (idx == PLAYER && s_env_kind) combat_note_env_hit(s_env_kind);
     Ship *s = &g_ships[idx];
     if (idx != PLAYER) dmg *= 0.6f;          /* NPCs scrape lighter */
@@ -41,10 +41,11 @@ static void collide_damage(int idx, float dmg) {
         return;
     }
     s->hull -= dmg;
-    if (s->hull <= 0.0f) {
-        s->alive = false;
-        fx_spawn_explosion(s->pos, s->vel);
-    }
+    if (s->hull <= 0.0f)
+        /* route through the shared kill path so a rammed kill counts
+         * (tally/loot/bounty); 'by' = the other ship (player gets
+         * credit when they ram), env collisions pass -1. */
+        combat_finalize_kill(by, idx);
 }
 
 /* Impulse + separation for two spheres; returns impact speed. */
@@ -81,8 +82,8 @@ void collide_tick(int station_alive, float station_r, int player_manual) {
                 /* size sets the split: the lighter hull eats more */
                 float ma = ship_mass(a), mb = ship_mass(b);
                 float base = (vi - COL_MIN_SPEED) * COL_DMG_K;
-                collide_damage(i, base * (mb / (ma + mb)) * 2.0f);
-                collide_damage(j, base * (ma / (ma + mb)) * 2.0f);
+                collide_damage(i, base * (mb / (ma + mb)) * 2.0f, j);
+                collide_damage(j, base * (ma / (ma + mb)) * 2.0f, i);
                 Vec3 hit = v3_add(b->pos, v3_scale(n, ship_radius(b)));
                 fx_spawn_spark(hit, a->vel);
                 if (i == PLAYER || j == PLAYER) sfx_hit_hull();
@@ -115,7 +116,7 @@ void collide_tick(int station_alive, float station_r, int player_manual) {
             float vi = -vn;
             if (vi > COL_MIN_SPEED) {
                 float base = (vi - COL_MIN_SPEED) * COL_DMG_K;
-                collide_damage(i, base * (mr / (ms + mr)) * 2.0f);
+                collide_damage(i, base * (mr / (ms + mr)) * 2.0f, -1);
                 /* no ore from ramming (user rule: no benefit for poor
                  * flying) — just the dent and the bounce */
                 fx_spawn_spark(v3_sub(s->pos, v3_scale(n, sr)), s->vel);
@@ -152,7 +153,7 @@ void collide_tick(int station_alive, float station_r, int player_manual) {
                             /* the station always wins the mass contest */
                             collide_damage(PLAYER,
                                            (-vn - COL_MIN_SPEED) *
-                                               COL_DMG_K * 2.0f);
+                                               COL_DMG_K * 2.0f, -1);
                             fx_spawn_spark(v3_sub(p->pos,
                                                   v3_scale(n, 2.0f)),
                                            p->vel);

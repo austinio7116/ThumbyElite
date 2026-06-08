@@ -265,47 +265,48 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
             v->ai_target = PLAYER;
         }
     }
-    if (v->hull <= 0.0f) {
-        v->alive = false;
-        fx_spawn_explosion(v->pos, v->vel);
-        {
-            float d = v3_len(v3_sub(v->pos, g_ships[PLAYER].pos));
-            float amp = 1.0f - d / 700.0f;
-            if (victim == PLAYER) amp = 1.0f;
-            sfx_explosion(amp, v->mesh->bound_r / 15.0f);
-        }
-        if (victim == PLAYER) plat_rumble(1.0f, 0.7f);
-        if (victim != PLAYER) {
-            /* Wrecks drop loot whoever fired; the kill TALLY (rank) is
-             * the player's alone — distress events add NPC-vs-NPC
-             * kills that must not inflate it. */
-            if (shooter == PLAYER) s_kills++;
-            loot_on_kill(v->pos, v->vel, v->tier);
-            if (shooter == PLAYER)
-                mission_on_kill(v->tier, v->is_mark != 0);
-        }
-        if (shooter == PLAYER) {
-            s_killmark = 0.7f;
-            if (victim != PLAYER && v->is_police) {
-                /* Cop killer: no bounty, a heavy fine on your head. */
-                g_player.legal = 2;
-                g_player.fine += 1500;
-            } else if (victim != PLAYER && v->is_civilian) {
-                /* Murder: FUGITIVE, and the wreck's cargo is STOLEN —
-                 * contraband canisters, black-market only. */
-                g_player.legal = 2;
-                g_player.fine += 1000;
-                int nc = 2 + (victim & 1);
-                for (int c2 = 0; c2 < nc; c2++)
-                    loot_spawn_good(v->pos, v->vel, 19, 1 + (c2 & 1));
-            } else if (victim != PLAYER) {
-                g_player.xp_gunnery++;
-                /* Lawful kill bounty: dangerous pilots pay big. */
-                static const int k_pay[5] = { 25, 80, 220, 600, 1600 };
-                int t = v->tier > 4 ? 4 : v->tier;
-                s_kill_pay += k_pay[t];
-                g_player.credits += k_pay[t];
-            }
+    if (v->hull <= 0.0f)
+        combat_finalize_kill(shooter, victim);
+}
+
+/* Shared kill processing: explosion, tally, loot, bounty, legal status.
+ * Called from weapon damage AND collision deaths (user: rammed kills
+ * must count). shooter == PLAYER credits the kill; -1 = environment. */
+void combat_finalize_kill(int shooter, int victim) {
+    Ship *v = &g_ships[victim];
+    if (!v->alive) return;
+    v->alive = false;
+    fx_spawn_explosion(v->pos, v->vel);
+    {
+        float d = v3_len(v3_sub(v->pos, g_ships[PLAYER].pos));
+        float amp = 1.0f - d / 700.0f;
+        if (victim == PLAYER) amp = 1.0f;
+        sfx_explosion(amp, v->mesh->bound_r / 15.0f);
+    }
+    if (victim == PLAYER) plat_rumble(1.0f, 0.7f);
+    if (victim != PLAYER) {
+        if (shooter == PLAYER) s_kills++;
+        loot_on_kill(v->pos, v->vel, v->tier);
+        if (shooter == PLAYER)
+            mission_on_kill(v->tier, v->is_mark != 0);
+    }
+    if (shooter == PLAYER && victim != PLAYER) {
+        s_killmark = 0.7f;
+        if (v->is_police) {
+            g_player.legal = 2;
+            g_player.fine += 1500;
+        } else if (v->is_civilian) {
+            g_player.legal = 2;
+            g_player.fine += 1000;
+            int nc = 2 + (victim & 1);
+            for (int c2 = 0; c2 < nc; c2++)
+                loot_spawn_good(v->pos, v->vel, 19, 1 + (c2 & 1));
+        } else {
+            g_player.xp_gunnery++;
+            static const int k_pay[5] = { 25, 80, 220, 600, 1600 };
+            int t = v->tier > 4 ? 4 : v->tier;
+            s_kill_pay += k_pay[t];
+            g_player.credits += k_pay[t];
         }
     }
 }

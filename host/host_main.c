@@ -247,6 +247,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_SETSHOT") ||
         getenv("ELITE_FLAKTEST") ||
         getenv("ELITE_FLAKVIS") ||
+        getenv("ELITE_RAMKILL") ||
         getenv("ELITE_SWEEPTEST") ||
         getenv("ELITE_RAMTEST") ||
         getenv("ELITE_DASHTEST") ||
@@ -774,8 +775,25 @@ int main(int argc, char **argv) {
                   pl->basis.r[0]=v3_norm(v3_cross(v3(0,1,0),to));
                   pl->basis.r[1]=v3_cross(to,pl->basis.r[0]);
                   pl->vel=v3_scale(to,70.0f); }
+            } else if (charge) {
+                /* handled above */
             } else {
-                b.up = (f/45)&1; b.down=!((f/45)&1);   /* gentle weave */
+                /* REALISTIC dogfight: turn toward nearest enemy at a
+                 * LIMITED rate (like real flying), cruise speed */
+                int nr2=-1; float nd=1e9f;
+                for (int i=1;i<MAX_SHIPS;i++){ if(!g_ships[i].alive)continue;
+                  float d=v3_len(v3_sub(g_ships[i].pos,pl->pos));
+                  if(d<nd){nd=d;nr2=i;} }
+                if (nr2>0){
+                  Vec3 to=v3_norm(v3_sub(g_ships[nr2].pos,pl->pos));
+                  Vec3 ax=v3_cross(pl->basis.r[2],to);
+                  float sa=v3_len(ax);
+                  if(sa>1e-4f){ float ang=asinf(sa>1?1:sa);
+                    float step=ang<0.06f?ang:0.06f;
+                    m3_rotate_world(&pl->basis,v3_scale(ax,1.0f/sa),step);
+                    m3_orthonormalize(&pl->basis); }
+                  pl->vel=v3_scale(pl->basis.r[2], pl->max_speed*0.7f);
+                }
             }
             elite_game_tick(&b, 1.0f / 30.0f);
             for (int i = 1; i < MAX_SHIPS; i++) {
@@ -829,6 +847,26 @@ int main(int argc, char **argv) {
                    closest > 14.0f ? "no ram" : "RAMMED");
             en->alive = false;
         }
+        return 0;
+    }
+
+    /* Collision kill counts. */
+    if (getenv("ELITE_RAMKILL")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Ship *pl = &g_ships[0];
+        int k0 = combat_kills();
+        int c0 = g_player.credits;
+        int e = ship_spawn(hull_mesh(0xACE1u, 1),
+                           v3_add(pl->pos, v3_scale(pl->basis.r[2], 6.0f)),
+                           TEAM_HOSTILE);   /* overlapping -> collides */
+        ship_set_tier(e, 1, 1);
+        g_ships[e].hull = 1; g_ships[e].shield = 0;   /* one bump kills */
+        pl->vel = v3_scale(pl->basis.r[2], 60.0f);
+        g_ships[e].vel = v3_scale(pl->basis.r[2], -60.0f);
+        collide_tick(0, 0, 1);
+        printf("[ramkill] enemy alive=%d kills %d->%d credits %d->%d (%s)\n",
+               g_ships[e].alive, k0, combat_kills(), c0, g_player.credits,
+               (combat_kills() > k0) ? "COUNTS" : "NOT COUNTED");
         return 0;
     }
 
