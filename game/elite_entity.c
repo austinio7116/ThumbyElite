@@ -155,10 +155,27 @@ void ship_set_tier(int idx, int tier, int hull_class) {
     s->n_weapons = 0;
     s->active_w = 0;
     int nguns = (tier >= 3) ? 2 : (tier == 2 && (idx & 1)) ? 2 : 1;
-    for (int m = 0; m < nguns; m++)
-        ship_fit_weapon(idx, m,
-                        roll_weapon(tier, (uint32_t)(idx * 977 + m * 31
-                                                     + tier * 7)));
+    for (int m = 0; m < nguns; m++) {
+        WeaponType w = roll_weapon(tier,
+                           (uint32_t)(idx * 977 + m * 31 + tier * 7));
+        /* Mount 0 must be a real PRIMARY — flak/mine/tractor/mining are
+         * supplements (a flak burst on a run), never a pilot's only
+         * gun. Re-roll the primary slot until it's a forward weapon. */
+        if (m == 0) {
+            int tries = 0;
+            while ((w == WPN_FLAK || w == WPN_MINE || w == WPN_TRACTOR ||
+                    w == WPN_MINING) && tries < 8) {
+                w = roll_weapon(tier, (uint32_t)(idx * 977 + 53 +
+                                                 tries * 101 + tier * 7));
+                tries++;
+            }
+            if (w == WPN_FLAK || w == WPN_MINE || w == WPN_TRACTOR ||
+                w == WPN_MINING)
+                w = (tier >= 4) ? WPN_PULSE_L
+                  : (tier >= 2) ? WPN_PULSE_M : WPN_PULSE_S;
+        }
+        ship_fit_weapon(idx, m, w);
+    }
 }
 
 int ships_alive_hostile(void) {

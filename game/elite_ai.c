@@ -69,16 +69,30 @@ static void turn_toward(Ship *s, Vec3 dir, float dt) {
 
 /* Pick the mount that suits the range (longest-reach gun that's in
  * range and still has ammo; fall back to mount 0). */
-static void choose_weapon(Ship *s, float dist) {
-    int best = 0;
-    float best_score = -1.0f;
+/* Each weapon has an IDEAL engagement range; flak's is its fuze. */
+static float weapon_ideal(int wt, const WeaponDef *w) {
+    if (wt == WPN_FLAK) return FLAK_FUZE;
+    return w->range * 0.55f;
+}
+/* Pick the gun that suits the CURRENT range, not just the longest one
+ * (user: switch to shorter guns when closer; variety is key). Soft
+ * score = range-fit + slight punch + a STABLE per-ship/weapon bias so
+ * different pilots favour different guns from the same loadout. */
+static void choose_weapon(Ship *s, float dist, int idx) {
+    int best = s->active_w;
+    float best_score = -1e9f;
     for (int i = 0; i < s->n_weapons; i++) {
+        if (s->crits & (uint8_t)(CRIT_WPN0 << i)) continue;
         const WeaponDef *w = &k_weapons[s->weapons[i]];
-        if (s->crits & (uint8_t)(CRIT_WPN0 << i)) continue;  /* smashed */
         if (w->ammo_max && s->ammo[i] <= 0) continue;
         if (dist > w->range) continue;
-        /* Prefer the tightest range fit: big guns far, fast guns close. */
-        float score = (dist > 320.0f) ? w->range : (2000.0f - w->range);
+        float ideal = weapon_ideal(s->weapons[i], w);
+        float score = -((dist - ideal) < 0 ? ideal - dist : dist - ideal)
+                      / 300.0f;
+        score += w->dmg * 0.008f;
+        uint32_t h = (uint32_t)(idx * 2654435761u) ^ (uint32_t)(i * 40503u);
+        h ^= h >> 13;
+        score += (float)(h % 1000u) * 0.00035f;   /* per-ship variety */
         if (score > best_score) { best_score = score; best = i; }
     }
     s->active_w = (uint8_t)best;
@@ -124,7 +138,8 @@ static void ai_ship(int idx, float dt) {
         if (al > 1e-3f) dir = v3_scale(away, 1.0f / al);
     }
     int tier = s->tier > 4 ? 4 : s->tier;
-    static uint8_t s_flak_fired[MAX_SHIPS];   /* one flak burst per run */
+    static float s_flak_cd[MAX_SHIPS];        /* periodic timed burst */
+    s_flak_cd[idx] -= dt;
 
     /* SHIP-COLLISION AVOIDANCE (user: they ram me on attack runs). The
      * missing counterpart to rock avoidance — when closing inside ram
@@ -305,12 +320,12 @@ static void ai_ship(int idx, float dt) {
             if (dist < k_brk[tier]) {
                 s->ai_state = AI_BREAK;
                 s->ai_timer = 4.0f;        /* safety cap only */
-                s_flak_fired[idx] = 0;     /* rearm flak for next run */
                 break;
             }
         }
-        choose_weapon(s, dist);
+        choose_weapon(s, dist, idx);
         const WeaponDef *w = &k_weapons[s->weapons[s->active_w]];
+        float eng = k_eng[tier];
         /* RAILGUN telegraphs (user req: 0.6s kills were undodgeable):
          * 0.9s charge with the player's own charge sfx + muzzle flare
          * — hear it, see it, BREAK. Losing the cone aborts. */
@@ -357,13 +372,13 @@ static void ai_ship(int idx, float dt) {
                                                 38.0f, 24.0f };
             float off = dist - FLAK_FUZE;
             if (off < 0) off = -off;
-            flak_ok = (off < k_flakwin[tier]) && !s_flak_fired[idx];
+            flak_ok = (off < k_flakwin[tier]) && s_flak_cd[idx] <= 0.0f;
         }
-        if (flak_ok && dist < w->range && dist < k_eng[tier] &&
+        if (flak_ok && dist < w->range && dist < eng &&
             v3_dot(s->basis.r[2], dir) > k_cone[tier] &&
             combat_can_fire(s)) {
             if (s->weapons[s->active_w] == WPN_FLAK)
-                s_flak_fired[idx] = 1;   /* one burst per run */
+                s_flak_cd[idx] = 1.8f;   /* timed burst, ~one per 1.8s */
             /* THE HUMAN FIRE MODEL (user design): fire at the WEAPON's
              * own cadence while on target — a thumb holding A. Heat
              * throttles streams exactly as it does for the player;
