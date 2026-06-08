@@ -1072,6 +1072,7 @@ int main(int argc, char **argv) {
         /* store per (weapon,tier): avg shots fired + avg hit% */
         static float g_shots[WPN_COUNT][5], g_hitpc[WPN_COUNT][5];
         static float g_ttk[WPN_COUNT][5];   /* <0 = no kill (>cap) */
+        static float g_hits[WPN_COUNT][5];
         uint32_t br = 0x1234567u;
         #define BR() (br ^= br<<13, br ^= br>>17, br ^= br<<5, br)
         #define BRF(a,b) ((a) + ((b)-(a)) * ((BR() & 0xFFFF) / 65535.0f))
@@ -1124,11 +1125,11 @@ int main(int argc, char **argv) {
                     for (int f = 0; f < 30 * 120; f++) {
                         float speed;
                         if (st8 == 0) {                /* STRAIGHT */
-                            speed = maxv * 0.66f;
+                            speed = maxv * 0.50f;
                             seg += speed / 30.0f;
                             if (seg >= L_STRAIGHT) { st8 = 1; tacc = 0; }
                         } else {                       /* SLOW TURN */
-                            speed = maxv * 0.50f;
+                            speed = maxv * 0.40f;
                             float dpsi = TURN_RATE / 30.0f * tsign;
                             psi += dpsi; tacc += dpsi < 0 ? -dpsi : dpsi;
                             if (tacc >= 3.14159f) {     /* half loop done */
@@ -1155,11 +1156,12 @@ int main(int argc, char **argv) {
                 }
                 g_shots[wt][tier] = csh / (NT > 0 ? NT : 1);
                 g_hitpc[wt][tier] = csh > 0 ? 100.0f * chit / csh : 0.0f;
+                g_hits[wt][tier] = chit / (NT > 0 ? NT : 1);
                 g_ttk[wt][tier] = (tn > NT/2) ? tsum/tn : -1.0f;
             }
         }
         /* ONE combined table: time-to-kill (s) and hit-rate %% per cell */
-        printf("[bench] === kill-time(s) / hit-rate%% -- slow figure-8 target ===\n");
+        printf("[bench] === kill-time(s)/hit%%/shots/hits -- racetrack-8 50%%-40%% ===\n");
         printf("[bench] %-9s   T0         T1         T2         T3         T4\n",
                "WEAPON");
         for (int wt = 0; wt < WPN_COUNT; wt++) {
@@ -1167,11 +1169,11 @@ int main(int argc, char **argv) {
             printf("[bench] %-9s", k_weapons[wt].name);
             for (int tier = 0; tier <= 4; tier++) {
                 if (g_ttk[wt][tier] < 0)
-                    printf("  >cap/%2.0f%%/%4.0fsh", g_hitpc[wt][tier],
-                           g_shots[wt][tier]);
+                    printf("  >cap/%2.0f%%/%4.0fsh/%3.0fhit", g_hitpc[wt][tier],
+                           g_shots[wt][tier], g_hits[wt][tier]);
                 else
-                    printf(" %5.1f/%2.0f%%/%4.0fsh", g_ttk[wt][tier],
-                           g_hitpc[wt][tier], g_shots[wt][tier]);
+                    printf(" %5.1f/%2.0f%%/%4.0fsh/%3.0fhit", g_ttk[wt][tier],
+                           g_hitpc[wt][tier], g_shots[wt][tier], g_hits[wt][tier]);
             }
             printf("\n");
         }
