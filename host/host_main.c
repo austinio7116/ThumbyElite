@@ -2344,10 +2344,18 @@ int main(int argc, char **argv) {
                                                    v3_scale(rgt, -70.0f))),
                             TEAM_HOSTILE);
         if (p2 > 0) ship_set_tier(p2, 0, 1);
+        /* tankier so the weapon showcase lingers (slower combat) */
+        if (p1 > 0) g_ships[p1].hull = g_ships[p1].hull_max =
+                        g_ships[p1].hull_max * 2.4f;
+        if (p2 > 0) g_ships[p2].hull = g_ships[p2].hull_max =
+                        g_ships[p2].hull_max * 2.4f;
         pl->hull = pl->hull_max;                /* fresh paint */
-        MV_IDLE(20);
+        CAP("Two pirates inbound -- read the radar, close the gap");
+        pl->throttle = 0.25f;
+        MV_IDLE(75);                            /* establishing approach */
         CAP("Tap LB to lock the nearest threat");
         MV_TAP(lb, 2);                          /* lock */
+        MV_IDLE(35);                            /* hold on the lock box */
 
         /* Phase 2: the weapons showcase. The button-flip autopilot
          * fought the 1%-floor turn ramp (every direction change reset
@@ -2636,11 +2644,18 @@ int main(int argc, char **argv) {
         MV_TAP(down, 6); MV_TAP(a, 10);
         MV_IDLE(40);
         MV_TAP(menu, 14);
-        CAP("THE SHIPYARD: trade up to a bigger hull");
+        CAP("THE SHIPYARD: hulls for sale, each a different trade-off");
         GOROW(1); MV_TAP(a, 14);                /* SHIPYARD */
-        MV_IDLE(55);
-        MV_TAP(b, 10);                          /* a spec sheet */
-        MV_IDLE(55);
+        MV_IDLE(55);                            /* the offer list */
+        CAP("Browse the lot -- cargo, speed, slots and price all vary");
+        MV_TAP(down, 45);                       /* hull #2 */
+        MV_TAP(down, 45);                       /* hull #3 */
+        CAP("B opens a hull's full spec to compare against yours");
+        MV_TAP(b, 70);                          /* spec sheet, linger */
+        MV_TAP(b, 10);
+        MV_TAP(down, 45);                       /* hull #4 */
+        MV_TAP(down, 40);                       /* hull #5 */
+        MV_TAP(b, 65);                          /* another spec */
         MV_TAP(b, 10); MV_TAP(menu, 12);
         CAP("OUTFITTING: weapons, shields, armor and gadgets for sale");
         GOROW(2); MV_TAP(a, 14);                /* OUTFITTING */
@@ -2676,10 +2691,24 @@ int main(int argc, char **argv) {
 
         printf("[movie] station phase done, state=%d frame=%d\n",
                elite_game_state(), mf);
-        CAP("THE GALAXY CHART: pick your next jump");
-        /* Phase 8: dashboard -> GALAXY -> survey -> hyperjump. */
+        CAP("THE GALAXY CHART: every star is a place you can go");
+        /* Phase 8: dashboard -> GALAXY -> filter tour -> fuel/range
+         * explainer -> survey -> hyperjump. */
         MV_TAP(menu, 12);
         MV_TAP(a, 12);                          /* GALAXY CHART */
+        MV_IDLE(55);
+        CAP("The ring is your JUMP RANGE -- fuel and drive set how far");
+        MV_IDLE(75);
+        CAP("RB cycles DATA LAYERS. Star type colours each sun");
+        MV_TAP(rb, 70);                         /* layer: threat */
+        CAP("THREAT layer: green is safe, red is pirate country");
+        MV_TAP(rb, 70);                         /* layer: faction */
+        CAP("FACTION layer: who controls each system");
+        MV_TAP(rb, 70);                         /* layer: stations */
+        CAP("STATIONS layer: economies -- the trade map");
+        MV_TAP(rb, 70);                         /* back to spectral */
+        MV_IDLE(20);
+        CAP("Pick a star in range -- out of range reads OUT, refuel first");
         {
             /* aim the snap at the nearest in-range neighbour */
             const SystemInfo *si = system_info();
@@ -2709,12 +2738,15 @@ int main(int argc, char **argv) {
             }
             MV(b); MV_IDLE(20);
         }
-        MV_TAP(a, 70);                          /* survey sheet, linger */
+        CAP("A in range opens the SURVEY: economy, threat, stations");
+        MV_TAP(a, 85);                          /* survey sheet, linger */
+        CAP("Confirm to jump -- each hop burns fuel from the tank");
+        MV_IDLE(30);
         MV_TAP(a, 6);                           /* commit the jump */
 
         printf("[movie] jump committed, state=%d frame=%d\n",
                elite_game_state(), mf);
-        CAP("HYPERSPACE: jump to the next system");
+        CAP("HYPERSPACE: the drive lights and the stars streak past");
         /* Phase 9: recede + tunnel + arrival. */
         for (int f = 0; f < 30 * 8 && elite_game_state() != 0; f++)
             MV(none);
