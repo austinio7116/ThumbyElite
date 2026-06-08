@@ -180,6 +180,9 @@ void elite_game_police_stand_down(void) {
 int elite_game_debug_rock_target(void) { return s_rock_target; }
 int elite_game_debug_ai_state(int idx) { return g_ships[idx].ai_state; }
 int elite_game_debug_distress_civ(void) { return s_distress_civ; }
+void elite_game_debug_set_distress_civ(int idx) {
+    s_distress_civ = idx; s_distress_paid = false;
+}
 
 /* Debug: jump the anchor straight to POI n (harness only). */
 void elite_game_debug_goto_poi(int n) {

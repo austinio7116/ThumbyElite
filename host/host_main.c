@@ -2456,6 +2456,113 @@ int main(int argc, char **argv) {
         pl->throttle = 0.2f;
         MV_IDLE(30);
 
+        /* Phase 3b: MINING loop — crack a rock, scoop the ore. */
+        CAP("MINING: switch to a mining laser and crack asteroids");
+        {
+            extern void rocks_spawn_field(uint32_t, int);
+            extern int rocks_positions(Vec3 *, int);
+            /* fit a mining laser to mount 0 for the demo, select it */
+            g_player.mounts[0] = (WeaponInst){ .type = WPN_MINING,
+                .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
+            g_player.ammo[0] = -1;
+            player_apply_to_ship();
+            pl->active_w = 0;
+            /* a small belt just ahead */
+            extern int loot_positions(Vec3 *, int *, int);
+            rocks_spawn_field(0xB17B17u, 6);
+            MV_IDLE(20);
+            CAP("Line up a rock and hold fire to chip it open");
+            for (int f = 0; f < 30 * 9; f++) {
+                Vec3 rk[8]; int nr = rocks_positions(rk, 8);
+                if (nr == 0) break;
+                int bi = 0; float bd = 1e30f;
+                for (int i = 0; i < nr; i++) {
+                    float d = v3_len(v3_sub(rk[i], pl->pos));
+                    if (d < bd) { bd = d; bi = i; }
+                }
+                MV_STEER(rk[bi], 0.06f);
+                pl->throttle = (bd > 140.0f) ? 0.7f
+                             : (bd > 70.0f) ? 0.3f : 0.0f;
+                /* fire when roughly lined up and in range */
+                Vec3 l = m3_mul_v3_t(&pl->basis, v3_sub(rk[bi], pl->pos));
+                CraftRawButtons b = none;
+                if (bd < 150.0f && l.z > 0 &&
+                    l.x*l.x + l.y*l.y < bd*bd*0.02f) {
+                    pl->fire_cool = 0; b.a = true;
+                }
+                MV(b);
+            }
+            CAP("Ore spills out -- scoop it like any salvage");
+            pl->throttle = 0.0f;
+            for (int c2 = 0; c2 < 8; c2++) {
+                Vec3 cans[6]; int comp[6];
+                int n = loot_positions(cans, comp, 6);
+                if (n == 0) { MV_IDLE(10); continue; }
+                int bi = 0; float bd = 1e30f;
+                for (int i = 0; i < n; i++) {
+                    float d = v3_len(v3_sub(cans[i], pl->pos));
+                    if (d < bd) { bd = d; bi = i; }
+                }
+                MV_STEER(cans[bi], 0.07f);
+                pl->throttle = (bd > 90.0f) ? 0.6f : 0.25f;
+                MV(none);
+            }
+            MV_IDLE(20);
+            /* restore the combat loadout for the rest of the guide */
+            g_player.mounts[0] = (WeaponInst){ .type = WPN_PULSE_S,
+                .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
+            player_apply_to_ship();
+            pl->active_w = 0;
+        }
+        pl->throttle = 0.2f;
+        MV_IDLE(20);
+
+        /* Phase 3c: DISTRESS CALL rescue. */
+        CAP("DISTRESS CALL: a trader is under attack");
+        {
+            extern const Mesh *hull_mesh(uint32_t, int);
+            extern void elite_game_debug_set_distress_civ(int);
+            Vec3 fwd = pl->basis.r[2], rgt = pl->basis.r[0];
+            Vec3 cpos = v3_add(pl->pos, v3_scale(fwd, 360.0f));
+            int civ = ship_spawn(hull_mesh(0xC1771Eu, 7), cpos,
+                                 TEAM_NEUTRAL);
+            int pa = -1, pb = -1;
+            if (civ > 0) {
+                ship_set_tier(civ, 1, 7);
+                g_ships[civ].is_civilian = 1;
+                g_ships[civ].team = TEAM_NEUTRAL;
+                g_ships[civ].hull = g_ships[civ].hull_max * 0.55f;
+                g_ships[civ].shield = 0;
+                elite_game_debug_set_distress_civ(civ);
+                pa = ship_spawn(hull_mesh(0x9A9Au, 2),
+                                v3_add(cpos, v3_scale(rgt, 60.0f)),
+                                TEAM_HOSTILE);
+                pb = ship_spawn(hull_mesh(0x7B7Bu, 2),
+                                v3_add(cpos, v3_scale(rgt, -55.0f)),
+                                TEAM_HOSTILE);
+                if (pa > 0) { ship_set_tier(pa, 1, 2);
+                              g_ships[pa].ai_target = (uint8_t)civ; }
+                if (pb > 0) { ship_set_tier(pb, 1, 2);
+                              g_ships[pb].ai_target = (uint8_t)civ; }
+            }
+            pl->hull = pl->hull_max; pl->shield = pl->shield_max;
+            MV_IDLE(25);
+            CAP("Kill the pirates before they finish the trader");
+            MV_TAP(lb, 3);                        /* lock an attacker */
+            for (int f = 0; f < 30 * 11; f++) {
+                int tgt = (pa > 0 && g_ships[pa].alive) ? pa
+                        : (pb > 0 && g_ships[pb].alive) ? pb : -1;
+                if (tgt < 0) break;
+                MV_AIM(tgt, 0.0f, 3.0f, 0.012f, 1);
+                pl->shield = pl->shield_max;
+                if (f == 90) MV_TAP(lb, 3);       /* retarget */
+            }
+            CAP("Trader saved -- rescues pay credits and reputation");
+            MV_IDLE(70);
+        }
+        pl->throttle = 0.2f;
+        MV_IDLE(15);
+
         CAP("MENU opens the dashboard -- the galaxy never pauses");
         /* Phase 4: dashboard TOUR -> SYSTEM map -> supercruise. The
          * dash panels are live MFDs: 0 GALAXY, 1 SYSTEM, 2 STATUS. */
@@ -2535,14 +2642,21 @@ int main(int argc, char **argv) {
         MV_TAP(b, 10);                          /* a spec sheet */
         MV_IDLE(55);
         MV_TAP(b, 10); MV_TAP(menu, 12);
-        CAP("OUTFITTING: fit weapons, shields and gadgets");
+        CAP("OUTFITTING: weapons, shields, armor and gadgets for sale");
         GOROW(2); MV_TAP(a, 14);                /* OUTFITTING */
-        MV_IDLE(45);
-        MV_TAP(lb, 50);                         /* the A action menu */
-        MV_TAP(b, 10);
-        for (int k = 0; k < 6; k++) MV_TAP(rb, 16);   /* into the shop */
-        MV_IDLE(45);
-        MV_TAP(a, 24);                          /* BUY IT */
+        MV_IDLE(55);                            /* read your fitted gear */
+        CAP("Open any item for its full spec sheet");
+        MV_TAP(lb, 55);                         /* detail on a row */
+        CAP("Stock varies: quality, wear and affixes roll per item");
+        MV_TAP(rb, 60);                         /* browse for-sale #1 */
+        MV_TAP(rb, 60);                         /* #2 */
+        CAP("One PULSE may out-punch another -- read before you buy");
+        MV_TAP(rb, 60);                         /* #3 */
+        MV_TAP(rb, 60);                         /* #4 */
+        MV_TAP(rb, 55);                         /* #5 */
+        CAP("Found an upgrade? A buys and fits it");
+        MV_TAP(a, 28);                          /* BUY + FIT */
+        MV_IDLE(25);
         MV_TAP(b, 10); MV_TAP(menu, 12);
         CAP("MISSIONS: contracts for credits and reputation");
         GOROW(3); MV_TAP(a, 14);                /* MISSIONS */
@@ -2648,8 +2762,15 @@ int main(int argc, char **argv) {
                                 g_ships[0].alive = false; }
         MV(none);                                /* death path -> report */
         MV_IDLE(15);                             /* the explosion */
-        CAP("Even the best fall. Insurance brings you back");
-        for (int f = 0; f < 150; f++) MV(none);  /* dwell on the report */
+        CAP("The KILL REPORT names who got you -- study it, hunt smarter");
+        for (int f = 0; f < 130; f++) MV(none);  /* read the report */
+        CAP("Press A to claim INSURANCE");
+        MV_TAP(a, 6);
+        for (int f = 0; f < 40; f++) MV(none);
+        CAP("It rebuilds your ship at your last dock -- but the cargo");
+        for (int f = 0; f < 70; f++) MV(none);
+        CAP("and credits you earned since are gone. Dock often to bank");
+        for (int f = 0; f < 90; f++) MV(none);
         if (gwav) fclose(gwav);
         printf("[movie] %d frames (player alive=%d)\n", mf,
                g_ships[0].alive);
