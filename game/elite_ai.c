@@ -277,40 +277,41 @@ static void ai_ship(int idx, float dt) {
      * we're about to fly through the target and still pointed at it,
      * force the tight corner-speed peel NOW — catches both the firing
      * pass and the sweep, before contact. */
+    float avoid_slow = 0.0f;     /* CPA urgency -> slow to turn tighter */
     {
         float radii = (s->mesh ? s->mesh->bound_r : 4.0f) +
                       (t->mesh ? t->mesh->bound_r : 4.0f);
         /* CPA (closest-point-of-approach) avoidance: predict where the
          * two will be nearest; if that miss is inside the danger radius
-         * and coming SOON, steer aside EARLY (while there's time to
-         * turn) — widening the miss. Only fires on a real collision
-         * course, so normal firing approaches are untouched. This is
-         * the proper anti-ram (user: avoid the crash, not paper it). */
-        Vec3 rel = dir;                          /* unit toward target */
-        Vec3 rv = v3_sub(s->vel, t->vel);        /* our closing vel */
+         * and coming soon, steer aside EARLY and SLOW DOWN. The target
+         * MANEUVRES (the player doesn't fly straight), so the constant-
+         * velocity CPA is only approximate — a WIDE berth absorbs the
+         * error, and slowing lets the per-frame re-prediction correct
+         * (user). Only fires on a real collision course. */
+        Vec3 rel = dir;
+        Vec3 rv = v3_sub(s->vel, t->vel);
         float rv2 = v3_dot(rv, rv);
         if (rv2 > 1.0f) {
             Vec3 relv = v3_sub(t->pos, s->pos);
-            float tcpa = v3_dot(relv, rv) / rv2; /* >0 approaching */
-            if (tcpa > 0.0f && tcpa < 3.0f) {
+            float tcpa = v3_dot(relv, rv) / rv2;
+            if (tcpa > 0.0f && tcpa < 4.0f) {
                 Vec3 cpa = v3_sub(relv, v3_scale(rv, tcpa));
                 float miss = v3_len(cpa);
-                float danger = radii + 32.0f;
+                float danger = radii + 70.0f;        /* WIDE berth */
                 if (miss < danger) {
-                    /* steer AWAY from where the target will be at
-                     * closest approach (-cpa widens the miss) */
                     Vec3 away = (miss > 1e-3f)
                                     ? v3_scale(cpa, -1.0f / miss)
                                     : s->basis.r[0];
                     float urg = (1.0f - miss / danger) *
-                                (1.0f - tcpa / 3.0f);
+                                (1.0f - tcpa / 4.0f);
                     dir = v3_norm(v3_add(rel,
-                                         v3_scale(away, 3.0f * urg)));
+                                         v3_scale(away, 4.0f * urg)));
+                    avoid_slow = urg;                /* slow to turn tight */
                 }
             }
         }
         /* last-ditch hard peel if something still gets very close */
-        if (s->ai_state != AI_BREAK && dist < radii + 24.0f &&
+        if (s->ai_state != AI_BREAK && dist < radii + 30.0f &&
             v3_dot(s->vel, dir) > 0.0f) {
             s->ai_state = AI_BREAK;
             s->ai_timer = 3.0f;
@@ -339,6 +340,12 @@ static void ai_ship(int idx, float dt) {
             float fl = vt / (s->max_speed > 1.0f ? s->max_speed : 1.0f);
             if (fl > 1.0f) fl = 1.0f;
             if (s->throttle < fl) s->throttle = fl;
+        }
+        /* avoiding a collision: slow hard (corner speed) for the
+         * tightest turn and lowest closing speed */
+        if (avoid_slow > 0.0f) {
+            float cap = 1.0f - 0.75f * avoid_slow;
+            if (s->throttle > cap) s->throttle = cap;
         }
         /* Break off before ramming. Worse pilots break FARTHER (they
          * turn slowly and need room); aces break late and daring. All
@@ -429,6 +436,8 @@ static void ai_ship(int idx, float dt) {
          * faster/tighter; exit when re-acquired or on timeout. */
         turn_toward(s, dir, dt);
         s->throttle = 0.45f;   /* corner speed = tight sweep radius */
+        if (avoid_slow > 0.0f)
+            s->throttle *= (1.0f - 0.6f * avoid_slow);
         s->ai_timer -= dt;
         if (v3_dot(s->basis.r[2], dir) > 0.55f || s->ai_timer <= 0.0f ||
             dist > 700.0f)
