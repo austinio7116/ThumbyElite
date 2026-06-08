@@ -239,7 +239,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_DODGETEST") ||
         getenv("ELITE_BENDTEST") ||
         getenv("ELITE_SPEEDKILL") ||
-        getenv("ELITE_DOGKILL") ||
+        getenv("ELITE_BENCH") ||
         getenv("ELITE_KILLSCREEN") ||
         getenv("ELITE_FURBALL") ||
         getenv("ELITE_CIVMOVE") ||
@@ -1058,19 +1058,25 @@ int main(int argc, char **argv) {
      * tier vs a player flying STRAIGHT at 66%% throttle, standard
      * SKIFF shield, no evasion. Cell = seconds to kill, AMMO = ran
      * dry, ->60s = survived the window. */
-    if (getenv("ELITE_DOGKILL")) {
-        /* REALISTIC close dogfight: the player orbits the enemy at ~90m
-         * (a sustained turning fight, where spread barely helps), so we
-         * measure how fast each tier ACTUALLY kills you up close --
-         * unlike SPEEDKILL's straight-line fly-past. */
+    if (getenv("ELITE_BENCH")) {
+        /* REALISTIC engagement matrix: the player ACTIVELY fights --
+         * pursues the enemy (steers at it, holds combat range) but
+         * jinks imperfectly (~45% of the time), like a competent human.
+         * The enemy is immortal and unarmed-player, so we measure how
+         * fast each tier/weapon kills a real maneuvering target -- not
+         * SPEEDKILL's fly-straight-away nor a forced point-blank orbit
+         * that trips the anti-ram break-off. */
         extern const Mesh *hull_mesh(uint32_t, int);
-        int guns[4] = { WPN_PULSE_M, WPN_AUTOCANNON, WPN_PLASMA, WPN_GAUSS };
-        printf("[dog] %-9s  T0     T1     T2     T3     T4\n", "WEAPON");
-        for (int gi = 0; gi < 4; gi++) {
-            int wt = guns[gi];
-            printf("[dog] %-9s", k_weapons[wt].name);
+        int NT = atoi(getenv("ELITE_BENCH")); if (NT < 1) NT = 6;
+        uint32_t br = 0x1234567u;
+        #define BR() (br ^= br<<13, br ^= br>>17, br ^= br<<5, br)
+        #define BRF(a,b) ((a) + ((b)-(a)) * ((BR() & 0xFFFF) / 65535.0f))
+        printf("[bench] %-9s  T0     T1     T2     T3     T4\n", "WEAPON");
+        for (int wt = 0; wt < WPN_COUNT; wt++) {
+            if (wt == WPN_MINE || wt == WPN_TRACTOR) continue;
+            printf("[bench] %-9s", k_weapons[wt].name);
             for (int tier = 0; tier <= 4; tier++) {
-                int NT = 4; float tsum = 0; int tn = 0, surv = 0;
+                float tsum = 0; int tn = 0, surv = 0;
                 for (int trial = 0; trial < NT; trial++) {
                     g_player.hull_id = 0; g_player.hull_seed = 0x5EEDu;
                     memset(g_player.mounts, 0, sizeof g_player.mounts);
@@ -1081,10 +1087,12 @@ int main(int argc, char **argv) {
                     player_apply_to_ship();
                     Ship *pl = &g_ships[0];
                     pl->hull = pl->hull_max; pl->shield = pl->shield_max;
-                    pl->pos = v3(90, 0, 0);
-                    int e = ship_spawn(hull_mesh(0xACE1u + trial,
-                                                 1 + tier),
-                                       v3(0, 0, 0), TEAM_HOSTILE);
+                    pl->pos = v3(0, 0, -180); pl->basis = m3_identity();
+                    pl->vel = v3_scale(pl->basis.r[2], pl->max_speed*0.5f);
+                    float ea = BRF(0, 6.2831f);
+                    int e = ship_spawn(hull_mesh(0xACE1u + trial, 1+tier),
+                                       v3(cosf(ea)*70.0f, BRF(-30,30),
+                                          0.0f), TEAM_HOSTILE);
                     if (e <= 0) { printf(" spawn!"); continue; }
                     ship_set_tier(e, tier, 1 + tier);
                     Ship *t2 = &g_ships[e];
@@ -1092,38 +1100,55 @@ int main(int argc, char **argv) {
                     t2->active_w = 0; t2->turret_type = 0;
                     t2->ammo[0] = k_weapons[wt].ammo_max
                                       ? k_weapons[wt].ammo_max : -1;
-                    t2->hull = t2->hull_max = 1e9f;   /* enemy immortal */
+                    t2->hull = t2->hull_max = 1e9f;   /* immortal enemy */
+                    t2->ai_target = 0;
+                    float jink_t = 0; int dodging = 0; float jdir = 1;
                     float tkill = -1; CraftRawButtons none = {0};
-                    float th = (float)trial * 1.3f;
                     for (int f = 0; f < 30 * 45; f++) {
-                        /* CLOSE slow scrap (~55m): a gentle weave at low
-                         * speed -- an EASY target, like a player lining
-                         * up shots in a knife fight (the lethal case) */
-                        th += 0.9f / 30.0f * 0.7f;
-                        Ship *en = &g_ships[e];
-                        Vec3 c = en->pos;
-                        pl->pos = v3_add(c, v3(55.0f * cosf(th), 0,
-                                               55.0f * sinf(th)));
-                        Vec3 tang = v3_norm(v3(-sinf(th), 0, cosf(th)));
-                        pl->vel = v3_scale(tang, pl->max_speed * 0.22f);
-                        /* face roughly along travel (a moving target) */
-                        pl->basis.r[2] = tang;
-                        pl->basis.r[0] = v3(tang.z, 0, -tang.x);
-                        pl->basis.r[1] = v3(0, 1, 0);
-                        elite_game_tick(&none, 1.0f / 30.0f);
+                        Vec3 ep = g_ships[e].pos;
+                        Vec3 aim = ep;
+                        jink_t -= 1.0f/30.0f;
+                        if (jink_t <= 0) {
+                            jink_t = BRF(0.7f, 1.7f);
+                            dodging = ((BR() % 100u) < 30u);  /* imperfect */
+                            jdir = (BR() & 1) ? 1.0f : -1.0f;
+                        }
+                        if (dodging)
+                            aim = v3_add(ep, v3_scale(pl->basis.r[0],
+                                                      jdir * 220.0f));
+                        /* steer toward aim at the PLAYER's turn rate */
+                        Vec3 want = v3_norm(v3_sub(aim, pl->pos));
+                        Vec3 ax = v3_cross(pl->basis.r[2], want);
+                        float sa = v3_len(ax);
+                        if (sa > 1e-4f) {
+                            float a = asinf(sa > 1 ? 1 : sa);
+                            float st = pl->turn_rate * 0.92f * (1.0f/30.0f);
+                            if (st > a) st = a;
+                            m3_rotate_world(&pl->basis,
+                                            v3_scale(ax, 1.0f/sa), st);
+                            m3_orthonormalize(&pl->basis);
+                        }
+                        float d = v3_len(v3_sub(ep, pl->pos));
+                        /* close-quarters dogfight band (~70-130m), where
+                         * fights actually happen and aim matters */
+                        pl->throttle = (d > 150.0f) ? 0.9f
+                                     : (d > 75.0f) ? 0.42f : 0.62f;
+                        elite_game_tick(&none, 1.0f/30.0f);
                         if (!pl->alive || pl->hull <= 0) {
-                            tkill = (float)f / 30.0f; break;
+                            tkill = (float)f/30.0f; break;
                         }
                     }
                     if (tkill >= 0) { tsum += tkill; tn++; } else surv++;
                     g_ships[e].alive = false; g_ships[0].alive = true;
                     proj_clear_all();
                 }
-                if (tn > NT / 2) printf(" %5.1f", tsum / tn);
+                if (tn > NT/2) printf(" %5.1f", tsum/tn);
                 else printf("  >45s");
             }
             printf("\n");
         }
+        #undef BR
+        #undef BRF
         return 0;
     }
 

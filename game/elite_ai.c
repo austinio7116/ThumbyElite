@@ -34,22 +34,23 @@ static const float k_fight_speed[5] = { 0.55f, 0.70f, 0.85f,
  * compensated its gauss payload; the kill matrix showed it inverting
  * the ladder once geometry was fixed — k_npc_dmg carries balance now). */
 static const float k_refire[5] = { 0.90f, 0.75f, 0.60f, 0.50f, 0.42f };
-/* Accuracy by rank (wider = worse). Eased across ALL tiers after the
- * player's hours-in skill outpaced them (user): ~30% wider than the
- * old {.050,.044,.034,.027,.021}. Gradient preserved. */
-static const float k_spread[5] = { 0.066f, 0.058f, 0.045f, 0.036f, 0.028f };
+/* Accuracy by rank (wider cone = worse aim). Low tiers are now GENUINELY
+ * bad shots -- a tier-0 cone of ~0.20 rad throws rounds ~11m wide at
+ * 55m, so a harmless pilot sprays and misses even up close (user:
+ * weaker pilots waste more shots). Steep gradient up to a razor ace. */
+/* Accuracy by rank (wider cone = worse aim). Low tiers are now GENUINELY
+ * bad shots so a harmless pilot sprays and wastes rounds even up close
+ * (user: weaker pilots should miss more, not fire less); aces kept near
+ * the old razor values. Steep gradient. */
+static const float k_spread[5] = { 0.200f, 0.130f, 0.072f, 0.038f, 0.022f };
 
 /* The tier accuracy table, shared with the turret gunner. */
-/* NPC TRIGGER DISCIPLINE (user: a single harmless pilot is too lethal
- * up close). Spread can't help at knife range -- a tier-0 cone of
- * 0.066 rad is only ~4m of miss at 55m, smaller than a ship -- so the
- * only lever for close-range lethality is FIRE RATE. Each tier fires
- * no faster than this floor (seconds), so harmless pilots squeeze off
- * slow bursts while aces stay near their weapon's full cadence. */
-static const float k_fire_min[5] = { 1.70f, 1.05f, 0.60f, 0.32f, 0.12f };
+/* NPCs fire at the weapon's full cadence (user: weaker pilots should
+ * WASTE shots, not fire less). All the rank difference lives in AIM
+ * -- see k_spread below. */
 static float npc_fire_gap(int tier, float cooldown) {
-    float g = cooldown * 1.15f;
-    return g < k_fire_min[tier] ? k_fire_min[tier] : g;
+    (void)tier;
+    return cooldown;
 }
 
 float ai_tier_spread(int tier) {
