@@ -243,6 +243,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_FURBALL") ||
         getenv("ELITE_CIVMOVE") ||
         getenv("ELITE_LANCESHOT") ||
+        getenv("ELITE_ENGTEST") ||
         getenv("ELITE_SFXTEST") ||
         getenv("ELITE_SETSHOT") ||
         getenv("ELITE_FLAKTEST") ||
@@ -972,6 +973,17 @@ int main(int argc, char **argv) {
     }
 
     /* Verify a weapon's sfx produces audio (non-silent render). */
+    if (getenv("ELITE_ENGTEST")) {
+        extern void audio_engine_set(float, float);
+        audio_engine_set(0.7f, 0.7f);
+        int16_t buf[512]; int peak=0; long sumsq=0; int nn=0;
+        for (int b=0;b<40;b++){ audio_render(buf,512);
+          for(int i=0;i<512;i++){int a=buf[i]<0?-buf[i]:buf[i];
+            if(a>peak)peak=a; sumsq+=(long)buf[i]*buf[i]; nn++; } }
+        printf("[eng] peak=%d rms=%d (audible, not a pure tone)\n",
+               peak, (int)(sumsq/nn>0?__builtin_sqrtl((double)(sumsq/nn)):0));
+        return 0;
+    }
     if (getenv("ELITE_SFXTEST")) {
         const char *nm = getenv("ELITE_SFXTEST");
         int wt = WPN_PULSE_S;
@@ -2428,12 +2440,27 @@ int main(int argc, char **argv) {
         MV_IDLE(30);
 
         CAP("MENU opens the dashboard -- the galaxy never pauses");
-        /* Phase 4: dashboard -> SYSTEM region -> supercruise. */
+        /* Phase 4: dashboard TOUR -> SYSTEM map -> supercruise. The
+         * dash panels are live MFDs: 0 GALAXY, 1 SYSTEM, 2 STATUS. */
         MV_TAP(menu, 12);                       /* dash rises (in shot) */
-        MV_TAP(right, 3);
-        MV_TAP(a, 10);
-        /* Seed 42: the station is POI #5 in TEASO's list. */
-        for (int k = 0; k < 5; k++) MV_TAP(down, 3);
+        MV_IDLE(70);                            /* watch it slide up */
+        pl->throttle = 0.18f;
+        CAP("GALAXY panel: your place in the star map");
+        for (int _u = 0; _u < 3; _u++) MV_TAP(left, 1);
+        for (int _u = 0; _u < 3; _u++) MV_TAP(up, 1);   /* sel 0 */
+        MV_IDLE(80);
+        CAP("SYSTEM panel: planets, belts and stations, live");
+        MV_TAP(right, 4);                       /* sel 1 */
+        MV_IDLE(85);
+        CAP("STATUS panel: hull, fuel and cargo at a glance");
+        MV_TAP(left, 3); MV_TAP(down, 4);       /* sel 2 */
+        MV_IDLE(85);
+        CAP("Pick a destination on the SYSTEM map and cruise to it");
+        MV_TAP(up, 3); MV_TAP(right, 3);        /* back to SYSTEM (1) */
+        MV_TAP(a, 12);                          /* open system map */
+        MV_IDLE(40);
+        for (int k = 0; k < 5; k++) MV_TAP(down, 3);  /* POI #5 station */
+        MV_IDLE(40);
         MV_TAP(a, 10);                          /* engage */
 
         CAP("SUPERCRUISE: cross the system in seconds");
