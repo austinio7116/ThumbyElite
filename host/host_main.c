@@ -2272,12 +2272,17 @@ int main(int argc, char **argv) {
         #define MV_TAP(field, settle) do { \
             CraftRawButtons _t = none; _t.field = true; MV(_t); \
             MV_IDLE(settle); } while (0)
+        /* Caption marker: the compositor renders these in a bar BELOW
+         * the game frame (never obscuring the gameplay). */
+        #define CAP(txt) printf("[cap] %d %s\n", mf, txt)
 
+        CAP("THUMBY ELITE  --  an infinite galaxy in your pocket");
         /* Phase 0: the title drifts, then NEW GAME. */
         MV_IDLE(140);
         MV_TAP(down, 4);
         MV_TAP(a, 8);
 
+        CAP("Every commander starts with a ship, 1000cr, and the void");
         /* Phase 1: a proper hero ship — MAULER with PULSE-M, GAUSS and
          * HOMING, war chest for the shopping act. */
         Ship *pl = &g_ships[0];
@@ -2309,6 +2314,7 @@ int main(int argc, char **argv) {
         if (p2 > 0) ship_set_tier(p2, 0, 1);
         pl->hull = pl->hull_max;                /* fresh paint */
         MV_IDLE(20);
+        CAP("Tap LB to lock the nearest threat");
         MV_TAP(lb, 2);                          /* lock */
 
         /* Phase 2: the weapons showcase. The button-flip autopilot
@@ -2345,6 +2351,7 @@ int main(int argc, char **argv) {
             MV(_b); \
         } while (0)
 
+        CAP("HOMING missiles: fire and forget -- they chase the lock");
         /* 2a: open with a homing volley — lock, loose two, watch. */
         pl->active_w = 2;                        /* HOMING */
         for (int f = 0; f < 120 && p1 > 0 && g_ships[p1].alive; f++) {
@@ -2353,6 +2360,7 @@ int main(int argc, char **argv) {
             MV_AIM(p1, 190.0f, 6.0f, 0.05f, fire);
         }
         MV_IDLE(45);                             /* missiles fly */
+        CAP("B cycles weapons. Pulse lasers: no ammo, just heat");
         /* 2b: switch to the medium laser, press the attack. */
         MV_TAP(b, 2);                            /* HOMING -> PULSE-M */
         pl->shield = pl->shield_max;             /* continuity polish */
@@ -2375,6 +2383,7 @@ int main(int argc, char **argv) {
                p1 > 0 ? g_ships[p1].alive : -1,
                p1 > 0 ? g_ships[p1].hull : 0,
                p1 > 0 ? g_ships[p1].shield : 0, pl->heat, mf);
+        CAP("GAUSS: a charged rail slug -- devastating, ammo-limited");
         /* 2c: the gauss finish on raider two — helix + kill. */
         MV_TAP(lb, 2);                           /* lock next */
         MV_TAP(b, 2);                            /* PULSE-M -> GAUSS */
@@ -2385,6 +2394,7 @@ int main(int argc, char **argv) {
         printf("[movie] p2 alive=%d frame=%d\n",
                p2 > 0 ? g_ships[p2].alive : -1, mf);
 
+        CAP("Wrecks drop loot -- lock it and fly through to scoop");
         /* Phase 3: salvage run — lock loot, fly to it, scoop. */
         extern int loot_positions(Vec3 *, int *, int);
         loot_on_kill(v3_add(pl->pos, v3_scale(pl->basis.r[2], 120.0f)),
@@ -2412,6 +2422,7 @@ int main(int argc, char **argv) {
         pl->throttle = 0.2f;
         MV_IDLE(30);
 
+        CAP("MENU opens the dashboard -- the galaxy never pauses");
         /* Phase 4: dashboard -> SYSTEM region -> supercruise. */
         MV_TAP(menu, 12);                       /* dash rises (in shot) */
         MV_TAP(right, 3);
@@ -2420,11 +2431,13 @@ int main(int argc, char **argv) {
         for (int k = 0; k < 5; k++) MV_TAP(down, 3);
         MV_TAP(a, 10);                          /* engage */
 
+        CAP("SUPERCRUISE: cross the system in seconds");
         /* Phase 5: the cruise — dust, swelling planet, auto-drop. */
         for (int f = 0; f < 30 * 30 && elite_game_state() == 1; f++)
             MV(none);
         MV_IDLE(40);
 
+        CAP("Approach the station");
         /* Phase 6: approach + dock. */
         for (int f = 0; f < 1400; f++) {
             float d3 = v3_len(pl->pos);         /* station at origin */
@@ -2436,6 +2449,7 @@ int main(int argc, char **argv) {
         pl->throttle = 0.05f;
         printf("[movie] dock attempt at %.0fm state=%d\n",
                v3_len(pl->pos), elite_game_state());
+        CAP("LB + RB together: request docking");
         for (int k = 0; k < 3; k++) {           /* hold the chord */
             CraftRawButtons b = none;
             b.lb = true; b.rb = true;
@@ -2450,29 +2464,56 @@ int main(int argc, char **argv) {
         }
         MV_IDLE(40);
 
-        /* Phase 7: station life — market, outfitting browse, mission. */
-        MV_TAP(a, 12);                          /* MARKET */
-        MV_TAP(a, 8); MV_TAP(a, 8);             /* buy 2 units */
-        MV_TAP(down, 4); MV_TAP(a, 8);          /* buy another good */
-        MV_TAP(menu, 10);
-        MV_TAP(down, 3); MV_TAP(down, 3);       /* OUTFITTING */
-        MV_TAP(a, 12);
-        MV_TAP(lb, 30);                         /* detail sheet, linger */
-        MV_TAP(rb, 24); MV_TAP(rb, 24);         /* fitted gear tour */
-        for (int k = 0; k < 6; k++) MV_TAP(rb, 12);   /* into the shop */
-        MV_IDLE(30);                            /* study the offer */
-        MV_TAP(a, 20);                          /* BUY IT */
-        MV_TAP(b, 8);                           /* back to list */
-        MV_TAP(menu, 8);
-        MV_TAP(down, 3); MV_TAP(a, 12);         /* MISSIONS */
-        MV_TAP(a, 14);                          /* accept the first */
-        MV_TAP(menu, 8);
-        for (int k = 0; k < 6; k++) MV_TAP(down, 2);
-        MV_TAP(a, 20);                          /* LAUNCH (idx 9 now) */
+        /* Phase 7: station life. DETERMINISTIC nav — GOHOME resets the
+         * HOME cursor to the top (UP clamps at 0), then DOWN to the
+         * exact row. HOME rows: 0 MARKET, 1 SHIPYARD, 2 OUTFITTING,
+         * 3 MISSIONS, 4 BAR, 5 STATUS, ... 9 LAUNCH. */
+        #define GOROW(row) do { \
+            for (int _u = 0; _u < 9; _u++) MV_TAP(up, 1); \
+            for (int _dn = 0; _dn < (row); _dn++) MV_TAP(down, 2); \
+        } while (0)
+        MV_IDLE(40);                            /* docked home menu */
+        CAP("THE MARKET: prices swing by economy -- buy low, sell high");
+        GOROW(0); MV_TAP(a, 12);                /* MARKET */
+        MV_IDLE(55);
+        MV_TAP(a, 10); MV_TAP(a, 10);           /* buy 2 units */
+        MV_TAP(down, 6); MV_TAP(a, 10);
         MV_IDLE(40);
+        MV_TAP(menu, 14);
+        CAP("THE SHIPYARD: trade up to a bigger hull");
+        GOROW(1); MV_TAP(a, 14);                /* SHIPYARD */
+        MV_IDLE(55);
+        MV_TAP(b, 10);                          /* a spec sheet */
+        MV_IDLE(55);
+        MV_TAP(b, 10); MV_TAP(menu, 12);
+        CAP("OUTFITTING: fit weapons, shields and gadgets");
+        GOROW(2); MV_TAP(a, 14);                /* OUTFITTING */
+        MV_IDLE(45);
+        MV_TAP(lb, 50);                         /* the A action menu */
+        MV_TAP(b, 10);
+        for (int k = 0; k < 6; k++) MV_TAP(rb, 16);   /* into the shop */
+        MV_IDLE(45);
+        MV_TAP(a, 24);                          /* BUY IT */
+        MV_TAP(b, 10); MV_TAP(menu, 12);
+        CAP("MISSIONS: contracts for credits and reputation");
+        GOROW(3); MV_TAP(a, 14);                /* MISSIONS */
+        MV_IDLE(60);                            /* read the board */
+        MV_TAP(a, 18);                          /* accept the first */
+        MV_IDLE(30); MV_TAP(menu, 10);
+        CAP("SHIP STATUS: every stat -- hold LB to admire the hull");
+        GOROW(5); MV_TAP(a, 14);                /* STATUS */
+        MV_IDLE(50);
+        MV_TAP(lb, 55);                         /* hide text: clean ship */
+        MV_TAP(lb, 18);                         /* show again */
+        MV_TAP(b, 10); MV_TAP(menu, 10);
+        CAP("REFUEL and SERVICE here -- then LAUNCH back into the black");
+        GOROW(9); MV_TAP(a, 22);                /* LAUNCH */
+        MV_IDLE(45);
+        #undef GOROW
 
         printf("[movie] station phase done, state=%d frame=%d\n",
                elite_game_state(), mf);
+        CAP("THE GALAXY CHART: pick your next jump");
         /* Phase 8: dashboard -> GALAXY -> survey -> hyperjump. */
         MV_TAP(menu, 12);
         MV_TAP(a, 12);                          /* GALAXY CHART */
@@ -2510,9 +2551,11 @@ int main(int argc, char **argv) {
 
         printf("[movie] jump committed, state=%d frame=%d\n",
                elite_game_state(), mf);
+        CAP("HYPERSPACE: jump to the next system");
         /* Phase 9: recede + tunnel + arrival. */
         for (int f = 0; f < 30 * 8 && elite_game_state() != 0; f++)
             MV(none);
+        CAP("Trade. Fight. Explore.  --  THUMBY ELITE");
         /* Phase 10: a parting cruise with a slow roll. */
         pl->throttle = 0.5f;
         for (int f = 0; f < 110; f++) {
