@@ -2692,11 +2692,24 @@ int main(int argc, char **argv) {
         printf("[movie] station phase done, state=%d frame=%d\n",
                elite_game_state(), mf);
         CAP("THE GALAXY CHART: every star is a place you can go");
-        /* Phase 8: dashboard -> GALAXY -> filter tour -> fuel/range
-         * explainer -> survey -> hyperjump. */
+        /* Phase 8: dashboard -> GALAXY -> pan -> filter tour -> fuel/
+         * range explainer -> survey -> hyperjump. */
         MV_TAP(menu, 12);
         MV_TAP(a, 12);                          /* GALAXY CHART */
-        MV_IDLE(55);
+        MV_IDLE(45);
+        CAP("Pan the chart -- thousands of real stars to explore");
+        /* wander the field to show the depth of the map */
+        MV_TAP(right, 16); MV_TAP(right, 16); MV_TAP(up, 16);
+        MV_TAP(up, 16); MV_TAP(left, 16); MV_TAP(down, 16);
+        MV_TAP(right, 16); MV_TAP(up, 16); MV_TAP(left, 16);
+        MV_IDLE(22);
+        /* recenter on home so the jump target is in range: close to the
+         * dash and reopen the chart (map_galaxy_open re-snaps to home) */
+        MV_TAP(b, 8);
+        for (int _u = 0; _u < 3; _u++) MV_TAP(left, 1);
+        for (int _u = 0; _u < 3; _u++) MV_TAP(up, 1);   /* dash sel 0 */
+        MV_TAP(a, 12);                           /* reopen, recentered */
+        MV_IDLE(20);
         CAP("The ring is your JUMP RANGE -- fuel and drive set how far");
         MV_IDLE(75);
         CAP("RB cycles DATA LAYERS. Star type colours each sun");
@@ -2761,16 +2774,14 @@ int main(int argc, char **argv) {
         for (int f = 0; f < 55; f++) MV(none);
 
         CAP("A bounty MARK -- a DEADLY ace. The hunt is on");
-        /* clear ambient pirates so the MARK is the one that gets us */
-        for (int i = 1; i < MAX_SHIPS; i++)
-            if (g_ships[i].alive && g_ships[i].team == TEAM_HOSTILE)
-                g_ships[i].alive = false;
         player_apply_to_ship();                  /* drop the plot armour */
-        pl->hull = 95.0f; pl->shield = 45.0f;    /* we will not survive */
+        pl->hull = pl->hull_max; pl->shield = pl->shield_max;
         extern const Mesh *hull_mesh(uint32_t, int);
+        Vec3 mfwd = pl->basis.r[2], mrgt = pl->basis.r[0];
         int mk = ship_spawn(hull_mesh(0xDEAD77u, 9),  /* BASILISK */
                             v3_add(pl->pos,
-                                   v3_scale(pl->basis.r[2], 230.0f)),
+                                   v3_add(v3_scale(mfwd, 320.0f),
+                                          v3_scale(mrgt, 50.0f))),
                             TEAM_HOSTILE);
         if (mk > 0) {
             ship_set_tier(mk, 4, 9);
@@ -2778,18 +2789,40 @@ int main(int argc, char **argv) {
             g_ships[mk].ai_target = 0;
             g_ships[mk].hull = g_ships[mk].hull_max = 9000.0f; /* survives */
         }
+        pl->throttle = 0.35f;
+        MV_IDLE(40);                             /* close the distance */
         MV_TAP(lb, 4);                           /* lock the mark */
-        CAP("Trade fire with a better pilot...");
-        /* fight ~11s so the mark scores hits (it becomes our killer in
-         * the report), keep the player on the edge */
-        for (int f = 0; f < 30 * 11 && g_ships[0].alive; f++) {
-            if (mk > 0 && g_ships[mk].alive)
-                MV_AIM(mk, 0.0f, 3.0f, 0.012f, 1);
-            else MV(none);
-            if (pl->hull > 40.0f) pl->hull = 40.0f;   /* stay near death */
-            if (pl->shield > 0.0f) pl->shield = 0.0f;
+        CAP("Trade fire with a better pilot -- the mark out-flies you");
+        /* A proper duel: keep the ARENA clear of everyone but the mark
+         * (so the mark is our killer), track SMOOTHLY (slow rate, no
+         * snapping), and hold a dogfight range instead of boring in. */
+        for (int f = 0; f < 30 * 15 && g_ships[0].alive; f++) {
+            for (int i = 1; i < MAX_SHIPS; i++)
+                if (i != mk && g_ships[i].alive &&
+                    g_ships[i].team == TEAM_HOSTILE)
+                    g_ships[i].alive = false;
+            CraftRawButtons b = none;
+            if (mk > 0 && g_ships[mk].alive) {
+                Ship *m = &g_ships[mk];
+                float d = v3_len(v3_sub(m->pos, pl->pos));
+                MV_STEER(m->pos, 0.045f);        /* smooth, not snappy */
+                pl->throttle = (d > 240.0f) ? 0.85f
+                             : (d > 130.0f) ? 0.5f : 0.22f;
+                Vec3 l = m3_mul_v3_t(&pl->basis, v3_sub(m->pos, pl->pos));
+                if (d < 420.0f && l.z > 0.0f &&
+                    l.x*l.x + l.y*l.y < d*d*0.018f) {
+                    pl->fire_cool = 0; b.a = true;
+                }
+            }
+            MV(b);
+            /* survive the SHOWCASE (top up hull each frame) so the duel
+             * actually plays out; the mark's hits still set it as our
+             * killer. Shields are left to flash under fire. */
+            pl->hull = pl->hull_max;
         }
-        /* the finishing blow — attributed to the mark (last to hit us) */
+        /* now the finishing blow — attributed to the mark (it has been
+         * hitting us throughout, so the report names it) */
+        CAP("...and the better pilot wins");
         if (g_ships[0].alive) { g_ships[0].hull = -1.0f;
                                 g_ships[0].alive = false; }
         MV(none);                                /* death path -> report */
