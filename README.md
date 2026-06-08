@@ -11,51 +11,84 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 
 ## Changelog
 
-### 1.23 (in development)
+### 1.23 (ThumbyOne v1.23)
 
-- **PLASMA cannon** (Z2, T6+, 2,400 cr): a rapid stream of energy
-  bolts — autocannon tempo with no ammo bill, paid in heat, balls need
-  leading
-- **PLASMA LANCE** (Z3, T11+, 6,400 cr): phases through shields
-  straight to hull — can crit a shielded target; the BULWARK-tank
-  killer, countered by thick armor
-- **FLAK reworked as a proximity shotgun** (airburst pellets:
-  devastating point-blank, wide at range); **BEAM buffed** (90/67
-  DPS); **NPC railguns telegraph** their 0.9s charge — hear the
-  tones, break (the instant 0.6s kills are gone)
-- **Kill report** — the death screen names your killer in full: rank,
-  hull class, every gun, shield/armor variants, speed/turn/chaff;
-  terrain deaths say so (A to claim insurance)
-- **Better attack runs** — fast tiers now break to RANGE (not time)
-  before wheeling in: proper boom-and-zoom passes; HARMLESS aim
-  tightened (less of a cliff below NOVICE); monotone AI skill tables;
-  ladder re-anchored
-- **PHOTON BLASTER** (Z2, T8+, 3,400 cr): slower plasma-style bolts
-  that bend gently toward your lock — forgiveness, not homing (chaff
-  ignores them)
-- **Missile rework** — HOMING slowed (172 m/s, gentler 1.0 rad/s
-  arcs). Pirates answer by rank: VETERAN+ chaffs first (1-2 charges),
-  turns and runs (the fastest hulls can outpace a long stern chase),
-  and slips the terminal lock (CAPABLE ~25% / ELITE ~50%); save on
-  LAUNCH as well as dock; measured-DPS weapon table in the guide
-- **Confidence is speed** — pilot tier sets fighting pace
-  (HARMLESS ~55% of envelope up to DEADLY at 100%): green pilots are
-  slow, trackable prey; aces duel at the edge. Distress call rate
-  halved
-- **Dogfight rework: the blue zone** — turn authority peaks at half
-  throttle for ALL ships; pirates fight at corner speed and answer a
-  tail by rank (run / jink / throttle-chop / scissors). Position is
-  earned and owned; jousting is over. Difficulty ladder re-anchored
-  (52/27/18/11/4s siege collapse)
-- **Collision physics** — ships, rocks and the station deflect and
-  damage on contact: shields block hull entirely, size sets the split,
-  autodock is exempt, rams chip ore, NPCs steer around boulders
-- **CLOAK** (T9+, 5,800 cr): RB+B, 8s invisible, one charge per
-  launch, heat climbs, firing breaks it
-- **MANIFEST SCANNER** (T7+, 2,200 cr): hold a lock on a civilian to
-  read its cargo before you commit to the crime
-- Mining laser rebalanced as a tool: weaker than a small laser but not
-  useless (ship DPS ~22 vs PULSE-S 56; rock yield unchanged)
+The combat update. The whole dogfighting AI was rebuilt, the weapon
+roster grew, and the audio was overhauled. **No save change — v3/v4
+saves load and migrate.**
+
+**Pirates fly and shoot like people now**
+
+- Each weapon fires at its own real rate (a stream weapon streams, a
+  cannon thumps), and the spread is applied to every shot — so a burst
+  sprays across the arc, some rounds hitting and some missing, instead
+  of a whole burst all hitting or all missing.
+- Skill lives in aim and flying, not a hidden damage number. A green
+  pilot sprays wide and flies slowly and predictably; an ace is
+  accurate and slippery. Pilots only dodge and weave some of the time
+  (rarely for greens, often for aces), so weaker enemies are actually
+  possible to hit with the d-pad and fights don't drag.
+- Attack runs: pirates fly toward you to line up a shot with their
+  forward guns, then break off cleanly before they reach you. They
+  slow down to turn tighter so the break clears — they no longer ram
+  you on the way in.
+- Collision avoidance: a pirate predicts when it would hit you and
+  steers wide early, slowing if needed. It gives a wide berth even
+  when you fly straight at it.
+- They pick the gun that suits the range, with some variety — snipers
+  hold a long gun at distance, brawlers switch to a short one up close.
+- Fast pilots fight fast and slow ones fight slow (turn rate peaks at
+  half throttle for everyone — the "blue zone"). When you get on a
+  pirate's tail it dances for a bit, then commits to a hard sweep
+  around to try to get back on top.
+
+**Weapons**
+
+- **PLASMA** (Z2, T6+): a rapid stream of energy bolts — autocannon
+  pace with no ammo, paid in heat. Lead your shots.
+- **PHOTON BLASTER** (Z2, T8+): slower bolts that bend gently toward
+  your lock. Forgiving aim, not a homing weapon — chaff ignores it.
+- **PLASMA LANCE** (Z3, T11+): a beam that passes straight through
+  shields and lands on hull, and can even score critical hits on a
+  fully-shielded target. The counter to shield-tank pirates; thick
+  armor is its counter.
+- **FLAK** reworked: it always bursts at a fixed 200 m, so the skill
+  is firing when the enemy is at that range. A well-timed burst hits
+  hard; a mistimed one misses. It is a supplement to a main gun, never
+  a pilot's only weapon.
+- **Pirates now field the full arsenal**, weighted by rank — you face
+  gauss snipers, ion shield-strippers, plasma, the occasional rare
+  lance, not just pulse lasers.
+- Mining laser is a tool, not a gun (about a third of a small laser's
+  damage to ships; rock yield unchanged). BEAM and AUTOCAN buffed.
+  Homing missiles slowed; pirates answer them by rank (chaff, run, or
+  slip the lock). NPC railguns telegraph their charge — hear the
+  tones and break.
+
+**Missile and gadget kit**
+
+- **CLOAK** (T9+): RB+B for 8 seconds invisible — one charge per
+  launch, heat climbs, firing breaks it.
+- **MANIFEST SCANNER** (T7+): hold a lock on a civilian to read its
+  cargo before you commit to robbing it.
+
+**Living galaxy and quality of life**
+
+- **Kill report** — the death screen names who killed you in full:
+  rank, hull, every gun, shields/armor, speed and chaff; terrain
+  deaths say so too. Press A to claim insurance.
+- **Collision kills count** — ram an enemy to death and you get the
+  kill, the loot, and the bounty.
+- **Civilian traffic actually flies** — miners work the rocks and
+  haulers cross the system, instead of sitting still.
+- Galaxy distances pulled in (more systems in range); supercruise is
+  faster (a big system crosses in about 20 seconds instead of 40);
+  closer planet orbits.
+- A test cheat: tap RB ten times on the title screen to start a new
+  game with 100,000 credits.
+- Audio overhaul — lasers (deeper, longer), plasma lance, photon
+  blaster and photon cannon all have richer, fuller sounds. Faster
+  hold to switch targeting mode (LB, 1.5 s).
 
 ### 1.22.1 (ThumbyOne v1.22.1)
 

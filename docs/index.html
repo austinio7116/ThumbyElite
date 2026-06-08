@@ -346,7 +346,7 @@ half the time</b>. Green pilots never see it coming.</p>
 </div>
 <div class="figrow">
   <figure class="wide" style="max-width:640px"><img src="img/weapon_icons.png" alt="All weapon icons">
-  <figcaption><b>The armoury at a glance</b> — all seventeen weapon
+  <figcaption><b>The armoury at a glance</b> — all eighteen weapon
   families as they appear on the HUD, in outfitting and on status rows,
   with their slot sizes.</figcaption></figure>
   <figure class="wide" style="max-width:640px"><img src="img/equip_icons.png" alt="Equipment and gadget icons">
@@ -371,18 +371,18 @@ larger. Base stats:</p>
 <tr><td class="tag" style="color:#ffd28c">AUTOCAN</td><td>Z1</td><td>5</td><td>64</td><td>17</td><td>750 m/s</td><td>900 m</td><td>200 rds</td><td class="y">900</td></tr>
 <tr><td class="tag" style="color:#ffaa5a">MISSILE</td><td>Z1</td><td>45 + 22&nbsp;m blast</td><td>50</td><td>2.5</td><td>220 m/s</td><td>2,000 m</td><td>8 rds</td><td class="y">1,200</td></tr>
 <tr><td class="tag" style="color:#ff78c8">HOMING</td><td>Z2</td><td>32 + 18&nbsp;m blast</td><td>27</td><td>1.8</td><td>190 m/s, seeks</td><td>2,600 m</td><td>10 rds</td><td class="y">2,800</td></tr>
-<tr><td class="tag" style="color:#ffbe6e">FLAK</td><td>Z2</td><td>5 × 5 pellets, airburst</td><td>~49 mid-range; devastating point-blank</td><td>7.7</td><td>420 m/s cone</td><td>400 m</td><td>60 rds</td><td class="y">1,600</td></tr>
+<tr><td class="tag" style="color:#ffbe6e">FLAK</td><td>Z2</td><td>5 × 30 pellets, airburst</td><td>burst, not sustained</td><td>7.7</td><td>1200 m/s, bursts at 200 m</td><td>300 m</td><td>60 rds</td><td class="y">1,600</td></tr>
 <tr><td class="tag" style="color:#aaf0ff">RAILGUN</td><td>Z3</td><td>90 (charged)</td><td>34</td><td>10</td><td>2,200 m/s</td><td>2,200 m</td><td>12 rds</td><td class="y">7,800</td></tr>
 <tr><td class="tag" style="color:#6ea0ff">ION</td><td>Z2</td><td>30 shield / 4 hull</td><td>67/9</td><td>18</td><td>340 m/s</td><td>700 m</td><td>energy</td><td class="y">3,000</td></tr>
 <tr><td class="tag" style="color:#ff8c46">MINE</td><td>Z1</td><td>45 + 18&nbsp;m blast</td><td>—</td><td>0.8</td><td>dropped astern</td><td>18 m trigger</td><td>6 rds</td><td class="y">1,400</td></tr>
 <tr><td class="tag" style="color:#ffd778">TRACTOR</td><td>Z1</td><td>—</td><td>—</td><td>6</td><td>pulls salvage</td><td>300 m</td><td>energy</td><td class="y">800</td></tr>
-<tr><td class="tag" style="color:#ffc85a">MINING</td><td>Z1</td><td>2 (6× vs rocks)</td><td>20</td><td>16</td><td>hitscan</td><td>350 m</td><td>energy</td><td class="y">700</td></tr>
+<tr><td class="tag" style="color:#ffc85a">MINING</td><td>Z1</td><td>2 (6× vs rocks)</td><td>22</td><td>16</td><td>hitscan</td><td>350 m</td><td>energy</td><td class="y">700</td></tr>
 <tr><td class="tag" style="color:#78ebff">PLASMA</td><td>Z2</td><td>7</td><td>70</td><td>24</td><td>380 m/s</td><td>700 m</td><td>energy</td><td class="y">2,400</td></tr>
 <tr><td class="tag" style="color:#96c8ff">BLASTER</td><td>Z2</td><td>11</td><td>66</td><td>20</td><td>260 m/s, bends</td><td>700 m</td><td>energy</td><td class="y">3,400</td></tr>
 <tr><td class="tag" style="color:#be8cff">P.LANCE</td><td>Z3</td><td>18 (ignores shields)</td><td>32</td><td>15</td><td>hitscan</td><td>600 m</td><td>energy</td><td class="y">6,400</td></tr>
 </table>
 <ul>
-<li><b>FLAK</b> — a cone of pellets, devastating point-blank, useless at range. The brawler's answer to agile fighters.</li>
+
 <li><b>RAILGUN</b> — <b>hold <span class="key">A</span> to charge</b> (rising tones, reticle brackets close in), release at full charge to fire. 90 damage per lance; tech-12 yards only, and ELITE aces field it against you.</li>
 <li><b>ION</b> — melts shields, tickles hull (13%). Fully stripping a shield <b class="c">SCRAMBLES</b> the target: weapons offline 2.5&nbsp;s with blue arcs crawling on the hull. Strip → disable → execute. CAPABLE+ pirates carry them too — when YOUR shield breaks to ion fire, expect the klaxon and a dead trigger.</li>
 <li><b>P.LANCE</b> — the plasma lance (T11+): a slow violet beam that
@@ -390,10 +390,13 @@ larger. Base stats:</p>
 can even score critical hits on a fully-shielded target. Modest DPS;
 its prey is the BULWARK tank that laughs at your pulses. Counter:
 plain thick armor.</li>
-<li><b>FLAK</b> — proximity-fused pellets that <b>airburst near any
-hull</b>: at shotgun range the whole cluster fuses on the target —
-devastating; past ~250&nbsp;m the spread carries most pellets wide.
-Time it like a shotgun.</li>
+<li><b>FLAK</b> — a cone of pellets that always <b>bursts at a fixed
+200&nbsp;m</b>, whatever you aim at. Fire it when the enemy is right
+at that range and the whole cloud explodes on them — a big hit.
+Mistime the range and the burst goes off short or long and barely
+scratches them. Pellets that fly through a target on the way to the
+fuze do only a light graze; the damage is in the timed burst. A run
+weapon: line up the range, fire once, peel off.</li>
 <li><b>RAILGUN warning</b> — pirates carrying one <b>telegraph the
 charge</b>: rising tones and a muzzle flare, then the slug. Hear it,
 break hard.</li>
