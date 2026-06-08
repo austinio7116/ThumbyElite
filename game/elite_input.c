@@ -91,7 +91,7 @@ void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) 
     static bool s_lb_hold_dpad, s_lb_hold_fired;
     if (btn->lb) {
         if (dpad) s_lb_hold_dpad = true;
-        if (s_lb.held_s >= 3.0f && !s_lb_hold_fired && !s_lb_hold_dpad) {
+        if (s_lb.held_s >= 1.5f && !s_lb_hold_fired && !s_lb_hold_dpad) {
             out->tgt_class_cycle = true;
             s_lb_hold_fired = true;
         }
