@@ -2313,6 +2313,21 @@ int main(int argc, char **argv) {
         g_player.mounts[2] = (WeaponInst){ .type = WPN_HOMING,
             .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
         for (int i = 0; i < HULL_SLOTS; i++) g_player.ammo[i] = -1;
+        /* Guide props: a CULL mission that completes during the fight,
+         * and CLOAK + MANIFEST gadgets for the utility demo. */
+        extern Mission g_missions[];
+        g_missions[0] = (Mission){ 0 };
+        g_missions[0].type = MIS_CULL;
+        g_missions[0].count = 2;
+        g_missions[0].reward = 1800;
+        g_missions[0].faction = 0;
+        g_missions[0].done = false;
+        snprintf(g_missions[0].label, sizeof g_missions[0].label,
+                 "CULL 2 PIRATES");
+        g_player.util_eq[0] = (WeaponInst){ .type = EQ_CLOAK,
+            .quality = 1, .integrity = 100, .in_use = 1 };
+        g_player.util_eq[1] = (WeaponInst){ .type = EQ_MANIFEST,
+            .quality = 1, .integrity = 100, .in_use = 1 };
         player_apply_to_ship();
         pl->hull = pl->hull_max;
         pl->shield = pl->shield_max;
@@ -2411,6 +2426,8 @@ int main(int argc, char **argv) {
         printf("[movie] p2 alive=%d frame=%d\n",
                p2 > 0 ? g_ships[p2].alive : -1, mf);
 
+        CAP("MISSION COMPLETE -- two pirates culled. Collect at any dock");
+        MV_IDLE(45);
         CAP("Wrecks drop loot -- lock it and fly through to scoop");
         /* Phase 3: salvage run — lock loot, fly to it, scoop. */
         extern int loot_positions(Vec3 *, int *, int);
@@ -2587,18 +2604,55 @@ int main(int argc, char **argv) {
         /* Phase 9: recede + tunnel + arrival. */
         for (int f = 0; f < 30 * 8 && elite_game_state() != 0; f++)
             MV(none);
-        CAP("Trade. Fight. Explore.  --  THUMBY ELITE");
-        /* Phase 10: a parting cruise with a slow roll. */
-        pl->throttle = 0.5f;
-        for (int f = 0; f < 110; f++) {
-            CraftRawButtons b = none;
-            b.lb = true;
-            b.left = true;                      /* roll */
-            MV(b);
+        /* Phase 10: gadgets, then the hunt that ends you. */
+        elite_game_debug_face_away_from_sun();
+        pl->throttle = 0.35f;
+        CAP("GADGETS: CLOAK vanishes you for 8s -- press RB + B");
+        { CraftRawButtons b = none; b.rb = true; MV(b);
+          b.b = true; MV(b); MV(b); }            /* RB held, then B */
+        for (int f = 0; f < 95; f++) MV(none);   /* CLOAKED readout */
+        CAP("Plus scanners, repair drones, chaff and more");
+        for (int f = 0; f < 55; f++) MV(none);
+
+        CAP("A bounty MARK -- a DEADLY ace. The hunt is on");
+        /* clear ambient pirates so the MARK is the one that gets us */
+        for (int i = 1; i < MAX_SHIPS; i++)
+            if (g_ships[i].alive && g_ships[i].team == TEAM_HOSTILE)
+                g_ships[i].alive = false;
+        player_apply_to_ship();                  /* drop the plot armour */
+        pl->hull = 95.0f; pl->shield = 45.0f;    /* we will not survive */
+        extern const Mesh *hull_mesh(uint32_t, int);
+        int mk = ship_spawn(hull_mesh(0xDEAD77u, 9),  /* BASILISK */
+                            v3_add(pl->pos,
+                                   v3_scale(pl->basis.r[2], 230.0f)),
+                            TEAM_HOSTILE);
+        if (mk > 0) {
+            ship_set_tier(mk, 4, 9);
+            g_ships[mk].is_mark = 1;
+            g_ships[mk].ai_target = 0;
+            g_ships[mk].hull = g_ships[mk].hull_max = 9000.0f; /* survives */
         }
-        MV_IDLE(60);
+        MV_TAP(lb, 4);                           /* lock the mark */
+        CAP("Trade fire with a better pilot...");
+        /* fight ~11s so the mark scores hits (it becomes our killer in
+         * the report), keep the player on the edge */
+        for (int f = 0; f < 30 * 11 && g_ships[0].alive; f++) {
+            if (mk > 0 && g_ships[mk].alive)
+                MV_AIM(mk, 0.0f, 3.0f, 0.012f, 1);
+            else MV(none);
+            if (pl->hull > 40.0f) pl->hull = 40.0f;   /* stay near death */
+            if (pl->shield > 0.0f) pl->shield = 0.0f;
+        }
+        /* the finishing blow — attributed to the mark (last to hit us) */
+        if (g_ships[0].alive) { g_ships[0].hull = -1.0f;
+                                g_ships[0].alive = false; }
+        MV(none);                                /* death path -> report */
+        MV_IDLE(15);                             /* the explosion */
+        CAP("Even the best fall. Insurance brings you back");
+        for (int f = 0; f < 150; f++) MV(none);  /* dwell on the report */
         if (gwav) fclose(gwav);
-        printf("[movie] %d frames\n", mf);
+        printf("[movie] %d frames (player alive=%d)\n", mf,
+               g_ships[0].alive);
         return 0;
     }
 
