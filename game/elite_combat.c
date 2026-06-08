@@ -74,8 +74,13 @@ static float ray_sphere(Vec3 o, Vec3 dir, Vec3 c, float r) {
  * scoped flags. */
 static void combat_roll_crit(int victim, Vec3 hit_pos) {
     Ship *v = &g_ships[victim];
-    fx_spawn_spark(hit_pos, v->vel);
-    fx_spawn_spark(hit_pos, v->vel);
+    /* a component is about to blow — a BIG blast on enemies (user) */
+    if (victim != PLAYER)
+        fx_break_blast(v->pos, v->vel);
+    else {
+        fx_spawn_spark(hit_pos, v->vel);
+        fx_spawn_spark(hit_pos, v->vel);
+    }
     if (victim == PLAYER) {
         /* candidate table: fitted items + engines + blanks */
         WeaponInst *items[8];
@@ -207,12 +212,20 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
             }
         }
     }
-    /* Shield impacts flash BLUE (visible strip feedback); hull sparks. */
-    if (had_shield)
+    /* Bigger, distance-readable feedback on ENEMY hits (user): a full
+     * blue shield ENVELOPE around the whole ship, or a hull FIREBALL
+     * scaled to the blow. Player hits keep the close screen feedback. */
+    if (had_shield) {
         fx_spawn_shield_flash(hit_pos, v->vel,
                               s_shot_type == WPN_ION ? 1 : 0);
-    else
+        if (victim != PLAYER)
+            fx_shield_envelope(v->pos, v->vel,
+                               v->mesh ? v->mesh->bound_r : 6.0f);
+    } else if (victim != PLAYER) {
+        fx_hull_burst(hit_pos, v->vel, dmg * (1.0f / 40.0f));
+    } else {
         fx_spawn_spark(hit_pos, v->vel);
+    }
     if (victim == PLAYER) {
         /* Feel it: soft buzz for shields, hard thump for hull. */
         if (had_shield) {

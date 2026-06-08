@@ -73,15 +73,17 @@ static void spawn(Vec3 pos, Vec3 vel, float life, uint16_t c0, uint16_t c1) {
 
 /* --- Fireballs: expanding depth-tested discs — the BIG readable part of
  * an explosion at any distance (debris particles alone vanish at range). */
-#define MAX_FIREBALLS 6
+#define MAX_FIREBALLS 12
 typedef struct {
     Vec3  pos, vel;
     float t, dur;        /* age / duration */
     float r_max;         /* world-space radius at peak, meters */
+    uint8_t kind;        /* 0 = fire (orange), 1 = shield (blue) */
 } Fireball;
 static Fireball s_fire[MAX_FIREBALLS];
 
-static void fireball(Vec3 pos, Vec3 vel, float r_max, float dur) {
+static void fireball_k(Vec3 pos, Vec3 vel, float r_max, float dur,
+                       uint8_t kind) {
     int oldest = 0;
     for (int i = 0; i < MAX_FIREBALLS; i++) {
         if (s_fire[i].t >= s_fire[i].dur) { oldest = i; break; }
@@ -92,6 +94,10 @@ static void fireball(Vec3 pos, Vec3 vel, float r_max, float dur) {
     s_fire[oldest].t = 0;
     s_fire[oldest].dur = dur;
     s_fire[oldest].r_max = r_max;
+    s_fire[oldest].kind = kind;
+}
+static void fireball(Vec3 pos, Vec3 vel, float r_max, float dur) {
+    fireball_k(pos, vel, r_max, dur, 0);
 }
 
 void fx_spawn_explosion(Vec3 pos, Vec3 base_vel) {
@@ -129,6 +135,46 @@ void fx_spawn_spark(Vec3 pos, Vec3 base_vel) {
         Vec3 v = v3_add(base_vel, v3_scale(rnd_dir(), frand(6, 20)));
         spawn(pos, v, frand(0.2f, 0.45f),
               RGB565C(255, 240, 160), RGB565C(180, 80, 30));
+    }
+}
+
+/* SHIELD ENVELOPE (user): a full blue bubble flicker around the WHOLE
+ * ship + a shell of blue motes — reads instantly at any range as
+ * 'shields holding'. */
+void fx_shield_envelope(Vec3 center, Vec3 vel, float radius) {
+    fireball_k(center, vel, radius * 1.15f, 0.20f, 1);
+    for (int i = 0; i < 26; i++) {
+        Vec3 dir = rnd_dir();
+        Vec3 p = v3_add(center, v3_scale(dir, radius * frand(0.95f, 1.18f)));
+        spawn(p, v3_add(vel, v3_scale(dir, frand(3, 10))),
+              frand(0.12f, 0.26f),
+              RGB565C(160, 210, 255), RGB565C(40, 90, 210));
+    }
+}
+
+/* HULL BURST (user): a real fireball on hull damage, scaled by the blow
+ * so it's visible from a distance — bigger hits, bigger flash. */
+void fx_hull_burst(Vec3 pos, Vec3 vel, float scale) {
+    if (scale < 0.15f) scale = 0.15f;
+    if (scale > 1.0f) scale = 1.0f;
+    fireball(pos, vel, 3.5f + 6.0f * scale, 0.26f + 0.10f * scale);
+    int n = 12 + (int)(20.0f * scale);
+    for (int i = 0; i < n; i++) {
+        Vec3 v = v3_add(vel, v3_scale(rnd_dir(), frand(10, 25 + 35 * scale)));
+        spawn(pos, v, frand(0.3f, 0.7f),
+              RGB565C(255, 220, 130), RGB565C(170, 65, 25));
+    }
+}
+
+/* SYSTEM BREAK (user): even bigger — a component just blew. */
+void fx_break_blast(Vec3 pos, Vec3 vel) {
+    fireball(pos, vel, 11.0f, 0.55f);
+    fireball(v3_add(pos, v3_scale(rnd_dir(), 4.0f)), vel, 6.0f, 0.40f);
+    for (int i = 0; i < 30; i++) {
+        Vec3 v = v3_add(vel, v3_scale(rnd_dir(), frand(20, 65)));
+        spawn(pos, v, frand(0.4f, 1.1f),
+              (i & 1) ? RGB565C(255, 240, 180) : RGB565C(255, 170, 70),
+              RGB565C(120, 40, 15));
     }
 }
 
@@ -342,7 +388,12 @@ static void dust_emit(Vec3 cam_pos, Vec3 cam_vel) {
 }
 
 /* Fireball colour ramp: white flash -> yellow -> orange -> dark ember. */
-static uint16_t fireball_color(float t01) {
+static uint16_t fireball_color(float t01, uint8_t kind) {
+    if (kind == 1) {                  /* shield bubble: blue flicker */
+        if (t01 < 0.25f) return RGB565C(200, 230, 255);
+        if (t01 < 0.55f) return RGB565C(90, 165, 255);
+        return RGB565C(30, 80, 210);
+    }
     if (t01 < 0.15f) return RGB565C(255, 255, 235);
     if (t01 < 0.40f) return RGB565C(255, 215, 90);
     if (t01 < 0.70f) return RGB565C(245, 130, 40);
@@ -366,7 +417,7 @@ static void fireballs_emit(Vec3 cam_pos) {
         float z = R3D_DEPTH_K / (float)(d > 0 ? d : 1);
         int r_px = (int)(focal * r_world / z);
         if (r_px < 1) r_px = 1;
-        r3d_scene_add_disc(sx, sy, d, r_px, fireball_color(t01));
+        r3d_scene_add_disc(sx, sy, d, r_px, fireball_color(t01, f->kind));
     }
 }
 
