@@ -246,6 +246,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_SFXTEST") ||
         getenv("ELITE_SETSHOT") ||
         getenv("ELITE_FLAKTEST") ||
+        getenv("ELITE_SWEEPTEST") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -734,6 +735,45 @@ int main(int argc, char **argv) {
             if (pc > peak) peak = pc;
         }
         printf("[furball] 6 shooters, peak projectiles: %d / 72\n", peak);
+        return 0;
+    }
+
+    /* Evade->sweep + no-ram: tail each tier, watch for the sweep and
+     * track closest approach (collision check). */
+    if (getenv("ELITE_SWEEPTEST")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        extern int elite_game_debug_ai_state(int idx);
+        Ship *pl = &g_ships[0];
+        elite_game_debug_face_away_from_sun();
+        for (int tier = 0; tier <= 4; tier++) {
+            int e = ship_spawn(hull_mesh(0xACE1u, 1 + tier),
+                               v3_add(pl->pos,
+                                      v3_scale(pl->basis.r[2], 120.0f)),
+                               TEAM_HOSTILE);
+            ship_set_tier(e, tier, 1 + tier);
+            Ship *en = &g_ships[e];
+            en->basis = pl->basis;           /* same heading: we're on its six */
+            pl->vel = v3_scale(pl->basis.r[2], 40.0f);
+            int swept = 0; float closest = 1e9f; float t_sweep = -1;
+            CraftRawButtons none = {0};
+            for (int f = 0; f < 30 * 10; f++) {
+                elite_game_tick(&none, 1.0f/30.0f);
+                /* keep chasing its six */
+                Vec3 six = v3_sub(en->pos,
+                                  v3_scale(en->basis.r[2], 110.0f));
+                pl->pos = v3_lerp(pl->pos, six, 0.3f);
+                pl->basis = en->basis;
+                float d = v3_len(v3_sub(en->pos, pl->pos));
+                if (d < closest) closest = d;
+                if (elite_game_debug_ai_state(e) == 3 && !swept) {
+                    swept = 1; t_sweep = f / 30.0f;
+                }
+            }
+            printf("[sweep] tier %d: swept=%s @%.1fs  closest=%.0fm "
+                   "(%s)\n", tier, swept?"YES":"no", t_sweep, closest,
+                   closest > 14.0f ? "no ram" : "RAMMED");
+            en->alive = false;
+        }
         return 0;
     }
 

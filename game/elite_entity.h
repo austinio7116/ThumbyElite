@@ -30,7 +30,7 @@ typedef enum { TEAM_PLAYER = 0, TEAM_HOSTILE = 1, TEAM_NEUTRAL = 2 } Team;
 #define CRIT_REGEN   0x10
 #define CRIT_ENGINE  0x20
 #define CRIT_AIM     0x40
-typedef enum { AI_NONE = 0, AI_ATTACK, AI_BREAK } AiState;
+typedef enum { AI_NONE = 0, AI_ATTACK, AI_BREAK, AI_SWEEP } AiState;
 
 typedef struct {
     bool  alive;

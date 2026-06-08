@@ -125,6 +125,26 @@ static void ai_ship(int idx, float dt) {
     }
     int tier = s->tier > 4 ? 4 : s->tier;
 
+    /* SHIP-COLLISION AVOIDANCE (user: they ram me on attack runs). The
+     * missing counterpart to rock avoidance — when closing inside ram
+     * range, veer the steering goal sideways so they strafe PAST the
+     * target instead of through it. All tiers. */
+    {
+        float avoid = (s->mesh ? s->mesh->bound_r : 4.0f) +
+                      (t->mesh ? t->mesh->bound_r : 4.0f) + 26.0f;
+        if (dist < avoid && dist > 1e-3f) {
+            Vec3 side = v3_cross(dir, s->basis.r[1]);
+            float sl = v3_len(side);
+            if (sl > 1e-3f) {
+                side = v3_scale(side, 1.0f / sl);
+                if (v3_dot(side, s->basis.r[0]) < 0.0f)
+                    side = v3_scale(side, -1.0f);   /* the near side */
+                float urg = 1.0f - dist / avoid;    /* 0 far .. 1 touch */
+                dir = v3_norm(v3_add(dir, v3_scale(side, 2.2f * urg)));
+            }
+        }
+    }
+
     /* MISSILE COUNTERMEASURES (user design): CAPABLE+ breaks hard off
      * an inbound seeker (the missile's 1.7 rad/s turn cap + their
      * blue-zone slowdown decide who wins the corner); VETERAN+ pops
@@ -176,23 +196,31 @@ static void ai_ship(int idx, float dt) {
         static float s_chop_cd[MAX_SHIPS], s_chop_t[MAX_SHIPS];
         static float s_scissor_t[MAX_SHIPS];
         static int8_t s_scissor_side[MAX_SHIPS];
-        static float s_evade_t[MAX_SHIPS];
+        static float s_evade_t[MAX_SHIPS], s_sweep_at[MAX_SHIPS];
         s_chop_cd[idx] -= dt;
-        int tailed = dist < 200.0f &&
-                     v3_dot(dir, s->basis.r[2]) < -0.35f &&
-                     v3_dot(t->basis.r[2], v3_scale(dir, -1.0f)) > 0.70f;
-        /* evasion has a clock: after ~2.2s of dancing they accept the
-         * duel and wheel back in (also stops a stationary gunline from
-         * reading as an eternal tail — the siege stalemate) */
-        if (tailed) {
-            s_evade_t[idx] += dt;
-            if (s_evade_t[idx] > 2.2f) {
-                tailed = 0;
-                if (s_evade_t[idx] > 3.6f) s_evade_t[idx] = 0;
+        int tailed = dist < 220.0f &&
+                     v3_dot(dir, s->basis.r[2]) < -0.30f &&
+                     v3_dot(t->basis.r[2], v3_scale(dir, -1.0f)) > 0.65f;
+        /* EVADE -> SWEEP (user model): when tailed they evade, then —
+         * after a randomised time that is SHORTER for better pilots —
+         * commit to a hard sweep all the way round to get back on top,
+         * instead of evading forever. The roll happens once per tail. */
+        if (tailed && s->ai_state != AI_SWEEP) {
+            if (s_evade_t[idx] <= 0.0f) {
+                /* fresh tail: roll how long this pilot dances first */
+                static const float k_evbase[5] = { 3.6f, 3.0f, 2.4f,
+                                                   1.8f, 1.2f };
+                float jit = (float)(frnd_pub() % 1000u) * 0.001f;
+                s_sweep_at[idx] = k_evbase[tier] + jit * 1.6f;
             }
-        } else if (s_evade_t[idx] > 0) {
-            s_evade_t[idx] -= dt * 2.0f;
-            if (s_evade_t[idx] < 0) s_evade_t[idx] = 0;
+            s_evade_t[idx] += dt;
+            if (s_evade_t[idx] >= s_sweep_at[idx]) {
+                s->ai_state = AI_SWEEP;
+                s->ai_timer = 3.2f;          /* sweep timeout */
+                s_evade_t[idx] = 0.0f;
+            }
+        } else if (!tailed && s->ai_state != AI_SWEEP) {
+            s_evade_t[idx] = 0.0f;
         }
         if (s_chop_t[idx] > 0.0f) {
             /* mid-chop: dead slow, whip the nose around */
@@ -201,31 +229,22 @@ static void ai_ship(int idx, float dt) {
             turn_toward(s, dir, dt);
             return;
         }
-        if (tailed) {
-            if (tier <= 1) {
-                /* prey: run flat out with a shallow weave */
-                Vec3 weave = v3_scale(s->basis.r[0],
-                                      0.35f * sinf(s->ai_timer * 5.0f +
-                                                   (float)idx));
-                s->ai_timer += dt;
-                turn_toward(s, v3_norm(v3_add(v3_scale(dir, -1.0f),
-                                              weave)), dt);
-                s->throttle = 0.6f + 0.4f * k_fight_speed[tier];
-                return;
-            }
+        if (tailed && s->ai_state != AI_SWEEP) {
+            /* EVADE — intensity by skill; veterans chop, the rest jink.
+             * Prey jink hard too now (no hopeless straight run that they
+             * can never escape, then they SWEEP). */
             if (tier >= 3 && s_chop_cd[idx] <= 0.0f) {
-                /* the ED move: chop throttle, force the overshoot */
                 s_chop_t[idx] = 1.1f;
                 s_chop_cd[idx] = 4.5f;
                 return;
             }
-            /* jink / scissors: hard alternating lateral breaks */
             s_scissor_t[idx] -= dt;
             if (s_scissor_t[idx] <= 0.0f) {
-                s_scissor_t[idx] = (tier >= 4) ? 0.7f : 1.0f;
+                s_scissor_t[idx] = (tier >= 4) ? 0.7f
+                                 : (tier >= 2) ? 1.0f : 1.3f;
                 s_scissor_side[idx] = (s_scissor_side[idx] >= 0) ? -1 : 1;
             }
-            Vec3 brk = v3_add(v3_scale(dir, -0.35f),
+            Vec3 brk = v3_add(v3_scale(dir, -0.30f),
                               v3_scale(s->basis.r[0],
                                        (float)s_scissor_side[idx]));
             brk = v3_add(brk, v3_scale(s->basis.r[1],
@@ -272,12 +291,13 @@ static void ai_ship(int idx, float dt) {
             if (fl > 1.0f) fl = 1.0f;
             if (s->throttle < fl) s->throttle = fl;
         }
-        /* Rookies PARK and plink (they need sustained close time for
-         * their spray to add up past shield regen); pros boom-and-zoom.
-         * The break trigger shrinks with rank. */
+        /* Break off before ramming. Worse pilots break FARTHER (they
+         * turn slowly and need room); aces break late and daring. All
+         * values clear the ~15m collision range; ship-avoidance is the
+         * backstop. (No 'parking' — everyone flies real passes.) */
         {
-            static const float k_brk[5] = { 55.0f, 70.0f, 110.0f,
-                                            120.0f, 120.0f };
+            static const float k_brk[5] = { 135.0f, 125.0f, 115.0f,
+                                            105.0f, 95.0f };
             if (dist < k_brk[tier]) {
                 s->ai_state = AI_BREAK;
                 s->ai_timer = 4.0f;        /* safety cap only */
@@ -344,6 +364,19 @@ static void ai_ship(int idx, float dt) {
             combat_fire(idx, sp, ti);
             s->fire_cool = w->cooldown;
         }
+        break;
+    }
+    case AI_SWEEP: {
+        /* Committed sweep (user): a hard turning pass to come around
+         * onto the target — ignores 'tailed', just wheels. Slower
+         * throttle = tighter radius (blue zone). Better pilots sweep
+         * faster/tighter; exit when re-acquired or on timeout. */
+        turn_toward(s, dir, dt);
+        s->throttle = (0.40f + 0.10f * (float)tier) * k_fight_speed[tier];
+        s->ai_timer -= dt;
+        if (v3_dot(s->basis.r[2], dir) > 0.55f || s->ai_timer <= 0.0f ||
+            dist > 700.0f)
+            s->ai_state = AI_ATTACK;
         break;
     }
     case AI_BREAK: {
