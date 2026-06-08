@@ -42,7 +42,7 @@ static const float k_refire[5] = { 0.90f, 0.75f, 0.60f, 0.50f, 0.42f };
  * bad shots so a harmless pilot sprays and wastes rounds even up close
  * (user: weaker pilots should miss more, not fire less); aces kept near
  * the old razor values. Steep gradient. */
-static const float k_spread[5] = { 0.200f, 0.130f, 0.072f, 0.038f, 0.022f };
+static const float k_spread[5] = { 0.095f, 0.070f, 0.050f, 0.033f, 0.022f };
 
 /* The tier accuracy table, shared with the turret gunner. */
 /* NPCs fire at the weapon's full cadence (user: weaker pilots should
