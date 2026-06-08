@@ -34,9 +34,16 @@ static const float k_fight_speed[5] = { 0.55f, 0.70f, 0.85f,
  * compensated its gauss payload; the kill matrix showed it inverting
  * the ladder once geometry was fixed — k_npc_dmg carries balance now). */
 static const float k_refire[5] = { 0.90f, 0.75f, 0.60f, 0.50f, 0.42f };
-static const float k_spread[5] = { 0.050f, 0.044f, 0.034f, 0.027f, 0.021f };
+/* Accuracy by rank (wider = worse). Eased across ALL tiers after the
+ * player's hours-in skill outpaced them (user): ~30% wider than the
+ * old {.050,.044,.034,.027,.021}. Gradient preserved. */
+static const float k_spread[5] = { 0.066f, 0.058f, 0.045f, 0.036f, 0.028f };
 
 /* The tier accuracy table, shared with the turret gunner. */
+/* NPCs fire at the weapon cadence stretched by this gap (>1 = slower)
+ * so the incoming wall of fire is less relentless (user). */
+#define NPC_FIRE_GAP 1.30f
+
 float ai_tier_spread(int tier) {
     return k_spread[tier > 4 ? 4 : tier];
 }
@@ -405,7 +412,7 @@ static void ai_ship(int idx, float dt) {
                                (1.0f + v3_len(latv) / 90.0f);
                     if (s->crits & CRIT_AIM) sp *= 2.2f;
                     combat_fire(idx, sp, ti);
-                    s->fire_cool = w->cooldown;   /* rail cadence */
+                    s->fire_cool = w->cooldown * NPC_FIRE_GAP;  /* rail */
                 }
             }
             break;
@@ -439,7 +446,7 @@ static void ai_ship(int idx, float dt) {
             float sp = k_spread[tier] * (1.0f + v3_len(latv) / 90.0f);
             if (s->crits & CRIT_AIM) sp *= 2.2f;   /* targeting smashed */
             combat_fire(idx, sp, ti);
-            s->fire_cool = w->cooldown;
+            s->fire_cool = w->cooldown * NPC_FIRE_GAP;
         }
         break;
     }
