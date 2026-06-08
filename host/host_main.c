@@ -246,6 +246,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_SFXTEST") ||
         getenv("ELITE_SETSHOT") ||
         getenv("ELITE_FLAKTEST") ||
+        getenv("ELITE_FLAKVIS") ||
         getenv("ELITE_SWEEPTEST") ||
         getenv("ELITE_RAMTEST") ||
         getenv("ELITE_DASHTEST") ||
@@ -828,6 +829,28 @@ int main(int argc, char **argv) {
                    closest > 14.0f ? "no ram" : "RAMMED");
             en->alive = false;
         }
+        return 0;
+    }
+
+    /* FLAK burst visual. */
+    if (getenv("ELITE_FLAKVIS")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Ship *pl = &g_ships[0];
+        elite_game_debug_face_away_from_sun();
+        int e = ship_spawn(hull_mesh(0xACE1u, 2),
+                           v3_add(pl->pos, v3_scale(pl->basis.r[2],
+                                                    FLAK_FUZE)),
+                           TEAM_HOSTILE);
+        ship_set_tier(e, 2, 2);
+        g_player.mounts[0] = (WeaponInst){ .type = WPN_FLAK,
+            .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
+        player_apply_to_ship();
+        pl->active_w = 0; pl->fire_cool = 0; pl->heat = 0;
+        combat_set_shot_type(WPN_FLAK);
+        combat_fire(0, 0, e);
+        CraftRawButtons none = {0};
+        for (int f = 0; f < 6; f++) elite_game_tick(&none, 1.0f/30.0f);
+        render_frame(); dump_ppm("/tmp/flakvis.ppm");
         return 0;
     }
 

@@ -13,7 +13,7 @@
 
 /* FLAK is a fixed-fuze airburst (user): it ALWAYS detonates at this
  * distance, so firing when the enemy is AT this range is the skill. */
-#define FLAK_FUZE   280.0f
+#define FLAK_FUZE   200.0f
 #define FLAK_BURST   34.0f   /* frag-cloud kill radius at the burst */
 
 #include <stdint.h>

@@ -34,7 +34,7 @@ static const float k_fight_speed[5] = { 0.55f, 0.70f, 0.85f,
  * compensated its gauss payload; the kill matrix showed it inverting
  * the ladder once geometry was fixed — k_npc_dmg carries balance now). */
 static const float k_refire[5] = { 0.90f, 0.75f, 0.60f, 0.50f, 0.42f };
-static const float k_spread[5] = { 0.078f, 0.058f, 0.040f, 0.030f, 0.023f };
+static const float k_spread[5] = { 0.050f, 0.044f, 0.034f, 0.027f, 0.021f };
 
 /* The tier accuracy table, shared with the turret gunner. */
 float ai_tier_spread(int tier) {
@@ -124,6 +124,7 @@ static void ai_ship(int idx, float dt) {
         if (al > 1e-3f) dir = v3_scale(away, 1.0f / al);
     }
     int tier = s->tier > 4 ? 4 : s->tier;
+    static uint8_t s_flak_fired[MAX_SHIPS];   /* one flak burst per run */
 
     /* SHIP-COLLISION AVOIDANCE (user: they ram me on attack runs). The
      * missing counterpart to rock avoidance — when closing inside ram
@@ -304,6 +305,7 @@ static void ai_ship(int idx, float dt) {
             if (dist < k_brk[tier]) {
                 s->ai_state = AI_BREAK;
                 s->ai_timer = 4.0f;        /* safety cap only */
+                s_flak_fired[idx] = 0;     /* rearm flak for next run */
                 break;
             }
         }
@@ -342,20 +344,26 @@ static void ai_ship(int idx, float dt) {
             }
             break;
         }
-        /* FLAK is a fixed-fuze airburst: only fire when the target is
-         * AT the fuze range. Aces judge it tight; greens have a loose
-         * window and mistime it (burst lands short/long). */
+        /* FLAK is a fixed-fuze airburst fired as ONE well-timed burst
+         * per attack run (user model): a single shot when the target
+         * crosses the fuze range, then peel (or use other weapons).
+         * The per-tier window is the timing skill — aces fire right at
+         * the fuze (burst lands on target), greens judge it loosely so
+         * the FIXED burst lands short/long and misses. Not sustained
+         * spray (that inverted the ladder — close brawlers won). */
         int flak_ok = 1;
         if (s->weapons[s->active_w] == WPN_FLAK) {
-            static const float k_flakwin[5] = { 170.0f, 120.0f, 80.0f,
-                                                50.0f, 30.0f };
+            static const float k_flakwin[5] = { 150.0f, 95.0f, 60.0f,
+                                                38.0f, 24.0f };
             float off = dist - FLAK_FUZE;
             if (off < 0) off = -off;
-            flak_ok = off < k_flakwin[tier];
+            flak_ok = (off < k_flakwin[tier]) && !s_flak_fired[idx];
         }
         if (flak_ok && dist < w->range && dist < k_eng[tier] &&
             v3_dot(s->basis.r[2], dir) > k_cone[tier] &&
             combat_can_fire(s)) {
+            if (s->weapons[s->active_w] == WPN_FLAK)
+                s_flak_fired[idx] = 1;   /* one burst per run */
             /* THE HUMAN FIRE MODEL (user design): fire at the WEAPON's
              * own cadence while on target — a thumb holding A. Heat
              * throttles streams exactly as it does for the player;

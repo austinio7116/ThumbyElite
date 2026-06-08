@@ -270,10 +270,12 @@ void proj_tick(float dt) {
                             p->pos);
                     }
                 }
-                fx_spawn_explosion(p->pos, p->vel);
+                fx_flak_burst(p->pos, p->vel);
                 p->alive = false;
-                continue;
+                continue;       /* burst: big AoE, done */
             }
+            /* else en route — fall through: a pass-through graze does
+             * REDUCED damage (user); the big payoff is the timed burst */
         }
 
         if (hit >= 0) {
@@ -298,7 +300,8 @@ void proj_tick(float dt) {
                 detonate(p);
             } else {
                 combat_direct_damage(p->owner, hit,
-                                     w->dmg * p->dmg_mult, p->pos);
+                    w->dmg * p->dmg_mult *
+                        (p->type == WPN_FLAK ? 0.22f : 1.0f), p->pos);
                 p->alive = false;
             }
             continue;

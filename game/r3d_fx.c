@@ -110,6 +110,18 @@ void fx_spawn_explosion(Vec3 pos, Vec3 base_vel) {
     }
 }
 
+void fx_flak_burst(Vec3 pos, Vec3 base_vel) {
+    /* A flak AIRBURST — a sharp frag puff, not a ship explosion: one
+     * quick flash + a radial star of fast frag embers fading to smoke,
+     * sized to the burst radius. */
+    fireball(pos, base_vel, 6.0f, 0.30f);
+    for (int i = 0; i < 24; i++) {
+        Vec3 v = v3_add(base_vel, v3_scale(rnd_dir(), frand(28, 70)));
+        spawn(pos, v, frand(0.25f, 0.55f),
+              RGB565C(255, 210, 120), RGB565C(120, 120, 130));
+    }
+}
+
 void fx_spawn_spark(Vec3 pos, Vec3 base_vel) {
     /* A visible impact: brief flash disc + a spray of embers. */
     fireball(pos, base_vel, 2.6f, 0.18f);

@@ -463,17 +463,34 @@ int combat_fire(int shooter, float spread, int target) {
         return -1;
     }
 
-    /* FLAK: 5 pellets in a cone — a SHOTGUN. Timing is the skill: it
-     * only groups tight enough to multi-hit at close range (see the
-     * small proximity radius in proj.c). */
+    /* FLAK: a fixed-fuze airburst SHOTGUN. The cone is aimed at where
+     * the target will BE when the cloud reaches the fuze distance
+     * (lead) — without this the burst always lands behind a mover and
+     * flak never connects. Timing the range is still the skill. */
     if (wtype == WPN_FLAK) {
+        Vec3 fdir = dir;
+        /* NPCs auto-lead the burst, quality by RANK (greens under-lead
+         * and miss the mover — 'mistime the range'); the player aims
+         * manually along the nose (leading is the player's skill). */
+        if (shooter != PLAYER && target > 0 && g_ships[target].alive) {
+            static const float k_leadq[5] = { 0.35f, 0.55f, 0.75f,
+                                              0.90f, 1.00f };
+            float lq = k_leadq[s->tier > 4 ? 4 : s->tier];
+            float tof = FLAK_FUZE / w->speed;
+            Vec3 lead = v3_add(g_ships[target].pos,
+                               v3_scale(v3_sub(g_ships[target].vel,
+                                               s->vel), tof * lq));
+            Vec3 lv = v3_sub(lead, muzzle);
+            float ll = v3_len(lv);
+            if (ll > 1e-3f) fdir = v3_scale(lv, 1.0f / ll);
+        }
         for (int p2 = 0; p2 < 5; p2++) {
             uint32_t r = (uint32_t)(s->heat * 977.0f) ^
                          (uint32_t)(p2 * 2654435761u) ^ (uint32_t)shooter;
             r ^= r >> 13; r *= 1274126177u; r ^= r >> 16;
             float a = ((r & 0xFF) / 255.0f - 0.5f) * 0.20f;
             float b = (((r >> 8) & 0xFF) / 255.0f - 0.5f) * 0.20f;
-            Vec3 pd = v3_norm(v3_add(dir,
+            Vec3 pd = v3_norm(v3_add(fdir,
                          v3_add(v3_scale(s->basis.r[0], a),
                                 v3_scale(s->basis.r[1], b))));
             proj_spawn_ex(WPN_FLAK, shooter, (int8_t)target, muzzle, pd,

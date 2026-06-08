@@ -23,6 +23,7 @@ void fx_spawn_shield_flash(Vec3 pos, Vec3 base_vel, int ion);
 void fx_chaff_burst(Vec3 pos, Vec3 base_vel);
 uint32_t frnd_pub(void);
 void fx_spawn_spark(Vec3 pos, Vec3 base_vel);
+void fx_flak_burst(Vec3 pos, Vec3 base_vel);
 /* Per-frame engine trail emission for a thrusting ship. */
 void fx_engine_trail(Vec3 rear_pos, Vec3 ship_vel, float throttle, float dt);
 /* A laser shot: visible for a few frames. */
