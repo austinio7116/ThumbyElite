@@ -2788,15 +2788,26 @@ int main(int argc, char **argv) {
             g_ships[mk].is_mark = 1;
             g_ships[mk].ai_target = 0;
             g_ships[mk].hull = g_ships[mk].hull_max = 9000.0f; /* survives */
+            /* cool weapons (user): a purple LANCE, bending PHOTON bolts
+             * and a PLASMA stream make the incoming fire spectacular */
+            g_ships[mk].weapons[0] = WPN_LANCE;
+            g_ships[mk].weapons[1] = WPN_PHOTON;
+            g_ships[mk].weapons[2] = WPN_PLASMA;
+            g_ships[mk].n_weapons = 3;
+            g_ships[mk].turret_type = WPN_BLASTER;   /* bending turret */
         }
         pl->throttle = 0.35f;
         MV_IDLE(40);                             /* close the distance */
         MV_TAP(lb, 4);                           /* lock the mark */
         CAP("Trade fire with a better pilot -- the mark out-flies you");
-        /* A proper duel: keep the ARENA clear of everyone but the mark
-         * (so the mark is our killer), track SMOOTHLY (slow rate, no
-         * snapping), and hold a dogfight range instead of boring in. */
-        for (int f = 0; f < 30 * 15 && g_ships[0].alive; f++) {
+        /* A REAL dogfight, not a nose-glued stare. Two states:
+         *   APPROACH (far): aim the lead point, throttle up, fire.
+         *   MERGE (close): STOP tracking -- fly straight through the
+         *     pass so the mark whips across the screen and ends up
+         *     behind, which forces a proper banked wheel-around as we
+         *     re-acquire. That pass/break/re-engage IS the dogfight. */
+        int merging = 0; float merge_t = 0.0f;
+        for (int f = 0; f < 30 * 16 && g_ships[0].alive; f++) {
             for (int i = 1; i < MAX_SHIPS; i++)
                 if (i != mk && g_ships[i].alive &&
                     g_ships[i].team == TEAM_HOSTILE)
@@ -2804,14 +2815,27 @@ int main(int argc, char **argv) {
             CraftRawButtons b = none;
             if (mk > 0 && g_ships[mk].alive) {
                 Ship *m = &g_ships[mk];
-                float d = v3_len(v3_sub(m->pos, pl->pos));
-                MV_STEER(m->pos, 0.045f);        /* smooth, not snappy */
-                pl->throttle = (d > 240.0f) ? 0.85f
-                             : (d > 130.0f) ? 0.5f : 0.22f;
-                Vec3 l = m3_mul_v3_t(&pl->basis, v3_sub(m->pos, pl->pos));
-                if (d < 420.0f && l.z > 0.0f &&
-                    l.x*l.x + l.y*l.y < d*d*0.018f) {
-                    pl->fire_cool = 0; b.a = true;
+                Vec3 to = v3_sub(m->pos, pl->pos);
+                float d = v3_len(to);
+                if (!merging && d < 95.0f) { merging = 1; merge_t = 0.6f; }
+                if (merging) {
+                    /* fly straight THROUGH the merge (mark whips past) */
+                    merge_t -= 1.0f / 30.0f;
+                    pl->throttle = 1.0f;
+                    if (merge_t <= 0.0f && d > 150.0f) merging = 0;
+                } else {
+                    /* APPROACH: lead the target, close, fire on line */
+                    Vec3 lead = v3_add(m->pos,
+                                       v3_scale(v3_sub(m->vel, pl->vel),
+                                                d / 900.0f));
+                    MV_STEER(lead, 0.058f);
+                    pl->throttle = (d > 300.0f) ? 1.0f
+                                 : (d > 150.0f) ? 0.8f : 0.95f;
+                    Vec3 l = m3_mul_v3_t(&pl->basis, v3_sub(lead, pl->pos));
+                    if (d < 380.0f && l.z > 0.0f &&
+                        l.x*l.x + l.y*l.y < d*d*0.016f) {
+                        pl->fire_cool = 0; b.a = true;
+                    }
                 }
             }
             MV(b);

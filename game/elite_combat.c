@@ -83,17 +83,16 @@ static void combat_roll_crit(int victim, Vec3 hit_pos) {
         int n = 0;
         for (int i = 0; i < HULL_SLOTS; i++)
             if (g_player.mounts[i].in_use) {
-                static char wn[3][12];
-                snprintf(wn[i], sizeof wn[i], "WPN %d", i + 1);
                 items[n] = &g_player.mounts[i];
-                names[n++] = wn[i];
+                names[n++] = item_name(g_player.mounts[i].type);
             }
         if (g_player.shield_eq.in_use) {
-            items[n] = &g_player.shield_eq; names[n++] = "SHIELD GEN";
+            items[n] = &g_player.shield_eq; names[n++] = "SHIELD";
         }
         for (int i = 0; i < 2; i++)
             if (g_player.util_eq[i].in_use) {
-                items[n] = &g_player.util_eq[i]; names[n++] = "GADGET";
+                items[n] = &g_player.util_eq[i];
+                names[n++] = item_name(g_player.util_eq[i].type);
             }
         if (g_player.turret_eq.in_use) {
             items[n] = &g_player.turret_eq; names[n++] = "TURRET";
