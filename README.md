@@ -84,8 +84,6 @@ saves load and migrate.**
 - Galaxy distances pulled in (more systems in range); supercruise is
   faster (a big system crosses in about 20 seconds instead of 40);
   closer planet orbits.
-- A test cheat: tap RB ten times on the title screen to start a new
-  game with 100,000 credits.
 - Audio overhaul — lasers (deeper, longer), plasma lance, photon
   blaster and photon cannon all have richer, fuller sounds. Faster
   hold to switch targeting mode (LB, 1.5 s).
