@@ -40,9 +40,17 @@ static const float k_refire[5] = { 0.90f, 0.75f, 0.60f, 0.50f, 0.42f };
 static const float k_spread[5] = { 0.066f, 0.058f, 0.045f, 0.036f, 0.028f };
 
 /* The tier accuracy table, shared with the turret gunner. */
-/* NPCs fire at the weapon cadence stretched by this gap (>1 = slower)
- * so the incoming wall of fire is less relentless (user). */
-#define NPC_FIRE_GAP 1.30f
+/* NPC TRIGGER DISCIPLINE (user: a single harmless pilot is too lethal
+ * up close). Spread can't help at knife range -- a tier-0 cone of
+ * 0.066 rad is only ~4m of miss at 55m, smaller than a ship -- so the
+ * only lever for close-range lethality is FIRE RATE. Each tier fires
+ * no faster than this floor (seconds), so harmless pilots squeeze off
+ * slow bursts while aces stay near their weapon's full cadence. */
+static const float k_fire_min[5] = { 1.70f, 1.05f, 0.60f, 0.32f, 0.12f };
+static float npc_fire_gap(int tier, float cooldown) {
+    float g = cooldown * 1.15f;
+    return g < k_fire_min[tier] ? k_fire_min[tier] : g;
+}
 
 float ai_tier_spread(int tier) {
     return k_spread[tier > 4 ? 4 : tier];
@@ -412,7 +420,7 @@ static void ai_ship(int idx, float dt) {
                                (1.0f + v3_len(latv) / 90.0f);
                     if (s->crits & CRIT_AIM) sp *= 2.2f;
                     combat_fire(idx, sp, ti);
-                    s->fire_cool = w->cooldown * NPC_FIRE_GAP;  /* rail */
+                    s->fire_cool = npc_fire_gap(tier, w->cooldown); /* rail */
                 }
             }
             break;
@@ -446,7 +454,7 @@ static void ai_ship(int idx, float dt) {
             float sp = k_spread[tier] * (1.0f + v3_len(latv) / 90.0f);
             if (s->crits & CRIT_AIM) sp *= 2.2f;   /* targeting smashed */
             combat_fire(idx, sp, ti);
-            s->fire_cool = w->cooldown * NPC_FIRE_GAP;
+            s->fire_cool = npc_fire_gap(tier, w->cooldown);
         }
         break;
     }

@@ -239,6 +239,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_DODGETEST") ||
         getenv("ELITE_BENDTEST") ||
         getenv("ELITE_SPEEDKILL") ||
+        getenv("ELITE_DOGKILL") ||
         getenv("ELITE_KILLSCREEN") ||
         getenv("ELITE_FURBALL") ||
         getenv("ELITE_CIVMOVE") ||
@@ -1057,6 +1058,75 @@ int main(int argc, char **argv) {
      * tier vs a player flying STRAIGHT at 66%% throttle, standard
      * SKIFF shield, no evasion. Cell = seconds to kill, AMMO = ran
      * dry, ->60s = survived the window. */
+    if (getenv("ELITE_DOGKILL")) {
+        /* REALISTIC close dogfight: the player orbits the enemy at ~90m
+         * (a sustained turning fight, where spread barely helps), so we
+         * measure how fast each tier ACTUALLY kills you up close --
+         * unlike SPEEDKILL's straight-line fly-past. */
+        extern const Mesh *hull_mesh(uint32_t, int);
+        int guns[4] = { WPN_PULSE_M, WPN_AUTOCANNON, WPN_PLASMA, WPN_GAUSS };
+        printf("[dog] %-9s  T0     T1     T2     T3     T4\n", "WEAPON");
+        for (int gi = 0; gi < 4; gi++) {
+            int wt = guns[gi];
+            printf("[dog] %-9s", k_weapons[wt].name);
+            for (int tier = 0; tier <= 4; tier++) {
+                int NT = 4; float tsum = 0; int tn = 0, surv = 0;
+                for (int trial = 0; trial < NT; trial++) {
+                    g_player.hull_id = 0; g_player.hull_seed = 0x5EEDu;
+                    memset(g_player.mounts, 0, sizeof g_player.mounts);
+                    memset(g_player.util_eq, 0, sizeof g_player.util_eq);
+                    g_player.shield_eq = (WeaponInst){ .type = WPN_COUNT,
+                        .quality = Q_STANDARD, .integrity = 100,
+                        .in_use = 1, .tier = 1 };
+                    player_apply_to_ship();
+                    Ship *pl = &g_ships[0];
+                    pl->hull = pl->hull_max; pl->shield = pl->shield_max;
+                    pl->pos = v3(90, 0, 0);
+                    int e = ship_spawn(hull_mesh(0xACE1u + trial,
+                                                 1 + tier),
+                                       v3(0, 0, 0), TEAM_HOSTILE);
+                    if (e <= 0) { printf(" spawn!"); continue; }
+                    ship_set_tier(e, tier, 1 + tier);
+                    Ship *t2 = &g_ships[e];
+                    t2->weapons[0] = (uint8_t)wt; t2->n_weapons = 1;
+                    t2->active_w = 0; t2->turret_type = 0;
+                    t2->ammo[0] = k_weapons[wt].ammo_max
+                                      ? k_weapons[wt].ammo_max : -1;
+                    t2->hull = t2->hull_max = 1e9f;   /* enemy immortal */
+                    float tkill = -1; CraftRawButtons none = {0};
+                    float th = (float)trial * 1.3f;
+                    for (int f = 0; f < 30 * 45; f++) {
+                        /* CLOSE slow scrap (~55m): a gentle weave at low
+                         * speed -- an EASY target, like a player lining
+                         * up shots in a knife fight (the lethal case) */
+                        th += 0.9f / 30.0f * 0.7f;
+                        Ship *en = &g_ships[e];
+                        Vec3 c = en->pos;
+                        pl->pos = v3_add(c, v3(55.0f * cosf(th), 0,
+                                               55.0f * sinf(th)));
+                        Vec3 tang = v3_norm(v3(-sinf(th), 0, cosf(th)));
+                        pl->vel = v3_scale(tang, pl->max_speed * 0.22f);
+                        /* face roughly along travel (a moving target) */
+                        pl->basis.r[2] = tang;
+                        pl->basis.r[0] = v3(tang.z, 0, -tang.x);
+                        pl->basis.r[1] = v3(0, 1, 0);
+                        elite_game_tick(&none, 1.0f / 30.0f);
+                        if (!pl->alive || pl->hull <= 0) {
+                            tkill = (float)f / 30.0f; break;
+                        }
+                    }
+                    if (tkill >= 0) { tsum += tkill; tn++; } else surv++;
+                    g_ships[e].alive = false; g_ships[0].alive = true;
+                    proj_clear_all();
+                }
+                if (tn > NT / 2) printf(" %5.1f", tsum / tn);
+                else printf("  >45s");
+            }
+            printf("\n");
+        }
+        return 0;
+    }
+
     if (getenv("ELITE_SPEEDKILL")) {
         extern const Mesh *hull_mesh(uint32_t, int);
         printf("[sk] %-9s", "WEAPON");
