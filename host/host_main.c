@@ -960,6 +960,7 @@ int main(int argc, char **argv) {
             else if (*c == 'B') wt = WPN_BLASTER;
             else if (*c == 'M') wt = WPN_PULSE_M;
             else if (*c == 'G') wt = WPN_PULSE_L;
+            else if (*c == 'H') wt = WPN_PHOTON;
         }
         extern void sfx_weapon(int wpn_type, float amp);
         sfx_weapon(wt, 1.0f);

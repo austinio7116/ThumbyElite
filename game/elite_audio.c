@@ -84,7 +84,15 @@ void sfx_weapon(int t, float amp) {
     case WPN_BEAM:
         play(W_SAW, 980, 860, 0.15f * amp, 0.001f, 0.07f);
         break;
-    case WPN_PHOTON:  play(W_SINE, 300, 900, 0.40f * amp, 0.010f, 0.18f); break;
+    case WPN_PHOTON:
+        /* Heavy energy slug — RICH and loud (user): a bright launch
+         * crack over a low body swell, a charged sine glide and a
+         * DETUNED twin for shimmer. ~0.34s, four voices. */
+        play(W_NOISE, 3200, 700, 0.26f * amp, 0.001f, 0.06f);
+        play(W_SQUARE, 300, 170, 0.34f * amp, 0.004f, 0.30f);
+        play(W_SINE,  620, 260, 0.34f * amp, 0.005f, 0.34f);
+        play(W_SINE,  650, 274, 0.28f * amp, 0.005f, 0.30f);
+        break;
     case WPN_GAUSS:
         /* Whoosh + lasery zing (user spec): long airy noise sweep over
          * a singing saw glide and a low body swell. */
