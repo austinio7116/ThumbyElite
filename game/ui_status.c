@@ -182,9 +182,12 @@ static int next_sel(int from, int dir) {
     return from;
 }
 
+static int s_hide_text;   /* LB: hide the sheet to admire the ship */
+
 void status_open(void) {
     s_scroll = 0;
     s_detail = 0;
+    s_hide_text = 0;
     s_prev = buttons_all_held();   /* debounce */
     build_rows();
     s_cursor = next_sel(-1, 1);
@@ -211,7 +214,12 @@ bool status_tick(const CraftRawButtons *btn, float dt) {
     } else s_rep_dn = 0;
     bool a = btn->a && !s_prev.a;
     bool close_btn = (btn->menu && !s_prev.menu) || (btn->b && !s_prev.b);
+    bool lb_edge = btn->lb && !s_prev.lb;
     s_prev = *btn;
+
+    /* LB hides/shows the text sheet so you can look at the ship
+     * uninterrupted (user). Works in flight and at the station. */
+    if (lb_edge && !s_detail) s_hide_text = !s_hide_text;
 
     if (s_detail) {
         if (a || close_btn) s_detail = 0;
@@ -254,6 +262,13 @@ void status_draw(uint16_t *fb) {
         return;
     }
 
+    if (s_hide_text) {
+        /* sheet hidden: the rendered ship fills the screen, clean —
+         * just a faint hint to bring the stats back. */
+        craft_font_draw(fb, "LB: STATS", 2, 2, RGB565C(110, 130, 165));
+        return;
+    }
+
     /* The rendered ship becomes a dimmed backdrop (50%) — the whole
      * screen stays free for the sheet. */
     for (int i = 0; i < ELITE_FB_W * ELITE_FB_H; i++)
@@ -280,5 +295,5 @@ void status_draw(uint16_t *fb) {
     }
 
     for (int x = 0; x < 128; x++) fb[118 * ELITE_FB_W + x] = COL_GRID;
-    craft_font_draw(fb, "A:DETAILS B:CLOSE", 2, 121, COL_DIM);
+    craft_font_draw(fb, "A:DETAILS LB:HIDE B:CLOSE", 2, 121, COL_DIM);
 }

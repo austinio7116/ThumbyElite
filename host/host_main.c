@@ -248,6 +248,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_FLAKTEST") ||
         getenv("ELITE_FLAKVIS") ||
         getenv("ELITE_RAMKILL") ||
+        getenv("ELITE_STATUSHIDE") ||
         getenv("ELITE_SWEEPTEST") ||
         getenv("ELITE_RAMTEST") ||
         getenv("ELITE_DASHTEST") ||
@@ -847,6 +848,26 @@ int main(int argc, char **argv) {
                    closest > 14.0f ? "no ram" : "RAMMED");
             en->alive = false;
         }
+        return 0;
+    }
+
+    /* In-flight status view: text shown, then LB-hidden. */
+    if (getenv("ELITE_STATUSHIDE")) {
+        CraftRawButtons none = {0}, b;
+        for (int k = 0; k < 30; k++) elite_game_tick(&none, 1.0f/30.0f);
+        b = none; b.menu = true; elite_game_tick(&b, 1.0f/30.0f); /* dash */
+        for (int k=0;k<14;k++) elite_game_tick(&none,1.0f/30.0f);
+        /* dash sel 2 = STATUS: down (sets bit2), A */
+        b=none; b.down=true; elite_game_tick(&b,1.0f/30.0f);
+        elite_game_tick(&none,1.0f/30.0f);
+        b=none; b.a=true; elite_game_tick(&b,1.0f/30.0f);
+        for(int k=0;k<10;k++) elite_game_tick(&none,1.0f/30.0f);
+        printf("[sh] state=%d (7=status? actually ST_STATUS)\n",
+               elite_game_state());
+        render_frame(); dump_ppm("/tmp/status_shown.ppm");
+        b=none;b.lb=true;elite_game_tick(&b,1.0f/30.0f);
+        for(int k=0;k<10;k++) elite_game_tick(&none,1.0f/30.0f);
+        render_frame(); dump_ppm("/tmp/status_hidden.ppm");
         return 0;
     }
 
