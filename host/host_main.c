@@ -1102,37 +1102,28 @@ int main(int argc, char **argv) {
                                       ? k_weapons[wt].ammo_max : -1;
                     t2->hull = t2->hull_max = 1e9f;   /* immortal enemy */
                     t2->ai_target = 0;
-                    float jink_t = 0; int dodging = 0; float jdir = 1;
                     float tkill = -1; CraftRawButtons none = {0};
-                    for (int f = 0; f < 30 * 120; f++) {  /* high cap: keep the tail signal */
-                        Vec3 ep = g_ships[e].pos;
-                        Vec3 aim = ep;
-                        jink_t -= 1.0f/30.0f;
-                        if (jink_t <= 0) {
-                            jink_t = BRF(0.9f, 2.2f);
-                            dodging = ((BR() % 100u) < 10u);  /* mostly straight at it */
-                            jdir = (BR() & 1) ? 1.0f : -1.0f;
+                    /* SLOW FIGURE-8 (lemniscate of Gerono) around the
+                     * origin: a predictable, bounded, constantly-turning
+                     * target -- the enemy can't be outrun and must lead.
+                     * th0 varies per trial so the phase differs. */
+                    const float A8 = 110.0f, W8 = 0.40f;   /* size, rad/s */
+                    float th = BRF(0, 6.2831f);
+                    Vec3 prev = pl->pos;
+                    for (int f = 0; f < 30 * 120; f++) {
+                        th += W8 / 30.0f;
+                        float ct = cosf(th), st = sinf(th);
+                        Vec3 npos = v3(A8 * st, 0, A8 * st * ct);
+                        pl->vel = v3_scale(v3_sub(npos, prev), 30.0f);
+                        prev = npos; pl->pos = npos;
+                        Vec3 tang = v3(A8 * ct, 0, A8 * (ct*ct - st*st));
+                        float tl = v3_len(tang);
+                        if (tl > 1e-4f) {
+                            tang = v3_scale(tang, 1.0f / tl);
+                            pl->basis.r[2] = tang;
+                            pl->basis.r[0] = v3(tang.z, 0, -tang.x);
+                            pl->basis.r[1] = v3(0, 1, 0);
                         }
-                        if (dodging)
-                            aim = v3_add(ep, v3_scale(pl->basis.r[0],
-                                                      jdir * 65.0f));
-                        /* steer toward aim at the PLAYER's turn rate */
-                        Vec3 want = v3_norm(v3_sub(aim, pl->pos));
-                        Vec3 ax = v3_cross(pl->basis.r[2], want);
-                        float sa = v3_len(ax);
-                        if (sa > 1e-4f) {
-                            float a = asinf(sa > 1 ? 1 : sa);
-                            float st = pl->turn_rate * 0.55f * (1.0f/30.0f);
-                            if (st > a) st = a;
-                            m3_rotate_world(&pl->basis,
-                                            v3_scale(ax, 1.0f/sa), st);
-                            m3_orthonormalize(&pl->basis);
-                        }
-                        float d = v3_len(v3_sub(ep, pl->pos));
-                        /* close-quarters dogfight band (~70-130m), where
-                         * fights actually happen and aim matters */
-                        pl->throttle = (d > 150.0f) ? 0.9f
-                                     : (d > 75.0f) ? 0.42f : 0.62f;
                         elite_game_tick(&none, 1.0f/30.0f);
                         if (!pl->alive || pl->hull <= 0) {
                             tkill = (float)f/30.0f; break;
