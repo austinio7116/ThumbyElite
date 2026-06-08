@@ -11,6 +11,26 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 
 ## Changelog
 
+### 1.23.1 (ThumbyOne v1.23.1)
+
+A balance-and-feel patch from playtesting. **No save change.**
+
+- **Enemy aim rebalanced by rank.** Weaker pilots are now genuinely
+  bad shots — a harmless pirate sprays a wide cone and wastes most of
+  its rounds, so a lone low-tier enemy is no longer an urgent threat;
+  veterans and aces keep their near-original precision. All the rank
+  difference lives in accuracy, not damage.
+- **Bigger hit feedback on enemy ships.** Shield hits flash a full
+  blue envelope around the whole ship, hull hits throw a fireball
+  scaled to the blow, and a destroyed component throws a bigger blast
+  — all readable from a distance.
+- **Damage messages name what was hit** — "PULSE-M DAMAGED!",
+  "CLOAK OFFLINE!" instead of "WEAPON 2" / "GADGET".
+- **Engine drone removed** — the constant high-pitched hum is gone;
+  weapons, explosions and the jump carry the soundscape.
+- **Ship status: hold/​tap LB to hide the stat sheet** and look at your
+  hull uninterrupted (in flight and at the station).
+
 ### 1.23 (ThumbyOne v1.23)
 
 The combat update. The whole dogfighting AI was rebuilt, the weapon
