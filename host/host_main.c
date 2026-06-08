@@ -2475,32 +2475,52 @@ int main(int argc, char **argv) {
             g_player.ammo[0] = -1;
             player_apply_to_ship();
             pl->active_w = 0;
-            /* a small belt just ahead */
             extern int loot_positions(Vec3 *, int *, int);
+            extern int rocks_get(int, Vec3 *, float *);
             rocks_spawn_field(0xB17B17u, 6);
+            /* drop the player AT the belt (no long drive): put the
+             * biggest rock ~120m dead ahead along the current nose */
+            {
+                Vec3 rk[8]; int nr = rocks_positions(rk, 8);
+                int big = 0; float bigr = -1.0f;
+                for (int i = 0; i < nr; i++) {
+                    Vec3 rp; float rr;
+                    if (rocks_get(i, &rp, &rr) && rr > bigr) {
+                        bigr = rr; big = i;
+                    }
+                }
+                if (nr > 0)
+                    pl->pos = v3_sub(rk[big],
+                                     v3_scale(pl->basis.r[2], 120.0f));
+            }
+            pl->vel = v3(0, 0, 0);
             MV_IDLE(20);
-            CAP("Line up a rock and hold fire to chip it open");
-            for (int f = 0; f < 30 * 9; f++) {
+            CAP("Close on a rock and hold fire -- the beam chews it open");
+            /* approach the nearest boulder, then SUSTAIN fire on it */
+            int target_rock = -1;
+            for (int f = 0; f < 30 * 11; f++) {
                 Vec3 rk[8]; int nr = rocks_positions(rk, 8);
                 if (nr == 0) break;
-                int bi = 0; float bd = 1e30f;
+                /* lock the first chosen rock; keep mining it till gone */
+                int bi = -1; float bd = 1e30f;
                 for (int i = 0; i < nr; i++) {
                     float d = v3_len(v3_sub(rk[i], pl->pos));
                     if (d < bd) { bd = d; bi = i; }
                 }
-                MV_STEER(rk[bi], 0.06f);
-                pl->throttle = (bd > 140.0f) ? 0.7f
-                             : (bd > 70.0f) ? 0.3f : 0.0f;
-                /* fire when roughly lined up and in range */
+                if (bi < 0) break;
+                MV_STEER(rk[bi], 0.05f);
+                pl->throttle = (bd > 90.0f) ? 0.55f
+                             : (bd > 45.0f) ? 0.22f : 0.0f;
                 Vec3 l = m3_mul_v3_t(&pl->basis, v3_sub(rk[bi], pl->pos));
                 CraftRawButtons b = none;
-                if (bd < 150.0f && l.z > 0 &&
-                    l.x*l.x + l.y*l.y < bd*bd*0.02f) {
+                /* hold fire whenever roughly on the rock and close */
+                if (bd < 130.0f && l.z > 0 &&
+                    l.x*l.x + l.y*l.y < bd*bd*0.03f) {
                     pl->fire_cool = 0; b.a = true;
                 }
                 MV(b);
             }
-            CAP("Ore spills out -- scoop it like any salvage");
+            CAP("The rock shatters -- ore canisters spill out, scoop them");
             pl->throttle = 0.0f;
             for (int c2 = 0; c2 < 8; c2++) {
                 Vec3 cans[6]; int comp[6];
@@ -2712,16 +2732,19 @@ int main(int argc, char **argv) {
         MV_IDLE(20);
         CAP("The ring is your JUMP RANGE -- fuel and drive set how far");
         MV_IDLE(75);
-        CAP("RB cycles DATA LAYERS. Star type colours each sun");
-        MV_TAP(rb, 70);                         /* layer: threat */
-        CAP("THREAT layer: green is safe, red is pirate country");
-        MV_TAP(rb, 70);                         /* layer: faction */
+        /* caption goes BEFORE the RB that shows the layer, so each
+         * comment matches the layer on screen during its dwell */
+        CAP("STAR TYPE layer: each sun coloured by its class");
+        MV_IDLE(60);                            /* dwell on spectral */
+        CAP("RB cycles DATA LAYERS -- THREAT: green safe, red pirate");
+        MV_TAP(rb, 78);                         /* -> threat (shown now) */
         CAP("FACTION layer: who controls each system");
-        MV_TAP(rb, 70);                         /* layer: stations */
-        CAP("STATIONS layer: economies -- the trade map");
-        MV_TAP(rb, 70);                         /* back to spectral */
+        MV_TAP(rb, 78);                         /* -> faction (shown now) */
+        CAP("ECONOMY layer: every station's trade -- the money map");
+        MV_TAP(rb, 78);                         /* -> economy (shown now) */
+        CAP("Back to star types -- pick a destination in range");
+        MV_TAP(rb, 55);                         /* -> spectral */
         MV_IDLE(20);
-        CAP("Pick a star in range -- out of range reads OUT, refuel first");
         {
             /* aim the snap at the nearest in-range neighbour */
             const SystemInfo *si = system_info();
