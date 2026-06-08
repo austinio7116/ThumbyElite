@@ -130,19 +130,8 @@ static void ai_ship(int idx, float dt) {
      * range, veer the steering goal sideways so they strafe PAST the
      * target instead of through it. All tiers. */
     {
-        float avoid = (s->mesh ? s->mesh->bound_r : 4.0f) +
-                      (t->mesh ? t->mesh->bound_r : 4.0f) + 26.0f;
-        if (dist < avoid && dist > 1e-3f) {
-            Vec3 side = v3_cross(dir, s->basis.r[1]);
-            float sl = v3_len(side);
-            if (sl > 1e-3f) {
-                side = v3_scale(side, 1.0f / sl);
-                if (v3_dot(side, s->basis.r[0]) < 0.0f)
-                    side = v3_scale(side, -1.0f);   /* the near side */
-                float urg = 1.0f - dist / avoid;    /* 0 far .. 1 touch */
-                dir = v3_norm(v3_add(dir, v3_scale(side, 2.2f * urg)));
-            }
-        }
+        /* (close-range separation is handled by the turning-fight ORBIT
+         * model below, not a last-second veer) */
     }
 
     /* MISSILE COUNTERMEASURES (user design): CAPABLE+ breaks hard off
@@ -268,6 +257,20 @@ static void ai_ship(int idx, float dt) {
         }
     }
 
+    /* ANTI-RAM GUARD (user: must avoid the crash in normal play). If
+     * we're about to fly through the target and still pointed at it,
+     * force the tight corner-speed peel NOW — catches both the firing
+     * pass and the sweep, before contact. */
+    {
+        float radii = (s->mesh ? s->mesh->bound_r : 4.0f) +
+                      (t->mesh ? t->mesh->bound_r : 4.0f);
+        if (s->ai_state != AI_BREAK && dist < radii + 28.0f &&
+            v3_dot(s->basis.r[2], dir) > -0.1f) {
+            s->ai_state = AI_BREAK;
+            s->ai_timer = 3.0f;
+        }
+    }
+
     switch (s->ai_state) {
     default:
     case AI_NONE:
@@ -296,8 +299,8 @@ static void ai_ship(int idx, float dt) {
          * values clear the ~15m collision range; ship-avoidance is the
          * backstop. (No 'parking' — everyone flies real passes.) */
         {
-            static const float k_brk[5] = { 135.0f, 125.0f, 115.0f,
-                                            105.0f, 95.0f };
+            static const float k_brk[5] = { 80.0f, 78.0f, 74.0f,
+                                            70.0f, 66.0f };
             if (dist < k_brk[tier]) {
                 s->ai_state = AI_BREAK;
                 s->ai_timer = 4.0f;        /* safety cap only */
@@ -372,7 +375,7 @@ static void ai_ship(int idx, float dt) {
          * throttle = tighter radius (blue zone). Better pilots sweep
          * faster/tighter; exit when re-acquired or on timeout. */
         turn_toward(s, dir, dt);
-        s->throttle = (0.40f + 0.10f * (float)tier) * k_fight_speed[tier];
+        s->throttle = 0.45f;   /* corner speed = tight sweep radius */
         s->ai_timer -= dt;
         if (v3_dot(s->basis.r[2], dir) > 0.55f || s->ai_timer <= 0.0f ||
             dist > 700.0f)
@@ -380,16 +383,30 @@ static void ai_ship(int idx, float dt) {
         break;
     }
     case AI_BREAK: {
-        /* Break-until-RANGE, scaled by fighting speed (user-diagnosed
-         * from the kill matrix: fast tiers wheeled around while still
-         * on top of the prey — T3 was slower to kill than T2 with
-         * every weapon. Proper boom-and-zoom: extend, THEN turn in). */
-        float break_out = 150.0f + 200.0f * k_fight_speed[tier];
-        turn_toward(s, v3_norm(v3_add(v3_scale(dir, -1.0f),
-                                      v3_scale(s->basis.r[1], 0.8f))), dt);
-        s->throttle = 1.0f;
+        /* Peel off the firing pass WITHOUT ramming. The bug was
+         * breaking at full throttle: the blue zone gives full speed the
+         * WORST turn rate, so the turn circle (~100m) was bigger than
+         * the break distance and they carved straight into the target.
+         * Fix (user): SLOW to corner speed -> tight turn (~30m radius)
+         * -> the nose whips clear; once pointed away, extend at speed,
+         * then re-engage. Slowing to turn faster, not to cut damage. */
+        float facing = v3_dot(s->basis.r[2], dir);   /* +1 in .. -1 away */
+        Vec3 away = v3_norm(v3_add(v3_scale(dir, -1.0f),
+                                   v3_scale(s->basis.r[1], 0.8f)));
+        turn_toward(s, away, dt);
+        if (facing > -0.25f) {
+            /* still swinging the nose off the target: the CLOSER we
+             * are, the SLOWER we go — tightest turn radius + least
+             * forward creep, so we clear cleanly (user: slow to turn
+             * faster). */
+            float thr = 0.20f + 0.35f * (dist / 150.0f);
+            s->throttle = thr > 0.55f ? 0.55f : thr;
+        } else {
+            s->throttle = 1.0f;        /* nose clear: extend away */
+        }
+        float break_out = 280.0f + 120.0f * k_fight_speed[tier];
         s->ai_timer -= dt;
-        if (dist > break_out || s->ai_timer <= 0.0f)
+        if ((facing < -0.25f && dist > break_out) || s->ai_timer <= 0.0f)
             s->ai_state = AI_ATTACK;
         break;
     }

@@ -247,6 +247,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_SETSHOT") ||
         getenv("ELITE_FLAKTEST") ||
         getenv("ELITE_SWEEPTEST") ||
+        getenv("ELITE_RAMTEST") ||
         getenv("ELITE_DASHTEST") ||
         getenv("ELITE_CRITTEST") ||
         getenv("ELITE_PLANETSHEET") ||
@@ -735,6 +736,59 @@ int main(int argc, char **argv) {
             if (pc > peak) peak = pc;
         }
         printf("[furball] 6 shooters, peak projectiles: %d / 72\n", peak);
+        return 0;
+    }
+
+    /* RAM test: disarmed attackers vs a cruising player — any player
+     * damage is purely collision. Reports closest approach + ram dmg. */
+    if (getenv("ELITE_RAMTEST")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        Ship *pl = &g_ships[0];
+        elite_game_debug_face_away_from_sun();
+        pl->shield = pl->shield_max; pl->hull = pl->hull_max;
+        for (int k = 0; k < 4; k++) {
+            int e = ship_spawn(hull_mesh(0xACE1u + k, 2 + k),
+                               v3_add(pl->pos,
+                                      v3(60.0f*(k-2), 20.0f, 150.0f+40*k)),
+                               TEAM_HOSTILE);
+            ship_set_tier(e, k % 5, 2 + k);
+            g_ships[e].n_weapons = 0;          /* rams only */
+            g_ships[e].turret_type = 0;
+        }
+        float start_hp = pl->shield + pl->hull;
+        float closest = 1e9f; int contacts = 0;
+        CraftRawButtons none = {0};
+        for (int f = 0; f < 30 * 25; f++) {
+            float before = pl->shield + pl->hull;
+            /* player flies a gentle weave at cruise (a real target) */
+            CraftRawButtons b = none;
+            int charge = atoi(getenv("ELITE_RAMTEST")) >= 2;
+            if (charge) {
+                int nr2=-1; float nd=1e9f;
+                for (int i=1;i<MAX_SHIPS;i++){ if(!g_ships[i].alive)continue;
+                  float d=v3_len(v3_sub(g_ships[i].pos,pl->pos));
+                  if(d<nd){nd=d;nr2=i;} }
+                if (nr2>0){ Vec3 to=v3_norm(v3_sub(g_ships[nr2].pos,pl->pos));
+                  pl->basis.r[2]=to;
+                  pl->basis.r[0]=v3_norm(v3_cross(v3(0,1,0),to));
+                  pl->basis.r[1]=v3_cross(to,pl->basis.r[0]);
+                  pl->vel=v3_scale(to,70.0f); }
+            } else {
+                b.up = (f/45)&1; b.down=!((f/45)&1);   /* gentle weave */
+            }
+            elite_game_tick(&b, 1.0f / 30.0f);
+            for (int i = 1; i < MAX_SHIPS; i++) {
+                if (!g_ships[i].alive) continue;
+                float d = v3_len(v3_sub(g_ships[i].pos, pl->pos));
+                if (d < closest && f > 45) closest = d;
+            }
+            if (pl->shield + pl->hull < before - 0.5f) contacts++;
+            if (!pl->alive) break;
+        }
+        printf("[ram] closest approach %.0fm, %d damage frames, "
+               "ram dmg taken %.0f (%s)\n", closest, contacts,
+               start_hp - (pl->shield + pl->hull),
+               contacts == 0 ? "NO RAMS" : "RAMMED");
         return 0;
     }
 
