@@ -1071,13 +1071,12 @@ int main(int argc, char **argv) {
         extern uint32_t g_dbg_npc_shots, g_dbg_player_hits;
         /* store per (weapon,tier): avg shots fired + avg hit% */
         static float g_shots[WPN_COUNT][5], g_hitpc[WPN_COUNT][5];
+        static float g_ttk[WPN_COUNT][5];   /* <0 = no kill (>cap) */
         uint32_t br = 0x1234567u;
         #define BR() (br ^= br<<13, br ^= br>>17, br ^= br<<5, br)
         #define BRF(a,b) ((a) + ((b)-(a)) * ((BR() & 0xFFFF) / 65535.0f))
-        printf("[bench] %-9s  T0     T1     T2     T3     T4\n", "WEAPON");
         for (int wt = 0; wt < WPN_COUNT; wt++) {
             if (wt == WPN_MINE || wt == WPN_TRACTOR) continue;
-            printf("[bench] %-9s", k_weapons[wt].name);
             for (int tier = 0; tier <= 4; tier++) {
                 float tsum = 0; int tn = 0, surv = 0;
                 float csh = 0, chit = 0;
@@ -1108,33 +1107,47 @@ int main(int argc, char **argv) {
                     t2->ai_target = 0;
                     float tkill = -1; CraftRawButtons none = {0};
                     g_dbg_npc_shots = 0; g_dbg_player_hits = 0;
-                    /* SLOW FIGURE-8 (lemniscate of Gerono) around the
-                     * origin: a predictable, bounded, constantly-turning
-                     * target -- the enemy can't be outrun and must lead.
-                     * th0 varies per trial so the phase differs. */
-                    const float A8 = 110.0f, W8 = 0.40f;   /* size, rad/s */
-                    float th = BRF(0, 6.2831f);
-                    Vec3 prev = pl->pos;
+                    /* RACETRACK FIGURE-8: long STRAIGHT runs (66% speed,
+                     * predictable -> the enemy gets a clean continuous
+                     * firing solution so the shield-regen delay never
+                     * resets) joined by SLOW half-loop turns (50% speed),
+                     * alternating direction = a figure-8. Phase/dir vary
+                     * per trial. */
+                    float maxv = pl->max_speed;
+                    const float L_STRAIGHT = 270.0f;   /* long straights */
+                    const float TURN_RATE = 1.10f;     /* 180 deg in ~2.9s < shield delay */
+                    float psi = BRF(0, 6.2831f);
+                    Vec3 pos = v3(0, 0, -120);
+                    int st8 = 0; float seg = 0, tacc = 0;
+                    float tsign = (BR() & 1) ? 1.0f : -1.0f;
+                    Vec3 prev = pos;
                     for (int f = 0; f < 30 * 120; f++) {
-                        th += W8 / 30.0f;
-                        float ct = cosf(th), st = sinf(th);
-                        Vec3 npos = v3(A8 * st, 0, A8 * st * ct);
-                        pl->vel = v3_scale(v3_sub(npos, prev), 30.0f);
-                        prev = npos; pl->pos = npos;
-                        Vec3 tang = v3(A8 * ct, 0, A8 * (ct*ct - st*st));
-                        float tl = v3_len(tang);
-                        if (tl > 1e-4f) {
-                            tang = v3_scale(tang, 1.0f / tl);
-                            pl->basis.r[2] = tang;
-                            pl->basis.r[0] = v3(tang.z, 0, -tang.x);
-                            pl->basis.r[1] = v3(0, 1, 0);
+                        float speed;
+                        if (st8 == 0) {                /* STRAIGHT */
+                            speed = maxv * 0.66f;
+                            seg += speed / 30.0f;
+                            if (seg >= L_STRAIGHT) { st8 = 1; tacc = 0; }
+                        } else {                       /* SLOW TURN */
+                            speed = maxv * 0.50f;
+                            float dpsi = TURN_RATE / 30.0f * tsign;
+                            psi += dpsi; tacc += dpsi < 0 ? -dpsi : dpsi;
+                            if (tacc >= 3.14159f) {     /* half loop done */
+                                st8 = 0; seg = 0; tsign = -tsign;
+                            }
                         }
-                        elite_game_tick(&none, 1.0f/30.0f);
+                        Vec3 dir = v3(sinf(psi), 0, cosf(psi));
+                        pos = v3_add(pos, v3_scale(dir, speed / 30.0f));
+                        pl->vel = v3_scale(v3_sub(pos, prev), 30.0f);
+                        prev = pos; pl->pos = pos;
+                        pl->basis.r[2] = dir;
+                        pl->basis.r[0] = v3(dir.z, 0, -dir.x);
+                        pl->basis.r[1] = v3(0, 1, 0);
+                        elite_game_tick(&none, 1.0f / 30.0f);
                         if (!pl->alive || pl->hull <= 0) {
-                            tkill = (float)f/30.0f; break;
+                            tkill = (float)f / 30.0f; break;
                         }
                     }
-                    if (tkill >= 0) { tsum += tkill; tn++; } else surv++;
+                                        if (tkill >= 0) { tsum += tkill; tn++; } else surv++;
                     csh += (float)g_dbg_npc_shots;
                     chit += (float)g_dbg_player_hits;
                     g_ships[e].alive = false; g_ships[0].alive = true;
@@ -1142,21 +1155,24 @@ int main(int argc, char **argv) {
                 }
                 g_shots[wt][tier] = csh / (NT > 0 ? NT : 1);
                 g_hitpc[wt][tier] = csh > 0 ? 100.0f * chit / csh : 0.0f;
-                if (tn > NT/2) printf(" %6.1f", tsum/tn);
-                else printf("  >120s");
+                g_ttk[wt][tier] = (tn > NT/2) ? tsum/tn : -1.0f;
             }
-            printf("\n");
         }
-        /* second pass: shots fired (avg) and hit-rate %% */
-        printf("[bench] --- shots fired (avg) / hit-rate %% ---\n");
-        printf("[bench] %-9s  T0        T1        T2        T3        T4\n",
+        /* ONE combined table: time-to-kill (s) and hit-rate %% per cell */
+        printf("[bench] === kill-time(s) / hit-rate%% -- slow figure-8 target ===\n");
+        printf("[bench] %-9s   T0         T1         T2         T3         T4\n",
                "WEAPON");
         for (int wt = 0; wt < WPN_COUNT; wt++) {
             if (wt == WPN_MINE || wt == WPN_TRACTOR) continue;
             printf("[bench] %-9s", k_weapons[wt].name);
-            for (int tier = 0; tier <= 4; tier++)
-                printf(" %5.0f/%2.0f%%", g_shots[wt][tier],
-                       g_hitpc[wt][tier]);
+            for (int tier = 0; tier <= 4; tier++) {
+                if (g_ttk[wt][tier] < 0)
+                    printf("  >cap/%2.0f%%/%4.0fsh", g_hitpc[wt][tier],
+                           g_shots[wt][tier]);
+                else
+                    printf(" %5.1f/%2.0f%%/%4.0fsh", g_ttk[wt][tier],
+                           g_hitpc[wt][tier], g_shots[wt][tier]);
+            }
             printf("\n");
         }
         #undef BR
