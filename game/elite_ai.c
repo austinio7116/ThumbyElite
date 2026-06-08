@@ -202,6 +202,7 @@ static void ai_ship(int idx, float dt) {
         static float s_scissor_t[MAX_SHIPS];
         static int8_t s_scissor_side[MAX_SHIPS];
         static float s_evade_t[MAX_SHIPS], s_sweep_at[MAX_SHIPS];
+        static float s_juke_t[MAX_SHIPS]; static uint8_t s_juking[MAX_SHIPS];
         s_chop_cd[idx] -= dt;
         int tailed = dist < 220.0f &&
                      v3_dot(dir, s->basis.r[2]) < -0.30f &&
@@ -235,28 +236,41 @@ static void ai_ship(int idx, float dt) {
             return;
         }
         if (tailed && s->ai_state != AI_SWEEP) {
-            /* EVADE — intensity by skill; veterans chop, the rest jink.
-             * Prey jink hard too now (no hopeless straight run that they
-             * can never escape, then they SWEEP). */
-            if (tier >= 3 && s_chop_cd[idx] <= 0.0f) {
-                s_chop_t[idx] = 1.1f;
-                s_chop_cd[idx] = 4.5f;
+            /* JUKE only SOMETIMES, by rank (user: too much weaving makes
+             * fights drag — a dodging target is too hard to hit with a
+             * d-pad). Greens mostly fly PREDICTABLY (hittable); aces
+             * juke often; everyone has windows. Re-rolled each ~2s.
+             * (Missile-dodging is separate and always on.) */
+            s_juke_t[idx] -= dt;
+            if (s_juke_t[idx] <= 0.0f) {
+                static const int k_juke[5] = { 6, 16, 30, 55, 80 };
+                s_juking[idx] = ((int)(frnd_pub() % 100u) < k_juke[tier]);
+                s_juke_t[idx] = 1.3f + (float)(frnd_pub() % 100u) * 0.012f;
+            }
+            if (s_juking[idx]) {
+                if (tier >= 3 && s_chop_cd[idx] <= 0.0f) {
+                    s_chop_t[idx] = 1.1f;
+                    s_chop_cd[idx] = 4.5f;
+                    return;
+                }
+                s_scissor_t[idx] -= dt;
+                if (s_scissor_t[idx] <= 0.0f) {
+                    s_scissor_t[idx] = (tier >= 4) ? 0.7f
+                                     : (tier >= 2) ? 1.0f : 1.3f;
+                    s_scissor_side[idx] = (s_scissor_side[idx] >= 0)
+                                              ? -1 : 1;
+                }
+                Vec3 brk = v3_add(v3_scale(dir, -0.30f),
+                                  v3_scale(s->basis.r[0],
+                                           (float)s_scissor_side[idx]));
+                brk = v3_add(brk, v3_scale(s->basis.r[1],
+                                           0.4f * (float)s_scissor_side[idx]));
+                turn_toward(s, v3_norm(brk), dt);
+                s->throttle = 0.85f * k_fight_speed[tier];
                 return;
             }
-            s_scissor_t[idx] -= dt;
-            if (s_scissor_t[idx] <= 0.0f) {
-                s_scissor_t[idx] = (tier >= 4) ? 0.7f
-                                 : (tier >= 2) ? 1.0f : 1.3f;
-                s_scissor_side[idx] = (s_scissor_side[idx] >= 0) ? -1 : 1;
-            }
-            Vec3 brk = v3_add(v3_scale(dir, -0.30f),
-                              v3_scale(s->basis.r[0],
-                                       (float)s_scissor_side[idx]));
-            brk = v3_add(brk, v3_scale(s->basis.r[1],
-                                       0.4f * (float)s_scissor_side[idx]));
-            turn_toward(s, v3_norm(brk), dt);
-            s->throttle = 0.85f * k_fight_speed[tier];
-            return;
+            /* not juking: fall through to normal flight — turn back to
+             * face the threat predictably (hittable). */
         }
     }
 

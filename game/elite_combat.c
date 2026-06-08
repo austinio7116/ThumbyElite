@@ -405,12 +405,19 @@ int combat_fire(int shooter, float spread, int target) {
         if (al > 1e-3f) dir = v3_scale(ad, 1.0f / al);
     }
     if (spread > 0.0f) {
-        uint32_t r = (uint32_t)(s->pos.x * 131.0f + s->pos.z * 17.0f)
-                     ^ (uint32_t)(s->heat * 1e3f) ^ (uint32_t)shooter;
-        r ^= r << 13; r ^= r >> 17; r ^= r << 5;
-        float a = ((r & 0xFF) / 255.0f - 0.5f) * 2.0f * spread;
-        r ^= r << 13; r ^= r >> 17; r ^= r << 5;
-        float b = ((r & 0xFF) / 255.0f - 0.5f) * 2.0f * spread;
+        /* PER-SHOT spread (user): advance a real RNG every shot so a
+         * BURST sprays across the arc — some rounds hit, some miss,
+         * like a real stream — instead of the whole burst sharing one
+         * offset (the old seed barely changed during a burst, so they
+         * 'missed every shot'). */
+        static uint32_t s_sprng = 0x9E3779B9u;
+        s_sprng ^= (uint32_t)shooter * 2654435761u;
+        s_sprng ^= s_sprng << 13; s_sprng ^= s_sprng >> 17;
+        s_sprng ^= s_sprng << 5;
+        float a = ((s_sprng & 0xFFFF) / 65535.0f - 0.5f) * 2.0f * spread;
+        s_sprng ^= s_sprng << 13; s_sprng ^= s_sprng >> 17;
+        s_sprng ^= s_sprng << 5;
+        float b = ((s_sprng & 0xFFFF) / 65535.0f - 0.5f) * 2.0f * spread;
         dir = v3_norm(v3_add(dir, v3_add(v3_scale(s->basis.r[0], a),
                                          v3_scale(s->basis.r[1], b))));
     }
