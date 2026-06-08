@@ -152,10 +152,16 @@ int combat_pkiller(void) { return s_pkiller; }
 int combat_pkiller_env(void) { return s_pkiller_env; }
 void combat_note_env_hit(int kind) { s_pkiller_env = kind; s_pkiller = -1; }
 
+/* Bench diagnostics: NPC trigger pulls that fire, and shots that land
+ * on the player. Free-running; the harness resets/reads them. */
+uint32_t g_dbg_npc_shots = 0;
+uint32_t g_dbg_player_hits = 0;
+
 void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
     if (victim == PLAYER && shooter > 0 && dmg > 0) {
         s_pkiller = shooter;
         s_pkiller_env = 0;
+        g_dbg_player_hits++;
     }
     Ship *v = &g_ships[victim];
     if (!v->alive) return;
@@ -354,6 +360,7 @@ int combat_fire(int shooter, float spread, int target) {
     } else if (s->crits & (CRIT_WPN0 << s->active_w)) {
         return -1;
     }
+    if (shooter != PLAYER) g_dbg_npc_shots++;
     const WeaponDef *w = &k_weapons[s->weapons[s->active_w]];
 
     /* Player: component quality/integrity + affix + gunnery skill. */

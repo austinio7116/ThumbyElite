@@ -1068,6 +1068,9 @@ int main(int argc, char **argv) {
          * that trips the anti-ram break-off. */
         extern const Mesh *hull_mesh(uint32_t, int);
         int NT = atoi(getenv("ELITE_BENCH")); if (NT < 1) NT = 6;
+        extern uint32_t g_dbg_npc_shots, g_dbg_player_hits;
+        /* store per (weapon,tier): avg shots fired + avg hit% */
+        static float g_shots[WPN_COUNT][5], g_hitpc[WPN_COUNT][5];
         uint32_t br = 0x1234567u;
         #define BR() (br ^= br<<13, br ^= br>>17, br ^= br<<5, br)
         #define BRF(a,b) ((a) + ((b)-(a)) * ((BR() & 0xFFFF) / 65535.0f))
@@ -1077,6 +1080,7 @@ int main(int argc, char **argv) {
             printf("[bench] %-9s", k_weapons[wt].name);
             for (int tier = 0; tier <= 4; tier++) {
                 float tsum = 0; int tn = 0, surv = 0;
+                float csh = 0, chit = 0;
                 for (int trial = 0; trial < NT; trial++) {
                     g_player.hull_id = 0; g_player.hull_seed = 0x5EEDu;
                     memset(g_player.mounts, 0, sizeof g_player.mounts);
@@ -1103,6 +1107,7 @@ int main(int argc, char **argv) {
                     t2->hull = t2->hull_max = 1e9f;   /* immortal enemy */
                     t2->ai_target = 0;
                     float tkill = -1; CraftRawButtons none = {0};
+                    g_dbg_npc_shots = 0; g_dbg_player_hits = 0;
                     /* SLOW FIGURE-8 (lemniscate of Gerono) around the
                      * origin: a predictable, bounded, constantly-turning
                      * target -- the enemy can't be outrun and must lead.
@@ -1130,12 +1135,28 @@ int main(int argc, char **argv) {
                         }
                     }
                     if (tkill >= 0) { tsum += tkill; tn++; } else surv++;
+                    csh += (float)g_dbg_npc_shots;
+                    chit += (float)g_dbg_player_hits;
                     g_ships[e].alive = false; g_ships[0].alive = true;
                     proj_clear_all();
                 }
+                g_shots[wt][tier] = csh / (NT > 0 ? NT : 1);
+                g_hitpc[wt][tier] = csh > 0 ? 100.0f * chit / csh : 0.0f;
                 if (tn > NT/2) printf(" %6.1f", tsum/tn);
                 else printf("  >120s");
             }
+            printf("\n");
+        }
+        /* second pass: shots fired (avg) and hit-rate %% */
+        printf("[bench] --- shots fired (avg) / hit-rate %% ---\n");
+        printf("[bench] %-9s  T0        T1        T2        T3        T4\n",
+               "WEAPON");
+        for (int wt = 0; wt < WPN_COUNT; wt++) {
+            if (wt == WPN_MINE || wt == WPN_TRACTOR) continue;
+            printf("[bench] %-9s", k_weapons[wt].name);
+            for (int tier = 0; tier <= 4; tier++)
+                printf(" %5.0f/%2.0f%%", g_shots[wt][tier],
+                       g_hitpc[wt][tier]);
             printf("\n");
         }
         #undef BR
