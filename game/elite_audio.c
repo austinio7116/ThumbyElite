@@ -28,7 +28,6 @@ static uint16_t s_lfsr = 0xACE1u;
 /* Engine hum. */
 static float s_eng_freq = 40.0f, s_eng_amp = 0.0f;
 static float s_eng_freq_t = 40.0f, s_eng_amp_t = 0.0f;
-static float s_eng_lp = 0.0f;     /* low-passed noise -> thruster rumble */
 static uint32_t s_eng_phase;
 
 void audio_init(void) {
@@ -226,8 +225,11 @@ void sfx_klaxon(void) {
 void audio_engine_set(float throttle01, float speed01) {
     /* Pure-sine turbine whine, well inside the speaker passband. The
      * saw version ticked: a sawtooth IS a per-cycle discontinuity. */
-    s_eng_freq_t = 210.0f + 140.0f * throttle01;   /* low body, not a whine */
-    s_eng_amp_t = 0.05f + 0.11f * speed01;
+    /* Engine drone REMOVED (user): both a pure-sine whine and a noise
+     * rumble sounded bad on the speaker. Silent; weapons/explosions/
+     * docking carry the audio. Kept as a hook for a future redo. */
+    s_eng_freq_t = 220.0f + 140.0f * throttle01;
+    s_eng_amp_t = 0.0f;
 }
 
 /* --- mixing ------------------------------------------------------------*/
@@ -262,18 +264,14 @@ int audio_render(int16_t *out, int n) {
     for (int s = 0; s < n; s++) {
         int32_t mix = 0;
 
-        /* Engine: a textured THRUSTER, not a pure-sine whine (user).
-         * A quiet low body tone for pitch + a low-pass-filtered noise
-         * rumble that carries on the tiny speaker and reads like a
-         * drive, not a dentist's drill. */
-        s_eng_freq += (s_eng_freq_t - s_eng_freq) * 0.0004f;
+        /* Engine drone removed (amp 0) — see audio_engine_set. */
         s_eng_amp += (s_eng_amp_t - s_eng_amp) * 0.0004f;
-        s_eng_phase += (uint32_t)(s_eng_freq * 65536.0f * dt);
-        float _body = (float)wave_sample(W_SINE, s_eng_phase) *
-                      s_eng_amp * 0.35f;
-        float _n = (float)wave_sample(W_NOISE, 0) * (1.0f / 11000.0f);
-        s_eng_lp += (_n - s_eng_lp) * 0.05f;          /* ~200 Hz rumble */
-        mix += (int32_t)(_body + s_eng_lp * 22000.0f * s_eng_amp);
+        if (s_eng_amp > 0.0005f) {
+            s_eng_freq += (s_eng_freq_t - s_eng_freq) * 0.0004f;
+            s_eng_phase += (uint32_t)(s_eng_freq * 65536.0f * dt);
+            mix += (int32_t)((float)wave_sample(W_SINE, s_eng_phase) *
+                             s_eng_amp);
+        }
 
         for (int i = 0; i < N_VOICES; i++) {
             Voice *v = &s_v[i];
