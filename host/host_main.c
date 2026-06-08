@@ -1104,25 +1104,25 @@ int main(int argc, char **argv) {
                     t2->ai_target = 0;
                     float jink_t = 0; int dodging = 0; float jdir = 1;
                     float tkill = -1; CraftRawButtons none = {0};
-                    for (int f = 0; f < 30 * 45; f++) {
+                    for (int f = 0; f < 30 * 120; f++) {  /* high cap: keep the tail signal */
                         Vec3 ep = g_ships[e].pos;
                         Vec3 aim = ep;
                         jink_t -= 1.0f/30.0f;
                         if (jink_t <= 0) {
-                            jink_t = BRF(0.7f, 1.7f);
-                            dodging = ((BR() % 100u) < 30u);  /* imperfect */
+                            jink_t = BRF(0.9f, 2.2f);
+                            dodging = ((BR() % 100u) < 10u);  /* mostly straight at it */
                             jdir = (BR() & 1) ? 1.0f : -1.0f;
                         }
                         if (dodging)
                             aim = v3_add(ep, v3_scale(pl->basis.r[0],
-                                                      jdir * 220.0f));
+                                                      jdir * 65.0f));
                         /* steer toward aim at the PLAYER's turn rate */
                         Vec3 want = v3_norm(v3_sub(aim, pl->pos));
                         Vec3 ax = v3_cross(pl->basis.r[2], want);
                         float sa = v3_len(ax);
                         if (sa > 1e-4f) {
                             float a = asinf(sa > 1 ? 1 : sa);
-                            float st = pl->turn_rate * 0.92f * (1.0f/30.0f);
+                            float st = pl->turn_rate * 0.55f * (1.0f/30.0f);
                             if (st > a) st = a;
                             m3_rotate_world(&pl->basis,
                                             v3_scale(ax, 1.0f/sa), st);
@@ -1142,8 +1142,8 @@ int main(int argc, char **argv) {
                     g_ships[e].alive = false; g_ships[0].alive = true;
                     proj_clear_all();
                 }
-                if (tn > NT/2) printf(" %5.1f", tsum/tn);
-                else printf("  >45s");
+                if (tn > NT/2) printf(" %6.1f", tsum/tn);
+                else printf("  >120s");
             }
             printf("\n");
         }
