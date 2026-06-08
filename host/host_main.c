@@ -2260,9 +2260,14 @@ int main(int argc, char **argv) {
     if (getenv("ELITE_MOVIE")) {
         static int mf = 0;
         CraftRawButtons none = {0};
+        /* Capture the game's audio synced to frames: 22050/30 = 735
+         * samples per frame, streamed to a WAV the compositor muxes. */
+        FILE *gwav = fopen("/tmp/guide_audio.raw", "wb");
         #define MV(btns) do { \
             CraftRawButtons _mv_b = (btns); \
             elite_game_tick(&_mv_b, 1.0f / 30.0f); \
+            if (gwav) { int16_t _ab[735]; audio_render(_ab, 735); \
+                        fwrite(_ab, 2, 735, gwav); } \
             render_frame(); \
             char _p[64]; \
             snprintf(_p, sizeof _p, "/tmp/movie/f_%05d.ppm", mf++); \
@@ -2565,6 +2570,7 @@ int main(int argc, char **argv) {
             MV(b);
         }
         MV_IDLE(60);
+        if (gwav) fclose(gwav);
         printf("[movie] %d frames\n", mf);
         return 0;
     }
