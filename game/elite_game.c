@@ -419,17 +419,21 @@ static void spawn_poi_content(void) {
                 cv->civ_kind = (uint8_t)(cls == 6 ? 0 : 1);
                 cv->team = TEAM_NEUTRAL;
                 cv->turret_type = 0;
-                cv->hull = cv->hull_max * 0.6f;   /* already hurting */
-                cv->shield = cv->shield_max * 0.3f;
+                /* A STURDY hauler at near-full HP (user: victims were
+                 * dying in 1-2s) -- gives the player time to arrive. */
+                cv->hull_max *= 2.4f;
+                cv->shield_max *= 1.7f;
+                cv->hull = cv->hull_max;
+                cv->shield = cv->shield_max * 0.8f;
                 s_distress_civ = civ;
                 int npir = 1 + (int)si->threat / 2;
                 if (npir > 3) npir = 3;
                 int first_pir = -1;
                 for (int k = 0; k < npir; k++) {
                     float a2 = frand(0, 6.2831f);
-                    Vec3 pp = v3_add(cpos, v3(cosf(a2) * 160.0f,
-                                              frand(-60, 60),
-                                              sinf(a2) * 160.0f));
+                    Vec3 pp = v3_add(cpos, v3(cosf(a2) * 430.0f,
+                                              frand(-110, 110),
+                                              sinf(a2) * 430.0f));
                     int tier = (int)si->threat - 1;
                     if (tier < 0) tier = 0;
                     int pcls = 1 + tier;
