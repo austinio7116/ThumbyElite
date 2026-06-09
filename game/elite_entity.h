@@ -56,6 +56,7 @@ typedef struct {
     float shield_regen;      /* pts/s (variant-dependent) */
     float shield_delay;      /* s after a hit before regen */
     uint8_t shield_var, armor_var;   /* SHV_* / ARV_* */
+    uint8_t shield_tier, armor_tier; /* rolled defensive kit (0=none,1-3=Z) */
     uint8_t is_police;       /* lawful Viper — killing it has a price */
     uint8_t is_civilian;     /* miner/cargo traffic — attacking is crime */
     uint8_t ai_target;       /* entity this ship's AI fights (0=player) */

@@ -304,7 +304,7 @@ void combat_finalize_kill(int shooter, int victim) {
     if (victim == PLAYER) plat_rumble(1.0f, 0.7f);
     if (victim != PLAYER) {
         if (shooter == PLAYER) s_kills++;
-        loot_on_kill(v->pos, v->vel, v->tier, v->weapons, v->n_weapons);
+        loot_on_kill(v->pos, v->vel, v->tier, v);
         if (shooter == PLAYER)
             mission_on_kill(v->tier, v->is_mark != 0, v->is_civilian != 0);
     }

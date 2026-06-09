@@ -515,7 +515,7 @@ static void spawn_poi_content(void) {
                               sinf(a) * r);
                 loot_on_kill(pos, v3(frand(-2, 2), frand(-2, 2),
                                      frand(-2, 2)),
-                             (int)si->threat, NULL, 0);
+                             (int)si->threat, NULL);
             }
         }
     }

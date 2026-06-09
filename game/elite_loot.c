@@ -51,7 +51,7 @@ void loot_init(void) {
 }
 
 void loot_on_kill(Vec3 pos, Vec3 vel, int tier,
-                  const uint8_t *loadout, int n_loadout) {
+                  const Ship *victim) {
     /* Mix kill-site bits into the stream: without this the sequence is
      * identical every boot and the first salvage is ALWAYS the same
      * weapon (user-reported: eternal PULSE-M). */
@@ -74,17 +74,23 @@ void loot_on_kill(Vec3 pos, Vec3 vel, int tier,
          * better-kept gear). */
         c->is_component = (rnd() % 100u) < (uint32_t)(30 + tier * 10);
         if (c->is_component) {
-            /* 1 in 4 components is equipment (shield/armor). */
-            if ((rnd() % 4u) == 0) {
-                c->comp.type = (uint8_t)(WPN_COUNT + (rnd() & 1));
-                c->comp.tier = (uint8_t)(1 + rnd() % 3u);
-                c->comp.affix = (uint8_t)(rnd() % 4u);   /* variant */
+            /* Drops are the ship's ACTUAL kit (user): 1-in-4 its real
+             * ARMOUR/SHIELD (rolled tier+variant), else a gun from its
+             * real loadout. Fall back to random only for ambient debris
+             * / tests where we have no ship. */
+            int has_def = victim &&
+                          (victim->shield_tier || victim->armor_tier);
+            if ((rnd() % 4u) == 0 && has_def) {
+                int armor = victim->armor_tier &&
+                            ((rnd() & 1) || !victim->shield_tier);
+                c->comp.type = (uint8_t)(WPN_COUNT + (armor ? 1 : 0));
+                c->comp.tier = armor ? victim->armor_tier
+                                     : victim->shield_tier;
+                c->comp.affix = armor ? victim->armor_var
+                                      : victim->shield_var;
             } else {
-                /* A WEAPON the ship was actually flying (user) -- pick
-                 * from its real loadout; only fall back to random if we
-                 * weren't handed one (ambient debris, tests). */
-                c->comp.type = (loadout && n_loadout > 0)
-                    ? loadout[rnd() % (uint32_t)n_loadout]
+                c->comp.type = (victim && victim->n_weapons > 0)
+                    ? victim->weapons[rnd() % (uint32_t)victim->n_weapons]
                     : (uint8_t)(rnd() % WPN_COUNT);
                 c->comp.tier = 0;
             }
@@ -270,6 +276,12 @@ void loot_tractor_pull(Vec3 to, float range, float speed) {
         if (dist > range || dist < 4.0f) continue;
         c->vel = v3_scale(d, speed / dist);
     }
+}
+
+int loot_dbg_comp_type(int slot) {
+    if (slot < 0 || slot >= MAX_CANS || !s_cans[slot].alive ||
+        !s_cans[slot].is_component) return -1;
+    return s_cans[slot].comp.type;
 }
 
 int loot_positions(Vec3 *out, int *is_component, int max) {

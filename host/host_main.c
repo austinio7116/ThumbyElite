@@ -241,6 +241,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_SPEEDKILL") ||
         getenv("ELITE_BENCH") ||
         getenv("ELITE_HPMATRIX") ||
+        getenv("ELITE_NPCHP") ||
         getenv("ELITE_ASSASSTEST") ||
         getenv("ELITE_KILLSCREEN") ||
         getenv("ELITE_FURBALL") ||
@@ -1092,6 +1093,48 @@ int main(int argc, char **argv) {
         int paid = mission_collect(si, 0);
         printf("[assass] collected=%d credits %d->%d\n", paid, cr0,
                g_player.credits);
+        return 0;
+    }
+
+    if (getenv("ELITE_NPCHP")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        extern void loot_on_kill(Vec3, Vec3, int, const Ship *);
+        extern int loot_positions(Vec3 *, int *, int);
+        printf("[npchp] SPARROW hull/shield per rank (was bare ~56/44 @T0):\n");
+        for (int tr = 0; tr <= 4; tr++) {
+            int e = ship_spawn(hull_mesh(0xABCDu + tr*7, 2), v3(0,0,300),
+                               TEAM_HOSTILE);
+            ship_set_tier(e, tr, 2);
+            printf("[npchp] T%d  hull=%4.0f shield=%4.0f  (armZ%d shdZ%d)\n",
+                   tr, g_ships[e].hull_max, g_ships[e].shield_max,
+                   g_ships[e].armor_tier, g_ships[e].shield_tier);
+            g_ships[e].alive = false;
+        }
+        /* drop check: kill a tier-3 NPC, count armour/shield canisters */
+        extern void loot_init(void);
+        int armsh = 0, wpn = 0, commod = 0, nodrop = 0;
+        for (int trial = 0; trial < 300; trial++) {
+            loot_init();
+            int e = ship_spawn(hull_mesh(0x1234u + trial*13, 4), v3(0,0,300),
+                               TEAM_HOSTILE);
+            ship_set_tier(e, 3, 4);
+            loot_on_kill(v3(trial*40,0,0), v3(0,0,0), 3, &g_ships[e]);
+            g_ships[e].alive = false;
+            extern int loot_dbg_comp_type(int);
+            int found = -2;
+            for (int sl = 0; sl < 6; sl++) {
+                int t2 = loot_dbg_comp_type(sl);
+                if (t2 >= 0) { found = t2; break; }
+            }
+            Vec3 cans[8]; int comp[8];
+            int n = loot_positions(cans, comp, 8);
+            if (n == 0) { nodrop++; continue; }
+            if (found >= WPN_COUNT) armsh++;
+            else if (found >= 0) wpn++;
+            else commod++;
+        }
+        printf("[npchp] 300 REAVER kills: %d armour/shield, %d weapon, %d commodity, %d no-drop\n",
+               armsh, wpn, commod, nodrop);
         return 0;
     }
 
@@ -2641,7 +2684,7 @@ int main(int argc, char **argv) {
         /* Phase 3: salvage run — lock loot, fly to it, scoop. */
         extern int loot_positions(Vec3 *, int *, int);
         loot_on_kill(v3_add(pl->pos, v3_scale(pl->basis.r[2], 120.0f)),
-                     v3(0, 0, 0), 2, NULL, 0);           /* guaranteed wreckage */
+                     v3(0, 0, 0), 2, NULL);           /* guaranteed wreckage */
         for (int c2 = 0; c2 < 2; c2++) {
             MV_TAP(lb, 2);                      /* salvage lock */
             for (int f = 0; f < 700; f++) {
@@ -3347,14 +3390,14 @@ int main(int argc, char **argv) {
 
     /* Salvage test: force component drops next to the player, scoop. */
     if (getenv("ELITE_LOOTTEST")) {
-        extern void loot_on_kill(Vec3 pos, Vec3 vel, int tier, const uint8_t *, int);
+        extern void loot_on_kill(Vec3 pos, Vec3 vel, int tier, const Ship *);
         CraftRawButtons none = {0};
         for (int k = 0; k < 10; k++) elite_game_tick(&none, 1.0f / 30.0f);
         Ship *p = &g_ships[0];
         p->vel = v3(0, 0, 0);
         p->throttle = 0;
         for (int i = 0; i < 8; i++)
-            loot_on_kill(v3_add(p->pos, v3(5, 0, 14)), v3(0, 0, 0), 4, NULL, 0);
+            loot_on_kill(v3_add(p->pos, v3(5, 0, 14)), v3(0, 0, 0), 4, NULL);
         for (int k = 0; k < 90; k++) elite_game_tick(&none, 1.0f / 30.0f);
         int rack = 0;
         for (int i = 0; i < MAX_SALVAGE; i++)
