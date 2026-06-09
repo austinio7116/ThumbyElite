@@ -31,17 +31,34 @@
 #include "elite_proj.h"
 #include "elite_input.h"
 #include "elite_loot.h"
+#include "elite_ships.h"
+#include "r3d_scene.h"
+#include "r3d_pipe.h"
+#include "vec.h"
 
 #include <SDL2/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
+#ifdef ELITE_OVERLAY_SPLIT
+/* Android-preview build: 3D renders physical (R3D_SS x), the 2D overlay
+ * draws into its own logical key-colour buffer, and we composite — the
+ * same path the Android shell uses. */
+#define SCALE 3
+#define OUT_W R3D_FB_W
+#define OUT_H R3D_FB_H
+static uint16_t g_fb3d[R3D_FB_W * R3D_FB_H];
+static uint16_t g_fbui[ELITE_FB_W * ELITE_FB_H];
+static uint16_t g_fb[R3D_FB_W * R3D_FB_H];      /* composited */
+#else
 #define SCALE 5
-#define WIN_W (ELITE_FB_W * SCALE)
-#define WIN_H (ELITE_FB_H * SCALE)
-
+#define OUT_W ELITE_FB_W
+#define OUT_H ELITE_FB_H
 static uint16_t g_fb[ELITE_FB_W * ELITE_FB_H];
+#endif
+#define WIN_W (OUT_W * SCALE)
+#define WIN_H (OUT_H * SCALE)
 
 /* --- platform hooks ----------------------------------------------------*/
 static int s_host_settings[2] = { 10, 255 };   /* volume, brightness */
@@ -77,17 +94,39 @@ static void audio_cb(void *ud, Uint8 *stream, int len) {
     audio_render((int16_t *)stream, len / (int)sizeof(int16_t));
 }
 
+#ifdef ELITE_OVERLAY_SPLIT
+static void render_frame(void) {
+    elite_game_render_begin();
+    elite_game_render(g_fb3d, 0, ELITE_FB_H);
+    for (int i = 0; i < ELITE_FB_W * ELITE_FB_H; i++)
+        g_fbui[i] = ELITE_KEY_T;
+    elite_game_draw_overlay(g_fbui);
+    /* Composite: UI pixel-doubled over the physical 3D frame. */
+    for (int y = 0; y < R3D_FB_H; y++) {
+        const uint16_t *ur = g_fbui + (y / R3D_SS) * ELITE_FB_W;
+        const uint16_t *dr = g_fb3d + y * R3D_FB_W;
+        uint16_t *o = g_fb + y * R3D_FB_W;
+        for (int x = 0; x < R3D_FB_W; x++) {
+            uint16_t u = ur[x / R3D_SS];
+            if (u == ELITE_KEY_T)        o[x] = dr[x];
+            else if (u == ELITE_KEY_DIM) o[x] = (uint16_t)((dr[x] >> 1) & 0x7BEF);
+            else                         o[x] = u;
+        }
+    }
+}
+#else
 static void render_frame(void) {
     elite_game_render_begin();
     elite_game_render(g_fb, 0, ELITE_FB_H);
     elite_game_draw_overlay(g_fb);
 }
+#endif
 
 static void dump_ppm(const char *path) {
     FILE *f = fopen(path, "wb");
     if (!f) { perror(path); return; }
-    fprintf(f, "P6\n%d %d\n255\n", ELITE_FB_W, ELITE_FB_H);
-    for (int i = 0; i < ELITE_FB_W * ELITE_FB_H; i++) {
+    fprintf(f, "P6\n%d %d\n255\n", OUT_W, OUT_H);
+    for (int i = 0; i < OUT_W * OUT_H; i++) {
         uint16_t c = g_fb[i];
         uint8_t rgb[3] = { (uint8_t)(((c >> 11) & 0x1F) * 255 / 31),
                            (uint8_t)(((c >>  5) & 0x3F) * 255 / 63),
@@ -2484,6 +2523,26 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    /* Launcher-icon render: a hero ship, 3/4 view, lit on a starfield.
+     * Run under the hires build for a crisp 256x256 source. */
+    if (getenv("ELITE_APPICON")) {
+        r3d_starfield_init(0x1CE0FFu);
+        Mat3 cam = m3_identity();
+        r3d_scene_begin(&cam, 52.0f);
+        r3d_pipe_set_sun(v3_norm(v3(0.45f, 0.55f, -0.70f)));
+        R3DObject obj;
+        obj.mesh  = hull_mesh(0x5A17u, 4);          /* a sleek mid hull */
+        obj.basis = m3_identity();
+        m3_rotate_local(&obj.basis, 1, 0.70f);      /* yaw  3/4 */
+        m3_rotate_local(&obj.basis, 0, 0.32f);      /* pitch nose-down */
+        float dist = obj.mesh->bound_r * 2.05f;
+        obj.pos   = v3(0.0f, 0.0f, dist);
+        r3d_scene_add_object(&obj);
+        r3d_scene_raster(g_fb, 0, ELITE_FB_H);
+        dump_ppm("/tmp/elite_icon.ppm");
+        return 0;
+    }
+
     /* Hull-roll variety + determinism. */
     if (getenv("ELITE_JITTERTEST")) {
         HullRoll a, b, c;
@@ -4083,7 +4142,7 @@ int main(int argc, char **argv) {
     SDL_Renderer *ren = SDL_CreateRenderer(win, -1,
         SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     SDL_Texture *tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGB565,
-        SDL_TEXTUREACCESS_STREAMING, ELITE_FB_W, ELITE_FB_H);
+        SDL_TEXTUREACCESS_STREAMING, OUT_W, OUT_H);
 
     SDL_AudioSpec want, have;
     SDL_zero(want);
@@ -4130,7 +4189,7 @@ int main(int argc, char **argv) {
         render_frame();
         elite_game_set_frame_ms((float)(SDL_GetTicks() - t0));
 
-        SDL_UpdateTexture(tex, NULL, g_fb, ELITE_FB_W * sizeof(uint16_t));
+        SDL_UpdateTexture(tex, NULL, g_fb, OUT_W * sizeof(uint16_t));
         SDL_RenderClear(ren);
         SDL_RenderCopy(ren, tex, NULL, NULL);
         SDL_RenderPresent(ren);

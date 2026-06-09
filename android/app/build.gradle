@@ -1,0 +1,132 @@
+def buildAsLibrary = project.hasProperty('BUILD_AS_LIBRARY');
+def buildAsApplication = !buildAsLibrary
+if (buildAsApplication) {
+    apply plugin: 'com.android.application'
+}
+else {
+    apply plugin: 'com.android.library'
+}
+
+android {
+    if (buildAsApplication) {
+        namespace "org.libsdl.app"
+    }
+    compileSdkVersion 35
+    ndkVersion "26.3.11579264"
+    defaultConfig {
+        if (buildAsApplication) {
+            applicationId "us.thumby.elite"
+        }
+        minSdkVersion 21
+        targetSdkVersion 35
+        versionCode 1
+        versionName "1.0"
+        externalNativeBuild {
+            ndkBuild {
+                arguments "APP_PLATFORM=android-21"
+                abiFilters 'arm64-v8a'
+            }
+            // cmake {
+            //     arguments "-DANDROID_APP_PLATFORM=android-19", "-DANDROID_STL=c++_static"
+            //     // abiFilters 'arm64-v8a'
+            //     abiFilters 'arm64-v8a'
+            // }
+        }
+    }
+    buildTypes {
+        release {
+            // Sign with the debug key so the release APK is still sideloadable
+            // without managing a keystore (not for Play Store distribution).
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    applicationVariants.all { variant ->
+        tasks["merge${variant.name.capitalize()}Assets"]
+            .dependsOn("externalNativeBuild${variant.name.capitalize()}")
+    }
+    if (!project.hasProperty('EXCLUDE_NATIVE_LIBS')) {
+        sourceSets.main {
+            jniLibs.srcDir 'libs'
+        }
+        externalNativeBuild {
+            ndkBuild {
+                path 'jni/Android.mk'
+            }
+            // cmake {
+            //     path 'jni/CMakeLists.txt'
+            // }
+        }
+       
+    }
+    lint {
+        abortOnError false
+    }
+
+    if (buildAsLibrary) {
+        libraryVariants.all { variant ->
+            variant.outputs.each { output ->
+                def outputFile = output.outputFile
+                if (outputFile != null && outputFile.name.endsWith(".aar")) {
+                    def fileName = "org.libsdl.app.aar";
+                    output.outputFile = new File(outputFile.parent, fileName);
+                }
+            }
+        }
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+}
+
+// Re-bake ship meshes (OBJ -> jni/src/generated/meshes_gen.c) from the same
+// host baker the host/device builds use, so the APK never ships a stale mesh
+// table. Best-effort: if cmake/gcc aren't available the committed copy is
+// used unchanged.
+task bakeMeshes {
+    doLast {
+        def root  = file('../..')                    // ThumbyElite/
+        def baker = file("${root}/build_host/baker/obj2mesh")
+        def gen   = file('jni/src/generated')
+        gen.mkdirs()
+        if (!baker.exists()) {
+            // Try to build just the baker via the tools cmake project.
+            try {
+                exec {
+                    commandLine 'cmake', '-S', "${root}/tools",
+                                '-B', "${root}/build_host/baker",
+                                '-DCMAKE_BUILD_TYPE=Release'
+                }
+                exec { commandLine 'cmake', '--build', "${root}/build_host/baker", '-j' }
+            } catch (ignored) {
+                logger.warn('bakeMeshes: host baker unavailable — using committed meshes_gen.c')
+                return
+            }
+        }
+        if (baker.exists()) {
+            def models = "${root}/tools/models"
+            exec {
+                commandLine baker.absolutePath,
+                    "${gen}/meshes_gen.c", "${gen}/meshes_gen.h",
+                    "shuttle=${models}/shuttle.obj",
+                    "courier=${models}/courier.obj",
+                    "fighter=${models}/fighter.obj",
+                    "mauler=${models}/mauler.obj",
+                    "viper=${models}/viper.obj",
+                    "cutter=${models}/cutter.obj",
+                    "lighthauler=${models}/lighthauler.obj",
+                    "freighter=${models}/freighter.obj",
+                    "hauler=${models}/hauler.obj",
+                    "dread=${models}/dread.obj",
+                    "canister=${models}/canister.obj",
+                    "station=${models}/station.obj",
+                    "beacon=${models}/beacon.obj"
+            }
+        }
+    }
+}
+tasks.configureEach { t ->
+    if (t.name.startsWith('externalNativeBuild')) t.dependsOn bakeMeshes
+}

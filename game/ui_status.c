@@ -302,8 +302,15 @@ void status_draw(uint16_t *fb) {
 
     /* The rendered ship becomes a dimmed backdrop (50%) — the whole
      * screen stays free for the sheet. */
+#ifdef ELITE_OVERLAY_SPLIT
+    /* Two-buffer shells: the 3D frame lives in another buffer, so ask
+     * the compositor to dim it (KEY_DIM) wherever we haven't drawn. */
+    for (int i = 0; i < ELITE_FB_W * ELITE_FB_H; i++)
+        if (fb[i] == ELITE_KEY_T) fb[i] = ELITE_KEY_DIM;
+#else
     for (int i = 0; i < ELITE_FB_W * ELITE_FB_H; i++)
         fb[i] = (uint16_t)((fb[i] >> 1) & 0x7BEF);
+#endif
 
     char buf[24];
     craft_font_draw(fb, "SHIP STATUS", 2, 2, COL_HDR);

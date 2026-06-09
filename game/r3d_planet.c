@@ -263,16 +263,21 @@ void r3d_planet_emit(Vec3 cam_pos_mm) {
 }
 
 void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
+    /* y0/y1 and every coordinate below are PHYSICAL pixels; the impostor
+     * list itself stays logical (HUD/emit reuse it), so scale up here. */
     uint16_t *depth = r3d_depth_buffer();
     for (int n = 0; n < s_nimp; n++) {
         const Impostor *im = &s_imp[n];
-        int r = (int)im->r_px;
+        const float imx = im->sx * (float)R3D_SS;
+        const float imy = im->sy * (float)R3D_SS;
+        const float imr = im->r_px * (float)R3D_SS;
+        int r = (int)imr;
         if (r < 1) r = 1;
-        int cy = (int)im->sy, cx = (int)im->sx;
+        int cy = (int)imy, cx = (int)imx;
         int ylo = cy - r, yhi = cy + r;
         if (ylo < y0) ylo = y0;
         if (yhi >= y1) yhi = y1 - 1;
-        float inv_r = 1.0f / im->r_px;
+        float inv_r = 1.0f / imr;
 
         if (im->planet < 0) {
             /* Sun: white-hot core -> dithered blend through the star's
@@ -282,24 +287,24 @@ void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
             uint16_t star = s_info ? s_info->star_color : RGB565C(255, 230, 150);
             int sr = (star >> 11) & 31, sg = (star >> 5) & 63, sb = star & 31;
             float halo = 2.1f;                       /* halo extent, x disc */
-            int hr = (int)(im->r_px * halo) + 1;
+            int hr = (int)(imr * halo) + 1;
             int hylo = cy - hr, hyhi = cy + hr;
             if (hylo < y0) hylo = y0;
             if (hyhi >= y1) hyhi = y1 - 1;
             static const uint8_t bayer[2][2] = { {0, 2}, {3, 1} };
             for (int py = hylo; py <= hyhi; py++) {
-                float ny = (py - im->sy) * inv_r;
-                uint16_t *fr = fb + py * ELITE_FB_W;
-                uint16_t *dr = depth + py * ELITE_FB_W;
+                float ny = (py - imy) * inv_r;
+                uint16_t *fr = fb + py * R3D_FB_W;
+                uint16_t *dr = depth + py * R3D_FB_W;
                 int xspan = (int)(sqrtf(halo * halo - (ny < 0 ? -ny : ny) *
                                         (ny < 0 ? -ny : ny) > 0
                                             ? halo * halo - ny * ny : 0) *
-                                  im->r_px);
+                                  imr);
                 int x0 = cx - xspan, x1 = cx + xspan;
                 if (x0 < 0) x0 = 0;
-                if (x1 > 127) x1 = 127;
+                if (x1 > R3D_FB_W - 1) x1 = R3D_FB_W - 1;
                 for (int px = x0; px <= x1; px++) {
-                    float nx = (px - im->sx) * inv_r;
+                    float nx = (px - imx) * inv_r;
                     float rr = sqrtf(nx * nx + ny * ny);
                     if (rr <= 1.0f) {
                         if (im->d < dr[px]) continue;   /* ties: painter order wins */
@@ -323,20 +328,20 @@ void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
                 }
             }
             /* Diffraction spikes: thin horizontal/vertical rays. */
-            if (im->r_px >= 3.0f) {
-                int len = (int)(im->r_px * 3.2f);
-                for (int k = (int)im->r_px + 1; k <= len; k++) {
-                    float g = 1.0f - (float)(k - im->r_px) /
-                              (float)(len - im->r_px + 1);
+            if (imr >= 3.0f * R3D_SS) {
+                int len = (int)(imr * 3.2f);
+                for (int k = (int)imr + 1; k <= len; k++) {
+                    float g = 1.0f - (float)(k - imr) /
+                              (float)(len - imr + 1);
                     g = g * g * 0.5f;
                     int ar = (int)(sr * g), ag = (int)(sg * g), ab = (int)(sb * g);
                     static const int dxs[4] = { 1, -1, 0, 0 };
                     static const int dys[4] = { 0, 0, 1, -1 };
                     for (int s = 0; s < 4; s++) {
                         int px = cx + dxs[s] * k, py = cy + dys[s] * k;
-                        if ((unsigned)px >= ELITE_FB_W) continue;
+                        if ((unsigned)px >= R3D_FB_W) continue;
                         if (py < y0 || py >= y1) continue;
-                        uint16_t *fp = &fb[py * ELITE_FB_W + px];
+                        uint16_t *fp = &fb[py * R3D_FB_W + px];
                         int r = ((*fp >> 11) & 31) + ar;
                         int gg = ((*fp >> 5) & 63) + ag;
                         int b = (*fp & 31) + ab;
@@ -352,20 +357,20 @@ void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
 
         const PlanetArt *art = &s_art[(int)im->planet];
         for (int py = ylo; py <= yhi; py++) {
-            float ny = (py - im->sy) * inv_r;
+            float ny = (py - imy) * inv_r;
             float w2 = 1.0f - ny * ny;
             if (w2 <= 0) continue;
-            int half = (int)(sqrtf(w2) * im->r_px);
+            int half = (int)(sqrtf(w2) * imr);
             int x0 = cx - half, x1 = cx + half;
             if (x0 < 0) x0 = 0;
-            if (x1 > 127) x1 = 127;
-            uint16_t *fr = fb + py * ELITE_FB_W;
-            uint16_t *dr = depth + py * ELITE_FB_W;
+            if (x1 > R3D_FB_W - 1) x1 = R3D_FB_W - 1;
+            uint16_t *fr = fb + py * R3D_FB_W;
+            uint16_t *dr = depth + py * R3D_FB_W;
             int tv = (int)((ny * 0.5f + 0.5f) * (TEX_N - 1));
             const uint8_t *trow = &art->tex[tv * TEX_N];
             for (int px = x0; px <= x1; px++) {
                 if (im->d < dr[px]) continue;   /* ties: painter order wins */
-                float nx = (px - im->sx) * inv_r;
+                float nx = (px - imx) * inv_r;
                 float nz2 = 1.0f - nx * nx - ny * ny;
                 if (nz2 < 0.0f) nz2 = 0.0f;
                 float nz = sqrtf(nz2);

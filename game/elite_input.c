@@ -25,6 +25,11 @@ typedef struct {
 } Mod;
 
 static Mod   s_lb, s_rb;
+/* Optional analog stick (Android touch stick / gamepad). x: + = right,
+ * y: + = up, both -1..1 with the shell's deadzone already applied.
+ * Zero (the default) leaves the digital d-pad path untouched. */
+static float s_ana_x, s_ana_y;
+static float s_ana_roll;     /* gamepad right-stick X: direct roll */
 static bool  s_prev_b;
 static bool  s_swallow_a;            /* A held over from a menu screen:
                                       * no fire until it's released once */
@@ -66,18 +71,38 @@ static int mod_update(Mod *m, bool down, bool dpad_used, bool use_consume,
     return ev;
 }
 
+void elite_input_set_analog(float x, float y) {
+    if (x < -1.0f) x = -1.0f; if (x > 1.0f) x = 1.0f;
+    if (y < -1.0f) y = -1.0f; if (y > 1.0f) y = 1.0f;
+    s_ana_x = x;
+    s_ana_y = y;
+}
+
+void elite_input_set_analog_roll(float r) {
+    if (r < -1.0f) r = -1.0f; if (r > 1.0f) r = 1.0f;
+    s_ana_roll = r;
+}
+
 void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) {
     memset(out, 0, sizeof *out);
 
-    bool dpad = btn->up || btn->down || btn->left || btn->right;
+    bool ana = (s_ana_x * s_ana_x + s_ana_y * s_ana_y) > 1e-4f;
+    bool ana_big = (s_ana_x * s_ana_x + s_ana_y * s_ana_y) > 0.0625f;
+    bool dpad = btn->up || btn->down || btn->left || btn->right || ana_big;
 
     /* Axes, redirected by held modifiers. */
     float ud = (btn->up ? 1.0f : 0.0f) - (btn->down ? 1.0f : 0.0f);
     float lr = (btn->right ? 1.0f : 0.0f) - (btn->left ? 1.0f : 0.0f);
+    if (ana) {       /* analog overrides: same max rates, finer control */
+        ud = s_ana_y;
+        lr = s_ana_x;
+    }
 
     if (s_lb.down) { out->roll = lr; } else { out->yaw = lr; }
     if (s_rb.down) { out->throttle_delta = ud; }
     else { out->pitch = g_player.invert_y ? ud : -ud; }
+    /* Dedicated roll axis (gamepad right stick) wins over the chord. */
+    if (s_ana_roll != 0.0f) out->roll = s_ana_roll;
 
     /* LB doubles get a LAZY window (0.5s) — physical-button double-taps
      * land 350-450ms apart and the tight window missed them (user

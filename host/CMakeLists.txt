@@ -54,7 +54,7 @@ add_custom_command(
 )
 add_custom_target(generate_meshes DEPENDS ${MESHES_GEN_C})
 
-add_executable(thumbyelite_host
+set(ELITE_SRC
     ${CMAKE_CURRENT_LIST_DIR}/host_main.c
     ${GAME}/elite_game.c
     ${GAME}/r3d_raster.c
@@ -92,18 +92,25 @@ add_executable(thumbyelite_host
     ${GAME}/craft_font.c
     ${MESHES_GEN_C}
 )
-add_dependencies(thumbyelite_host generate_meshes)
 
-target_compile_options(thumbyelite_host PRIVATE
-    -O2 -g -Wall -Wextra
-    -Wno-unused-parameter -Wno-unused-function
-    -ffast-math
-)
-target_include_directories(thumbyelite_host PRIVATE
-    ${GAME}
-    ${ELITE_ROOT}/device   # craft_buttons.h type (host doesn't link buttons.c)
-    ${CMAKE_BINARY_DIR}/generated
-    ${SDL2_INCLUDE_DIRS}
-)
-target_link_libraries(thumbyelite_host PRIVATE ${SDL2_LIBRARIES} m)
-target_compile_definitions(thumbyelite_host PRIVATE ELITE_INPUT_DEBUG=1)
+# Two targets from the same sources: the device-faithful 128x128 build,
+# and the Android-rendering preview (3D supersampled 2x + split overlay).
+foreach(tgt IN ITEMS thumbyelite_host thumbyelite_host_hires)
+    add_executable(${tgt} ${ELITE_SRC})
+    add_dependencies(${tgt} generate_meshes)
+    target_compile_options(${tgt} PRIVATE
+        -O2 -g -Wall -Wextra
+        -Wno-unused-parameter -Wno-unused-function
+        -ffast-math
+    )
+    target_include_directories(${tgt} PRIVATE
+        ${GAME}
+        ${ELITE_ROOT}/device   # craft_buttons.h type (host doesn't link buttons.c)
+        ${CMAKE_BINARY_DIR}/generated
+        ${SDL2_INCLUDE_DIRS}
+    )
+    target_link_libraries(${tgt} PRIVATE ${SDL2_LIBRARIES} m)
+    target_compile_definitions(${tgt} PRIVATE ELITE_INPUT_DEBUG=1)
+endforeach()
+target_compile_definitions(thumbyelite_host_hires PRIVATE
+    R3D_SS=2 ELITE_OVERLAY_SPLIT=1)

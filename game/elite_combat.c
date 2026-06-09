@@ -16,6 +16,8 @@
 #include "elite_audio.h"
 #include "elite_platform.h"
 #include "elite_types.h"
+#include "elite_game.h"   /* crit_toast / player_engaged / distress_protected */
+#include <stdio.h>        /* snprintf */
 
 #define HEAT_MAX       100.0f
 #define HEAT_DISSIPATE 22.0f

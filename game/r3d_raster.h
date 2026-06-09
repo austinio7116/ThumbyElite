@@ -23,7 +23,9 @@ void r3d_raster_set_fb(uint16_t *fb);
 void r3d_depth_clear(int y_min, int y_max);
 
 /* Direct depth-buffer access for renderers with their own pixel loops
- * (planet impostors). Layout: u16[ELITE_FB_W * ELITE_FB_H]. */
+ * (planet impostors). Layout: u16[R3D_FB_W * R3D_FB_H]. NOTE: everything
+ * in this module — coordinates, radii AND y_min/y_max bands — is in
+ * PHYSICAL pixels (logical x R3D_SS); r3d_scene_raster does the scaling. */
 uint16_t *r3d_depth_buffer(void);
 
 /* Screen-space flat triangle. (ax,ay,az)... are screen x/y (subpixel

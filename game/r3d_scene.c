@@ -143,27 +143,33 @@ void r3d_starfield_init(uint32_t seed) {
     }
 }
 
-static void starfield_raster(uint16_t *fb, int y0, int y1) {
+/* Physical-space band (y0p..y1p in R3D pixels). Stars keep their device
+ * apparent size (R3D_SS x R3D_SS blocks) but gain subpixel placement. */
+static void starfield_raster(uint16_t *fb, int y0p, int y1p) {
     const Mat3 *cam = r3d_pipe_camera();
     const float focal = r3d_pipe_focal();
     for (int i = 0; i < STAR_COUNT; i++) {
         Vec3 v = m3_mul_v3_t(cam, s_stars[i].dir);
         if (v.z < 0.05f) continue;
         float inv_z = 1.0f / v.z;
-        int sx = (int)(64.0f + focal * v.x * inv_z);
-        int sy = (int)(64.0f - focal * v.y * inv_z);
-        if ((unsigned)sx >= ELITE_FB_W) continue;
-        if (sy < y0 || sy >= y1) {
-            /* A big star's second row may still land in-band. */
-            if (!(s_stars[i].big && sy + 1 >= y0 && sy + 1 < y1)) continue;
-        }
+        int sx = (int)((64.0f + focal * v.x * inv_z) * R3D_SS);
+        int sy = (int)((64.0f - focal * v.y * inv_z) * R3D_SS);
+        if (sx < 0 || sy + R3D_SS * 2 <= y0p || sy >= y1p) continue;
         uint16_t c = s_stars[i].color;
-        if (sy >= y0 && sy < y1) fb[sy * ELITE_FB_W + sx] = c;
-        if (s_stars[i].big) {
-            if (sx + 1 < ELITE_FB_W && sy >= y0 && sy < y1)
-                fb[sy * ELITE_FB_W + sx + 1] = c;
-            if (sy + 1 >= y0 && sy + 1 < y1)
-                fb[(sy + 1) * ELITE_FB_W + sx] = c;
+        /* big: 2x1 + 1 below (device pattern), scaled. */
+        int w = s_stars[i].big ? R3D_SS * 2 : R3D_SS;
+        int h = R3D_SS;
+        for (int pass = 0; pass < (s_stars[i].big ? 2 : 1); pass++) {
+            for (int dy = 0; dy < h; dy++) {
+                int py = sy + pass * R3D_SS + dy;
+                if (py < y0p || py >= y1p) continue;
+                int pw = pass ? R3D_SS : w;       /* second row: 1 block */
+                for (int dx = 0; dx < pw; dx++) {
+                    int px = sx + dx;
+                    if ((unsigned)px >= R3D_FB_W) continue;
+                    fb[py * R3D_FB_W + px] = c;
+                }
+            }
         }
     }
 }
@@ -172,33 +178,39 @@ void r3d_scene_raster(uint16_t *fb, int y0, int y1) {
     if (y0 < 0) y0 = 0;
     if (y1 > ELITE_FB_H) y1 = ELITE_FB_H;
     if (y0 >= y1) return;
+    /* Callers pass logical rows; everything below runs physical. */
+    int y0p = y0 * R3D_SS, y1p = y1 * R3D_SS;
 
-    memset(fb + y0 * ELITE_FB_W, 0,
-           (size_t)(y1 - y0) * ELITE_FB_W * sizeof(uint16_t));
+    memset(fb + y0p * R3D_FB_W, 0,
+           (size_t)(y1p - y0p) * R3D_FB_W * sizeof(uint16_t));
     r3d_raster_set_fb(fb);
-    r3d_depth_clear(y0, y1);
-    starfield_raster(fb, y0, y1);
-    r3d_planet_raster(fb, y0, y1);   /* writes depth: ships pass behind */
+    r3d_depth_clear(y0p, y1p);
+    starfield_raster(fb, y0p, y1p);
+    r3d_planet_raster(fb, y0p, y1p); /* writes depth: ships pass behind */
 
+    const float SS = (float)R3D_SS;
     int n = s_ntris;
     for (int i = 0; i < n; i++) {
         const SceneTri *t = &s_tris[i];
-        r3d_tri(t->x0, t->y0, t->d0, t->x1, t->y1, t->d1,
-                t->x2, t->y2, t->d2, t->color, y0, y1);
+        r3d_tri(t->x0 * SS, t->y0 * SS, t->d0, t->x1 * SS, t->y1 * SS, t->d1,
+                t->x2 * SS, t->y2 * SS, t->d2, t->color, y0p, y1p);
     }
 
     /* FX pass: depth-tested, no depth write — ships occlude them.
      * Discs first (fireballs), so sparks/debris draw over them. */
     for (int i = 0; i < s_ndiscs; i++) {
         const SceneDisc *p = &s_discs[i];
-        r3d_disc((int)p->x, (int)p->y, p->d, p->r, p->color, y0, y1);
+        r3d_disc((int)(p->x * SS), (int)(p->y * SS), p->d,
+                 p->r * R3D_SS, p->color, y0p, y1p);
     }
     for (int i = 0; i < s_npoints; i++) {
         const ScenePoint *p = &s_points[i];
-        r3d_point((int)p->x, (int)p->y, p->d, p->color, p->size, y0, y1);
+        r3d_point((int)(p->x * SS), (int)(p->y * SS), p->d, p->color,
+                  p->size * R3D_SS, y0p, y1p);
     }
     for (int i = 0; i < s_nlines; i++) {
         const SceneLine *l = &s_lines[i];
-        r3d_line(l->x0, l->y0, l->d0, l->x1, l->y1, l->d1, l->color, y0, y1);
+        r3d_line(l->x0 * SS, l->y0 * SS, l->d0,
+                 l->x1 * SS, l->y1 * SS, l->d1, l->color, y0p, y1p);
     }
 }

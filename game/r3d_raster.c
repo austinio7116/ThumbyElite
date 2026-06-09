@@ -11,10 +11,14 @@
 #include <math.h>
 #include <string.h>
 
+/* All coordinates and row bands in this file are PHYSICAL pixels
+ * (R3D_FB_W x R3D_FB_H). r3d_scene_raster scales up from logical space
+ * before calling in; with R3D_SS == 1 the two spaces are identical. */
+
 static uint16_t *s_fb;
-/* Depth buffer lives here (32 KB .bss) — both cores read/write disjoint
- * row bands of it during the screen-half split. */
-static uint16_t s_depth[ELITE_FB_W * ELITE_FB_H];
+/* Depth buffer lives here (32 KB .bss on device) — both cores read/write
+ * disjoint row bands of it during the screen-half split. */
+static uint16_t s_depth[R3D_FB_W * R3D_FB_H];
 
 void r3d_raster_set_fb(uint16_t *fb) {
     s_fb = fb;
@@ -24,10 +28,10 @@ uint16_t *r3d_depth_buffer(void) { return s_depth; }
 
 void r3d_depth_clear(int y_min, int y_max) {
     if (y_min < 0) y_min = 0;
-    if (y_max > ELITE_FB_H) y_max = ELITE_FB_H;
+    if (y_max > R3D_FB_H) y_max = R3D_FB_H;
     if (y_max > y_min)
-        memset(s_depth + y_min * ELITE_FB_W, 0,
-               (size_t)(y_max - y_min) * ELITE_FB_W * sizeof(uint16_t));
+        memset(s_depth + y_min * R3D_FB_W, 0,
+               (size_t)(y_max - y_min) * R3D_FB_W * sizeof(uint16_t));
 }
 
 static inline float edge(float ax, float ay, float bx, float by, float px, float py) {
@@ -39,11 +43,11 @@ void r3d_point(int x, int y, uint16_t d, uint16_t color, int size,
     for (int dy = 0; dy < size; dy++) {
         int py = y + dy;
         if (py < y_min || py >= y_max) continue;
-        uint16_t *fb_row = s_fb + py * ELITE_FB_W;
-        uint16_t *dp_row = s_depth + py * ELITE_FB_W;
+        uint16_t *fb_row = s_fb + py * R3D_FB_W;
+        uint16_t *dp_row = s_depth + py * R3D_FB_W;
         for (int dx = 0; dx < size; dx++) {
             int px = x + dx;
-            if ((unsigned)px >= ELITE_FB_W) continue;
+            if ((unsigned)px >= R3D_FB_W) continue;
             if (d > dp_row[px]) fb_row[px] = color;
         }
     }
@@ -58,9 +62,9 @@ void r3d_disc(int cx, int cy, uint16_t d, int r, uint16_t color,
         int half = (int)sqrtf((float)(r * r - dy * dy));
         int x0 = cx - half, x1 = cx + half;
         if (x0 < 0) x0 = 0;
-        if (x1 > ELITE_FB_W - 1) x1 = ELITE_FB_W - 1;
-        uint16_t *fb_row = s_fb + py * ELITE_FB_W;
-        uint16_t *dp_row = s_depth + py * ELITE_FB_W;
+        if (x1 > R3D_FB_W - 1) x1 = R3D_FB_W - 1;
+        uint16_t *fb_row = s_fb + py * R3D_FB_W;
+        uint16_t *dp_row = s_depth + py * R3D_FB_W;
         for (int px = x0; px <= x1; px++)
             if (d > dp_row[px]) fb_row[px] = color;
     }
@@ -72,16 +76,31 @@ void r3d_line(float x0, float y0, uint16_t d0,
     float dx = x1 - x0, dy = y1 - y0;
     float adx = dx < 0 ? -dx : dx, ady = dy < 0 ? -dy : dy;
     int steps = (int)(adx > ady ? adx : ady) + 1;
-    if (steps > 256) steps = 256;
+    if (steps > 256 * R3D_SS) steps = 256 * R3D_SS;
     float inv = 1.0f / (float)steps;
     float sx = dx * inv, sy = dy * inv, sd = ((float)d1 - (float)d0) * inv;
     float px = x0, py = y0, pd = (float)d0;
     for (int i = 0; i <= steps; i++) {
         int ix = (int)px, iy = (int)py;
-        if (iy >= y_min && iy < y_max && (unsigned)ix < ELITE_FB_W) {
-            int idx = iy * ELITE_FB_W + ix;
+#if R3D_SS == 1
+        if (iy >= y_min && iy < y_max && (unsigned)ix < R3D_FB_W) {
+            int idx = iy * R3D_FB_W + ix;
             if ((uint16_t)pd > s_depth[idx]) s_fb[idx] = color;
         }
+#else
+        /* Stamp an R3D_SS block: beams/trails keep their device apparent
+         * thickness, just with a smoother (subpixel) path. */
+        for (int by = 0; by < R3D_SS; by++) {
+            int yy = iy + by;
+            if (yy < y_min || yy >= y_max) continue;
+            for (int bx = 0; bx < R3D_SS; bx++) {
+                int xx = ix + bx;
+                if ((unsigned)xx >= R3D_FB_W) continue;
+                int idx = yy * R3D_FB_W + xx;
+                if ((uint16_t)pd > s_depth[idx]) s_fb[idx] = color;
+            }
+        }
+#endif
         px += sx; py += sy; pd += sd;
     }
 }
@@ -104,7 +123,7 @@ void r3d_tri(float ax, float ay, uint16_t az,
 
     int min_x = (int)fminx; if (min_x < 0) min_x = 0;
     int min_y = (int)fminy; if (min_y < y_min) min_y = y_min;
-    int max_x = (int)fmaxx; if (max_x > ELITE_FB_W - 1) max_x = ELITE_FB_W - 1;
+    int max_x = (int)fmaxx; if (max_x > R3D_FB_W - 1) max_x = R3D_FB_W - 1;
     int max_y = (int)fmaxy; if (max_y >= y_max) max_y = y_max - 1;
     if (min_x > max_x || min_y > max_y) return;
 
@@ -129,8 +148,8 @@ void r3d_tri(float ax, float ay, uint16_t az,
 
     for (int py = min_y; py <= max_y; py++) {
         float w0 = w0_row, w1 = w1_row, w2 = w2_row, z = z_row;
-        uint16_t *fb_row = s_fb + py * ELITE_FB_W;
-        uint16_t *dp_row = s_depth + py * ELITE_FB_W;
+        uint16_t *fb_row = s_fb + py * R3D_FB_W;
+        uint16_t *dp_row = s_depth + py * R3D_FB_W;
         for (int px = min_x; px <= max_x; px++) {
             if (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) {
                 uint16_t d = (uint16_t)z;
