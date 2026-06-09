@@ -147,13 +147,16 @@ void player_apply_to_ship(void) {
     int shv = g_player.shield_eq.in_use ? g_player.shield_eq.affix : 0;
     int arv = g_player.armor_eq.in_use ? g_player.armor_eq.affix : 0;
     static const float k_shv_cap[4] = { 1.0f, 0.70f, 1.50f, 0.85f };
-    static const float k_shv_rgn[4] = { 1.0f, 2.40f, 0.40f, 1.00f };
+    static const float k_shv_rgn[4] = { 1.0f, 3.90f, 0.55f, 1.00f };
     static const float k_arv_hp[4]  = { 1.0f, 1.00f, 1.35f, 0.85f };
     p->hull_max = h->hull_base * rl->hull * ar_t *
                   equip_mult(&g_player.armor_eq) * k_arv_hp[arv & 3];
     p->shield_max = h->shield_base * rl->shd * sh_t *
                     equip_mult(&g_player.shield_eq) * k_shv_cap[shv & 3];
-    p->shield_regen = 3.0f * k_shv_rgn[shv & 3];
+    /* Baseline regen cut (3.0 -> 1.4) so widened enemy aim can't fall
+     * below it into an unkillable wall; the REGEN affix multiplier is
+     * raised to keep regen shields a strong top-tier pick (~7.1/s). */
+    p->shield_regen = 1.8f * k_shv_rgn[shv & 3];
     p->shield_delay = (shv == SHV_REGEN) ? 2.0f : 4.5f;
     p->shield_var = (uint8_t)shv;
     p->armor_var = (uint8_t)arv;
