@@ -1442,9 +1442,13 @@ static void draw_outfit(uint16_t *fb) {
             const WeaponInst *t2 = &g_player.turret_eq;
             if (t2->in_use) {
                 icon_weapon(fb, 7, y - 1, t2->type);
-                snprintf(buf, sizeof buf, "TURRET %s %s",
-                         k_weapons[t2->type].name,
-                         k_tier_names[player_turret_gunner_tier()]);
+                {
+                    static const char *k_cal[4] = { "STANDARD",
+                        "REINFORCED", "MILITARY", "PROTOTYPE" };
+                    snprintf(buf, sizeof buf, "TURRET %s %s",
+                             k_weapons[t2->type].name,
+                             k_cal[player_turret_gunner_tier()]);
+                }
             } else
                 snprintf(buf, sizeof buf, "TURRET ---- (Z1)");
             craft_font_draw(fb, buf, 21, y, c);

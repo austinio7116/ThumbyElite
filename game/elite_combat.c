@@ -350,14 +350,16 @@ void combat_crit_cooldown_tick(float dt) {
 
 void combat_set_shot_type(int wt) { s_shot_type = wt; }
 
-/* The player's turret has a GUNNER of rolled skill (HARMLESS..ELITE),
- * fixed per ship off the hull seed — so an auto-turret isn't a
- * perfect-aim cheat; some ships came with a crack shot, some a dud. */
+/* The player's turret has a rolled CALIBRATION, fixed per ship off the
+ * hull seed — so an auto-turret isn't a perfect-aim cheat. Four levels
+ * (0..3) feeding accuracy tiers HARMLESS..DEADLY (DEADLY is the best a
+ * turret gets), shown to the player as quality grades STANDARD ..
+ * PROTOTYPE. Skewed toward greener turrets. */
 int player_turret_gunner_tier(void) {
     uint32_t h = g_player.hull_seed * 2654435761u;
     h ^= h >> 15; h *= 0x2545F491u; h ^= h >> 13;
     int q = (int)(h % 100u);
-    return q < 26 ? 0 : q < 52 ? 1 : q < 74 ? 2 : q < 91 ? 3 : 4;
+    return q < 35 ? 0 : q < 65 ? 1 : q < 87 ? 2 : 3;
 }
 
 int combat_fire(int shooter, float spread, int target) {

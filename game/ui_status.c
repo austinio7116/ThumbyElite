@@ -68,6 +68,8 @@ static void row(RowKind k, int idx, uint16_t color, int icon,
 }
 
 static const char *k_qual_tag[5] = { "SLV", "STD", "RNF", "MIL", "PRO" };
+static const char *k_turret_cal[4] = { "STANDARD", "REINFORCED",
+                                       "MILITARY", "PROTOTYPE" };
 static const char *k_skill_names[4] = {
     "GUNNERY", "TRADING", "TECH", "PILOTING",
 };
@@ -94,7 +96,8 @@ static void build_rows(void) {
                                                       : g_player.legal],
             g_player.fine > 0 ? " (FINE DUE)" : "");
     }
-    row(RK_TEXT, 0, COL_HDR, -1, "MOUNTS:");
+    /* --- WEAPONS --- */
+    row(RK_TEXT, 0, COL_HDR, -1, "WEAPONS:");
     for (int i = 0; i < player_n_slots(); i++) {
         const WeaponInst *m = &g_player.mounts[i];
         /* Z# = the SLOT's capacity (what it can take), matching the
@@ -110,6 +113,21 @@ static void build_rows(void) {
         else
             row(RK_TEXT, 0, COL_DIM, -1, "Z%d EMPTY", player_slot_size(i));
     }
+    /* --- TURRET (only on turret hulls) --- */
+    if (k_hulls[g_player.hull_id].has_turret) {
+        row(RK_TEXT, 0, COL_HDR, -1, "TURRET:");
+        if (g_player.turret_eq.in_use) {
+            extern int player_turret_gunner_tier(void);
+            row(RK_TURRET, 0, COL_DIM, g_player.turret_eq.type,
+                "   %s %s %d%%",
+                k_weapons[g_player.turret_eq.type].name,
+                k_turret_cal[player_turret_gunner_tier()],
+                g_player.turret_eq.integrity);
+        } else
+            row(RK_TEXT, 0, COL_DIM, -1, "   EMPTY (Z1)");
+    }
+    /* --- ARMOUR & SHIELDS --- */
+    row(RK_TEXT, 0, COL_HDR, -1, "ARMOUR / SHIELDS:");
     for (int i = 0; i < 2; i++) {
         const WeaponInst *e = i ? &g_player.armor_eq : &g_player.shield_eq;
         if (e->in_use)
@@ -117,25 +135,18 @@ static void build_rows(void) {
                 "   %s Z%d %s %d%%", item_name(e->type), e->tier,
                 k_qual_tag[e->quality], e->integrity);
         else
-            row(RK_TEXT, 0, COL_WARN, -1, "%s ----",
+            row(RK_TEXT, 0, COL_WARN, -1, "   %s ----",
                 item_name(WPN_COUNT + i));
     }
+    /* --- UTILITY --- */
+    row(RK_TEXT, 0, COL_HDR, -1, "UTILITY:");
     for (int i = 0; i < player_util_slots(); i++) {
         const WeaponInst *e = &g_player.util_eq[i];
         if (e->in_use)
             row(RK_UTIL, i, COL_DIM, e->type, "   %s %d%%",
                 item_name(e->type), e->integrity);
         else
-            row(RK_TEXT, 0, COL_DIM, -1, "UTIL BAY ----");
-    }
-    if (k_hulls[g_player.hull_id].has_turret) {
-        if (g_player.turret_eq.in_use)
-            row(RK_TURRET, 0, COL_DIM, g_player.turret_eq.type,
-                "   TURRET %s %d%%",
-                k_weapons[g_player.turret_eq.type].name,
-                g_player.turret_eq.integrity);
-        else
-            row(RK_TEXT, 0, COL_DIM, -1, "TURRET ----");
+            row(RK_TEXT, 0, COL_DIM, -1, "   BAY ----");
     }
     {
         int used = 0;
