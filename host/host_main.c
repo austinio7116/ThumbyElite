@@ -241,6 +241,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_SPEEDKILL") ||
         getenv("ELITE_BENCH") ||
         getenv("ELITE_HPMATRIX") ||
+        getenv("ELITE_STARTSAFE") ||
         getenv("ELITE_TURRETTEST") ||
         getenv("ELITE_NPCHP") ||
         getenv("ELITE_ASSASSTEST") ||
@@ -1172,6 +1173,16 @@ int main(int argc, char **argv) {
                s0, g_ships[e].shield, h0, g_ships[e].hull,
                (g_ships[e].shield < s0 || g_ships[e].hull < h0)
                    ? "DAMAGING" : "NO DAMAGE");
+        return 0;
+    }
+
+    if (getenv("ELITE_STARTSAFE")) {
+        CraftRawButtons none = {0};
+        for (int k = 0; k < 12; k++) elite_game_tick(&none, 1.0f/30.0f);
+        const SystemInfo *si = system_info();
+        char nm[14]; galaxy_system_name(si->addr, nm);
+        printf("[startsafe] %-12s threat=%d stations=%d\n",
+               nm, si->threat, si->n_stations);
         return 0;
     }
 

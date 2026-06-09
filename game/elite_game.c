@@ -809,8 +809,10 @@ static void start_new_game(uint32_t seed) {
     SysAddr start = {0, 0, 0};
     SysAddr station_fallback = {0, 0, 0};
     SysAddr fallback = {0, 0, 0};
+    SysAddr reach_fb = {0, 0, 0};      /* reachable but not safe */
     const float START_JUMP = 6.0f;     /* SKIFF range with margin */
     bool found = false, have_st_fb = false, have_fallback = false;
+    bool have_reach_fb = false;
     for (int ring = 0; ring < 14 && !found; ring++)
         for (int sy = -ring; sy <= ring && !found; sy++)
             for (int sx = -ring; sx <= ring && !found; sx++) {
@@ -847,10 +849,20 @@ static void start_new_game(uint32_t seed) {
                                 }
                             }
                         }
-                    if (near >= 2 && near_station) { start = a; found = true; }
+                    /* Always start a new game in a SAFE system (user):
+                     * threat 0 = no pirates lurking. Reachable-but-not-
+                     * safe is the fallback if no safe start is nearby. */
+                    if (near >= 2 && near_station) {
+                        if (probe.threat == 0) { start = a; found = true; }
+                        else if (!have_reach_fb) {
+                            reach_fb = a; have_reach_fb = true;
+                        }
+                    }
                 }
             }
-    if (!found) start = have_st_fb ? station_fallback : fallback;
+    if (!found)
+        start = have_reach_fb ? reach_fb
+              : have_st_fb ? station_fallback : fallback;
     arrive_in_system(start);
     r3d_starfield_init((uint32_t)(system_info()->seed >> 16));
 }
