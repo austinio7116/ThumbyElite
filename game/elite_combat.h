@@ -23,6 +23,7 @@ int  combat_pkiller(void);
 int  combat_pkiller_env(void);
 void combat_note_env_hit(int kind);
 void combat_finalize_kill(int shooter, int victim);
+int player_turret_gunner_tier(void);
 void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos);
 void combat_explosion_damage(int shooter, Vec3 centre, float radius,
                              float dmg);

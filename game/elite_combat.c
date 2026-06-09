@@ -350,6 +350,16 @@ void combat_crit_cooldown_tick(float dt) {
 
 void combat_set_shot_type(int wt) { s_shot_type = wt; }
 
+/* The player's turret has a GUNNER of rolled skill (HARMLESS..ELITE),
+ * fixed per ship off the hull seed — so an auto-turret isn't a
+ * perfect-aim cheat; some ships came with a crack shot, some a dud. */
+int player_turret_gunner_tier(void) {
+    uint32_t h = g_player.hull_seed * 2654435761u;
+    h ^= h >> 15; h *= 0x2545F491u; h ^= h >> 13;
+    int q = (int)(h % 100u);
+    return q < 26 ? 0 : q < 52 ? 1 : q < 74 ? 2 : q < 91 ? 3 : 4;
+}
+
 int combat_fire(int shooter, float spread, int target) {
     Ship *s = &g_ships[shooter];
     if (!combat_can_fire(s)) return -1;
@@ -611,10 +621,19 @@ void combat_tick(float dt) {
                     Vec3 aim = v3_add(g_ships[tgt].pos,
                                       v3_scale(v3_sub(g_ships[tgt].vel,
                                                       s->vel), tt));
+                    /* Gunner accuracy = rank spread. NPC turrets use
+                     * the pilot's tier; the PLAYER's turret has a gunner
+                     * skill ROLLED per ship off the hull seed
+                     * (harmless..deadly) -- no more perfect-aim turret
+                     * (user). Same jitter, different tier source. */
+                    int gtier;
                     if (npc) {
-                        /* turret gunner shares the pilot's rank:
-                         * tier spread, not a fixed jitter */
-                        float tsp = ai_tier_spread(s->tier) * 2.2f;
+                        gtier = s->tier;
+                    } else {
+                        gtier = player_turret_gunner_tier();
+                    }
+                    {
+                        float tsp = ai_tier_spread(gtier) * 2.2f;
                         uint32_t r2 = (uint32_t)(s->pos.x * 57.0f)
                                       ^ (uint32_t)(s->heat * 977.0f) ^ i;
                         r2 ^= r2 << 13; r2 ^= r2 >> 17; r2 ^= r2 << 5;
