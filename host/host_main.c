@@ -241,6 +241,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_SPEEDKILL") ||
         getenv("ELITE_BENCH") ||
         getenv("ELITE_HPMATRIX") ||
+        getenv("ELITE_ASSASSTEST") ||
         getenv("ELITE_KILLSCREEN") ||
         getenv("ELITE_FURBALL") ||
         getenv("ELITE_CIVMOVE") ||
@@ -1061,6 +1062,39 @@ int main(int argc, char **argv) {
      * tier vs a player flying STRAIGHT at 66%% throttle, standard
      * SKIFF shield, no evasion. Cell = seconds to kill, AMMO = ran
      * dry, ->60s = survived the window. */
+    if (getenv("ELITE_ASSASSTEST")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        extern Mission g_missions[];
+        CraftRawButtons none = {0};
+        for (int k = 0; k < 20; k++) elite_game_tick(&none, 1.0f/30.0f);
+        const SystemInfo *si = system_info();
+        /* force an assassinate contract targeting THIS system */
+        g_missions[0] = (Mission){ 0 };
+        g_missions[0].type = MIS_ASSASSINATE;
+        g_missions[0].target = si->addr;
+        g_missions[0].reward = 3700;
+        g_missions[0].faction = 0;
+        /* spawn the marked civilian + a plain civilian (control) */
+        Ship *pl = &g_ships[0];
+        int mk = ship_spawn(hull_mesh(0xC1771Eu, 7),
+                            v3_add(pl->pos, v3_scale(pl->basis.r[2], 60.0f)),
+                            TEAM_NEUTRAL);
+        g_ships[mk].is_civilian = 1; g_ships[mk].is_mark = 1;
+        g_ships[mk].team = TEAM_NEUTRAL;
+        int legal0 = g_player.legal, cr0 = g_player.credits;
+        /* player murders the marked target */
+        extern void combat_finalize_kill(int, int);
+        g_ships[mk].hull = 0;
+        combat_finalize_kill(PLAYER, mk);
+        printf("[assass] mission.done=%d (want 1)  legal %d->%d (want fugitive=2)\n",
+               g_missions[0].done, legal0, g_player.legal);
+        /* collect at dock */
+        int paid = mission_collect(si, 0);
+        printf("[assass] collected=%d credits %d->%d\n", paid, cr0,
+               g_player.credits);
+        return 0;
+    }
+
     if (getenv("ELITE_HPMATRIX")) {
         /* Average effective HP (shield + hull) per hull class, bare vs
          * fitted armour+shield at each tier (STANDARD quality, 100%%).
@@ -2607,7 +2641,7 @@ int main(int argc, char **argv) {
         /* Phase 3: salvage run — lock loot, fly to it, scoop. */
         extern int loot_positions(Vec3 *, int *, int);
         loot_on_kill(v3_add(pl->pos, v3_scale(pl->basis.r[2], 120.0f)),
-                     v3(0, 0, 0), 2);           /* guaranteed wreckage */
+                     v3(0, 0, 0), 2, NULL, 0);           /* guaranteed wreckage */
         for (int c2 = 0; c2 < 2; c2++) {
             MV_TAP(lb, 2);                      /* salvage lock */
             for (int f = 0; f < 700; f++) {
@@ -3313,14 +3347,14 @@ int main(int argc, char **argv) {
 
     /* Salvage test: force component drops next to the player, scoop. */
     if (getenv("ELITE_LOOTTEST")) {
-        extern void loot_on_kill(Vec3 pos, Vec3 vel, int tier);
+        extern void loot_on_kill(Vec3 pos, Vec3 vel, int tier, const uint8_t *, int);
         CraftRawButtons none = {0};
         for (int k = 0; k < 10; k++) elite_game_tick(&none, 1.0f / 30.0f);
         Ship *p = &g_ships[0];
         p->vel = v3(0, 0, 0);
         p->throttle = 0;
         for (int i = 0; i < 8; i++)
-            loot_on_kill(v3_add(p->pos, v3(5, 0, 14)), v3(0, 0, 0), 4);
+            loot_on_kill(v3_add(p->pos, v3(5, 0, 14)), v3(0, 0, 0), 4, NULL, 0);
         for (int k = 0; k < 90; k++) elite_game_tick(&none, 1.0f / 30.0f);
         int rack = 0;
         for (int i = 0; i < MAX_SALVAGE; i++)

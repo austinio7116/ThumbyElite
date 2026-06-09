@@ -50,14 +50,15 @@ void loot_init(void) {
     for (int i = 0; i < MAX_CANS; i++) s_cans[i].alive = false;
 }
 
-void loot_on_kill(Vec3 pos, Vec3 vel, int tier) {
+void loot_on_kill(Vec3 pos, Vec3 vel, int tier,
+                  const uint8_t *loadout, int n_loadout) {
     /* Mix kill-site bits into the stream: without this the sequence is
      * identical every boot and the first salvage is ALWAYS the same
      * weapon (user-reported: eternal PULSE-M). */
     union { float f; uint32_t u; } px = { pos.x }, pz = { pos.z };
     s_rng ^= px.u * 0x9E3779B9u ^ (pz.u >> 3);
     if (!s_rng) s_rng = 1;
-    if ((rnd() % 100u) >= 60) return;          /* 60% drop chance */
+    if ((rnd() % 100u) >= 72) return;          /* 72% drop chance */
     for (int i = 0; i < MAX_CANS; i++) {
         if (s_cans[i].alive) continue;
         Canister *c = &s_cans[i];
@@ -79,16 +80,25 @@ void loot_on_kill(Vec3 pos, Vec3 vel, int tier) {
                 c->comp.tier = (uint8_t)(1 + rnd() % 3u);
                 c->comp.affix = (uint8_t)(rnd() % 4u);   /* variant */
             } else {
-                c->comp.type = (uint8_t)(rnd() % WPN_COUNT);
+                /* A WEAPON the ship was actually flying (user) -- pick
+                 * from its real loadout; only fall back to random if we
+                 * weren't handed one (ambient debris, tests). */
+                c->comp.type = (loadout && n_loadout > 0)
+                    ? loadout[rnd() % (uint32_t)n_loadout]
+                    : (uint8_t)(rnd() % WPN_COUNT);
                 c->comp.tier = 0;
             }
             int q = (int)(rnd() % 100u);
-            c->comp.quality = (q < 50) ? Q_SALVAGED
-                            : (q < 80) ? Q_STANDARD
-                            : (q < 93) ? Q_REINFORCED
-                            : (q < 99) ? Q_MILITARY : Q_PROTOTYPE;
-            if (tier >= 3 && c->comp.quality < Q_STANDARD)
-                c->comp.quality = Q_STANDARD;
+            int rolled = (q < 50) ? Q_SALVAGED
+                       : (q < 80) ? Q_STANDARD
+                       : (q < 93) ? Q_REINFORCED
+                       : (q < 99) ? Q_MILITARY : Q_PROTOTYPE;
+            /* Quality FLOOR rises with the victim's rank -- the drop is
+             * pulled from the kit they were flying (user). */
+            static const uint8_t q_floor[5] = { Q_SALVAGED, Q_SALVAGED,
+                Q_STANDARD, Q_REINFORCED, Q_MILITARY };
+            int fl = q_floor[tier > 4 ? 4 : tier];
+            c->comp.quality = (uint8_t)(rolled < fl ? fl : rolled);
             /* Affix roll (weapons only): ~25%, tier-sweetened; TUNED
              * only ever appears on PROTOTYPE drops. */
             c->comp.affix = AFX_NONE;

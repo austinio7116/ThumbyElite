@@ -108,7 +108,7 @@ void mission_make_offers(const SystemInfo *si, int station,
             m->count = (uint8_t)(2 + ((h >> 9) % 4u));
             m->reward = (int32_t)(m->count * 320 * rep_bonus);
             snprintf(m->label, sizeof m->label, "CULL %d PIRATES", m->count);
-        } else {
+        } else if (roll < 92) {
             /* Bounty: a marked pilot waits at a nearby beacon. Tier
              * varies — EASY marks for starter ships, ACE paydays for
              * the brave (user spec). */
@@ -126,8 +126,29 @@ void mission_make_offers(const SystemInfo *si, int station,
             galaxy_system_name(dest, dname);
             snprintf(m->label, sizeof m->label, "%s MARK>%s",
                      k_tag[m->tier], dname);
+        } else {
+            /* ASSASSINATE: murder a marked civilian. Pays HEAVY but the
+             * kill brands you a fugitive (user). A dark contract. */
+            SysAddr dest;
+            int dst_st;
+            if (!find_dest(si->addr, h ^ 0x4551u, &dest, &dst_st)) continue;
+            m->type = MIS_ASSASSINATE;
+            m->target = dest;
+            m->tier = (uint8_t)(1 + ((h >> 24) % 3u));
+            m->reward = (int32_t)((2600 + m->tier * 1100) * rep_bonus);
+            char dname[14];
+            galaxy_system_name(dest, dname);
+            snprintf(m->label, sizeof m->label, "HIT >%s", dname);
         }
     }
+}
+
+bool mission_assassinate_here(SysAddr a) {
+    for (int i = 0; i < MAX_MISSIONS; i++)
+        if (g_missions[i].type == MIS_ASSASSINATE && !g_missions[i].done &&
+            sysaddr_eq(g_missions[i].target, a))
+            return true;
+    return false;
 }
 
 bool mission_accept(const Mission *m) {
@@ -145,14 +166,18 @@ bool mission_accept(const Mission *m) {
     return false;
 }
 
-void mission_on_kill(int victim_tier, bool was_bounty_mark) {
+void mission_on_kill(int victim_tier, bool was_bounty_mark,
+                     bool was_civilian) {
     for (int i = 0; i < MAX_MISSIONS; i++) {
         Mission *m = &g_missions[i];
         if (m->done) continue;
-        if (m->type == MIS_CULL && m->count > 0) {
+        if (m->type == MIS_CULL && m->count > 0 && !was_civilian) {
             m->count--;
             if (m->count == 0) m->done = true;
-        } else if (m->type == MIS_BOUNTY && was_bounty_mark) {
+        } else if (m->type == MIS_BOUNTY && was_bounty_mark && !was_civilian) {
+            m->done = true;
+        } else if (m->type == MIS_ASSASSINATE && was_bounty_mark &&
+                   was_civilian) {
             m->done = true;
         }
     }
@@ -171,7 +196,8 @@ bool mission_objective_here(SysAddr a) {
     for (int i = 0; i < MAX_MISSIONS; i++) {
         const Mission *m = &g_missions[i];
         if (m->done) continue;
-        if ((m->type == MIS_BOUNTY || m->type == MIS_DELIVERY) &&
+        if ((m->type == MIS_BOUNTY || m->type == MIS_DELIVERY ||
+             m->type == MIS_ASSASSINATE) &&
             sysaddr_eq(m->target, a))
             return true;
     }
@@ -201,7 +227,8 @@ int mission_collect(const SystemInfo *si, int station) {
 
         paid += m->reward;
         g_player.credits += m->reward;
-        rep_add(m->faction, (m->type == MIS_BOUNTY) ? 8 : 4);
+        rep_add(m->faction, (m->type == MIS_BOUNTY) ? 8
+                          : (m->type == MIS_ASSASSINATE) ? 5 : 4);
         g_player.xp_trading += (m->type == MIS_DELIVERY) ? 2 : 0;
         g_player.xp_gunnery += (m->type != MIS_DELIVERY) ? 1 : 0;
         m->type = MIS_NONE;

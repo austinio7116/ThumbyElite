@@ -23,6 +23,7 @@ typedef enum {
     MIS_DELIVERY,      /* haul N units of a good to a named station */
     MIS_CULL,          /* destroy N pirates anywhere */
     MIS_BOUNTY,        /* kill the marked ace at a system's nav beacon */
+    MIS_ASSASSINATE,   /* murder a marked CIVILIAN -- pays well, makes you wanted */
 } MissionType;
 
 typedef struct {
@@ -54,10 +55,11 @@ void mission_make_offers(const SystemInfo *si, int station,
                          Mission out[MISSION_OFFERS]);
 bool mission_accept(const Mission *m);     /* false if log full */
 /* Event hooks. */
-void mission_on_kill(int victim_tier, bool was_bounty_mark);
+void mission_on_kill(int victim_tier, bool was_bounty_mark, bool was_civilian);
 void mission_on_docked(const SystemInfo *si, int station);
 /* Active bounty mark tier for this system, or -1. */
 int mission_bounty_tier_here(SysAddr a);
+bool mission_assassinate_here(SysAddr a);
 /* Any active mission objective in this system? (chart markers) */
 bool mission_objective_here(SysAddr a);
 /* Try to complete missions at the docked station; returns credits paid. */

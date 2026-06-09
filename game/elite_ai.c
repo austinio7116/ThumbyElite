@@ -259,7 +259,7 @@ static void ai_ship(int idx, float dt) {
              * (Missile-dodging is separate and always on.) */
             s_juke_t[idx] -= dt;
             if (s_juke_t[idx] <= 0.0f) {
-                static const int k_juke[5] = { 6, 16, 30, 55, 80 };
+                static const int k_juke[5] = { 0, 8, 30, 55, 80 };
                 s_juking[idx] = ((int)(frnd_pub() % 100u) < k_juke[tier]);
                 s_juke_t[idx] = 1.3f + (float)(frnd_pub() % 100u) * 0.012f;
             }

@@ -10,7 +10,8 @@
 void loot_init(void);
 void loot_seed(uint32_t seed);   /* per-run stream (new game / load) */
 /* Roll a drop at a kill site (tier raises component odds/quality). */
-void loot_on_kill(Vec3 pos, Vec3 vel, int tier);
+void loot_on_kill(Vec3 pos, Vec3 vel, int tier,
+                  const uint8_t *loadout, int n_loadout);
 /* Tumble + scoop check. Returns a toast string for this frame or NULL. */
 const char *loot_tick(float dt);
 /* Add live canisters to the scene (camera-relative). */

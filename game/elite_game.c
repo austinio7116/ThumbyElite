@@ -515,7 +515,7 @@ static void spawn_poi_content(void) {
                               sinf(a) * r);
                 loot_on_kill(pos, v3(frand(-2, 2), frand(-2, 2),
                                      frand(-2, 2)),
-                             (int)si->threat);
+                             (int)si->threat, NULL, 0);
             }
         }
     }
@@ -541,6 +541,27 @@ static void spawn_poi_content(void) {
             int e2 = ship_spawn(hull_mesh(mseed ^ 0x55u, 3),
                                 v3_add(pos, v3(120, 30, 60)), TEAM_HOSTILE);
             if (e2 > 0) ship_set_tier(e2, 2, 3);
+        }
+    }
+
+    /* Assassination target: a marked CIVILIAN at the contract beacon.
+     * Killing it pays heavy and brands you a fugitive (the murder
+     * penalty fires automatically on the kill). */
+    if (s_anchor_has_poi && s_anchor_poi.kind == POI_BEACON &&
+        mission_assassinate_here(s_addr)) {
+        float a = frand(0, 6.2831f);
+        Vec3 pos = v3(cosf(a) * 650.0f, frand(-130, 130), sinf(a) * 650.0f);
+        uint32_t aseed = (uint32_t)(si->seed >> 16) ^ 0x4551A551u;
+        int cls = (xorshift32() & 1) ? 7 : 6;   /* a trader/hauler */
+        int idx = ship_spawn(hull_mesh(aseed, cls), pos, TEAM_NEUTRAL);
+        if (idx > 0) {
+            ship_set_tier(idx, 1, cls);
+            g_ships[idx].is_civilian = 1;
+            g_ships[idx].is_mark = 1;
+            g_ships[idx].team = TEAM_NEUTRAL;
+            snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                     "ASSASSINATION TARGET");
+            s_scoop_toast_t = 3.0f;
         }
     }
 }

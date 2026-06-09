@@ -55,7 +55,7 @@ void ships_despawn_npcs(void) {
 }
 
 const char *k_tier_names[5] = {
-    "HARMLESS", "NOVICE", "CAPABLE", "DEADLY", "ELITE",
+    "VOIDRAT", "ROGUE", "MARAUDER", "REAVER", "ELITE",
 };
 
 void ship_fit_weapon(int idx, int mount, WeaponType w) {
