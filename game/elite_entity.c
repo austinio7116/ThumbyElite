@@ -74,14 +74,16 @@ void ship_fit_weapon(int idx, int mount, WeaponType w) {
  * has a peashooter but might surprise you, and an ELITE usually packs
  * heavy iron but occasionally slums it. */
 static const uint8_t k_grade0[] = { WPN_PULSE_S, WPN_AUTOCANNON };
-static const uint8_t k_grade1[] = { WPN_PULSE_M, WPN_BLASTER,
-                                    WPN_MISSILE, WPN_FLAK };
+static const uint8_t k_grade1[] = { WPN_PULSE_M, WPN_MISSILE,
+                                    WPN_FLAK };   /* BLASTER pulled: it
+                                    bypasses the aim-spread system, so
+                                    weak pilots hit ~65%% with it (user) */
 static const uint8_t k_grade2[] = { WPN_PULSE_L, WPN_BEAM, WPN_ION,
                                     WPN_HOMING };
 static const uint8_t k_grade3[] = { WPN_PHOTON, WPN_PLASMA, WPN_GAUSS };
 static const uint8_t k_grade4[] = { WPN_RAILGUN, WPN_LANCE };
 static const struct { const uint8_t *w; int n; } k_grades[5] = {
-    { k_grade0, 2 }, { k_grade1, 4 }, { k_grade2, 4 },
+    { k_grade0, 2 }, { k_grade1, 3 }, { k_grade2, 4 },
     { k_grade3, 3 }, { k_grade4, 2 },
 };
 /* per-tier grade probabilities x100 (rows sum to 100). */

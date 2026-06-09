@@ -240,6 +240,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_BENDTEST") ||
         getenv("ELITE_SPEEDKILL") ||
         getenv("ELITE_BENCH") ||
+        getenv("ELITE_HPMATRIX") ||
         getenv("ELITE_KILLSCREEN") ||
         getenv("ELITE_FURBALL") ||
         getenv("ELITE_CIVMOVE") ||
@@ -1060,6 +1061,45 @@ int main(int argc, char **argv) {
      * tier vs a player flying STRAIGHT at 66%% throttle, standard
      * SKIFF shield, no evasion. Cell = seconds to kill, AMMO = ran
      * dry, ->60s = survived the window. */
+    if (getenv("ELITE_HPMATRIX")) {
+        /* Average effective HP (shield + hull) per hull class, bare vs
+         * fitted armour+shield at each tier (STANDARD quality, 100%%).
+         * Shows the spread of total damage needed to kill each ship. */
+        extern float equip_mult(const WeaponInst *);
+        WeaponInst fit = { .in_use = 1, .quality = Q_STANDARD,
+                           .integrity = 100 };
+        WeaponInst bare = { .in_use = 0 };
+        float emf = equip_mult(&fit), emb = equip_mult(&bare);
+        printf("[hp] %-9s baseH baseS |  BARE   Z1    Z2    Z3   "
+               "(eff HP = shield+hull, STD qual)\n", "HULL");
+        for (int hc = 0; hc < N_HULLS; hc++) {
+            const HullDef *h = &k_hulls[hc];
+            float ah = 0, as = 0; int N = 300;
+            for (int sd = 0; sd < N; sd++) {
+                HullRoll rv;
+                hull_roll(hc, (uint32_t)(0x100u + sd) * 2654435761u, &rv);
+                ah += rv.hull; as += rv.shd;
+            }
+            ah /= N; as /= N;
+            float bh = h->hull_base * ah, bs = h->shield_base * as;
+            float bareHP = bh * emb + bs * emb;
+            printf("[hp] %-9s %5.0f %5.0f | %5.0f", h->name, bh, bs, bareHP);
+            for (int t = 1; t <= 3; t++) {
+                int ht = t <= h->max_hull_tier ? t : h->max_hull_tier;
+                int st = t <= h->max_shield_tier ? t : h->max_shield_tier;
+                float hp = bh * k_tier_mult[ht] * emf
+                         + bs * k_tier_mult[st] * emf;
+                int capped = (t > h->max_hull_tier || t > h->max_shield_tier);
+                printf(" %5.0f%s", hp, capped ? "*" : " ");
+            }
+            printf("  [maxA Z%d maxS Z%d]\n",
+                   h->max_hull_tier, h->max_shield_tier);
+        }
+        printf("[hp] * = hull can't reach that tier (shown at its cap). "
+               "PROTOTYPE quality adds ~+65%%.\n");
+        return 0;
+    }
+
     if (getenv("ELITE_BENCH")) {
         /* REALISTIC engagement matrix: the player ACTIVELY fights --
          * pursues the enemy (steers at it, holds combat range) but

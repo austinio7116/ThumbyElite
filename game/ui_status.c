@@ -9,6 +9,7 @@
 #include "ui_status.h"
 #include "elite_types.h"
 #include "elite_player.h"
+#include "elite_entity.h"
 #include "elite_ships.h"
 #include "elite_weapons.h"
 #include "ui_icons.h"
@@ -29,7 +30,8 @@
 
 /* Row model. */
 typedef enum {
-    RK_TEXT = 0, RK_MOUNT, RK_RACK, RK_CARGO, RK_EQ, RK_UTIL, RK_TURRET
+    RK_TEXT = 0, RK_MOUNT, RK_RACK, RK_CARGO, RK_EQ, RK_UTIL, RK_TURRET,
+    RK_BAR
 } RowKind;
 typedef struct {
     uint8_t kind, index;
@@ -80,6 +82,11 @@ static void build_rows(void) {
     row(RK_TEXT, 0, COL_HDR, -1, "%s", h->name);
     row(RK_TEXT, 0, COL_DIM, -1, "SPD %d CRG %d", (int)h->max_speed,
         h->cargo);
+    /* Live defence: hull + shield, current vs max (max already folded in
+     * armour/shield tier + quality + wear) as bars. */
+    row(RK_TEXT, 0, COL_HDR, -1, "DEFENCE:");
+    row(RK_BAR, 0, COL_DIM, -1, "HULL");
+    row(RK_BAR, 1, COL_DIM, -1, "SHIELD");
     /* Rank + legal standing belong on the FIRST screen — a FUGITIVE
      * pilot must not have to scroll to learn the law wants them. */
     {
@@ -185,7 +192,8 @@ static void build_rows(void) {
 }
 
 static bool selectable(int r) {
-    return r >= 0 && r < s_n_rows && s_rows[r].kind != RK_TEXT;
+    return r >= 0 && r < s_n_rows && s_rows[r].kind != RK_TEXT &&
+           s_rows[r].kind != RK_BAR;
 }
 static int next_sel(int from, int dir) {
     for (int r = from + dir; r >= 0 && r < s_n_rows; r += dir)
@@ -295,6 +303,36 @@ void status_draw(uint16_t *fb) {
     int y = 13;
     for (int r = s_scroll; r < s_n_rows && y < 117; r++, y += 8) {
         const Row *rw = &s_rows[r];
+        if (rw->kind == RK_BAR) {
+            const Ship *p = &g_ships[PLAYER];
+            int shd = rw->index;
+            float cur = shd ? p->shield : p->hull;
+            float mx  = shd ? p->shield_max : p->hull_max;
+            if (cur < 0) cur = 0;
+            uint16_t fc = shd ? RGB565C(90, 160, 255)
+                              : RGB565C(110, 220, 130);
+            craft_font_draw(fb, rw->text, 2, y, COL_DIM);
+            int bx = 44, bw = 46, by = y + 1, bh = 5;
+            float frac = mx > 0 ? cur / mx : 0; if (frac > 1) frac = 1;
+            int fill = (int)(frac * (bw - 2) + 0.5f);
+            /* frame */
+            for (int xx = 0; xx < bw; xx++) {
+                fb[by * ELITE_FB_W + bx + xx] = COL_GRID;
+                fb[(by + bh - 1) * ELITE_FB_W + bx + xx] = COL_GRID;
+            }
+            for (int yy = 0; yy < bh; yy++) {
+                fb[(by + yy) * ELITE_FB_W + bx] = COL_GRID;
+                fb[(by + yy) * ELITE_FB_W + bx + bw - 1] = COL_GRID;
+            }
+            for (int yy = 1; yy < bh - 1; yy++)
+                for (int xx = 0; xx < fill; xx++)
+                    fb[(by + yy) * ELITE_FB_W + bx + 1 + xx] = fc;
+            char hb[16];
+            snprintf(hb, sizeof hb, "%d/%d", (int)(cur + 0.5f),
+                     (int)(mx + 0.5f));
+            craft_font_draw(fb, hb, bx + bw + 3, y, fc);
+            continue;
+        }
         /* Don't draw under the preview window. */
         int x0 = 2;
         if (rw->icon >= 0 && y >= 11) icon_weapon(fb, x0, y - 1, rw->icon);
