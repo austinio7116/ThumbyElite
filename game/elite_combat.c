@@ -11,6 +11,7 @@
 #include "elite_loot.h"
 #include "elite_rocks.h"
 #include "mission.h"
+#include "elite_ai.h"
 #include "r3d_fx.h"
 #include "elite_audio.h"
 #include "elite_platform.h"
@@ -612,7 +613,7 @@ void combat_tick(float dt) {
                      * the heavy-hull siege times at ~2s regardless of
                      * every other tuning knob. */
                     int npc = (i != PLAYER);
-                    s->turret_cool = tw->cooldown * (npc ? 3.2f : 1.6f);
+                    s->turret_cool = tw->cooldown * (npc ? 3.2f : 2.6f);
                     s->heat += tw->heat * 0.6f;
                     float mult = 0.6f;
                     if (i == PLAYER) {
@@ -656,7 +657,7 @@ void combat_tick(float dt) {
                     Vec3 muz = v3_add(s->pos,
                                       v3_scale(dir2,
                                                s->mesh->bound_r * 0.8f));
-                    sfx_weapon(wt, i == PLAYER ? 0.5f
+                    sfx_weapon(wt, i == PLAYER ? 0.12f
                                : 0.4f - dist / 900.0f);
                     if (tw->speed > 0) {
                         proj_spawn_ex((WeaponType)wt, i, (int8_t)tgt,

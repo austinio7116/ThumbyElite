@@ -241,6 +241,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_SPEEDKILL") ||
         getenv("ELITE_BENCH") ||
         getenv("ELITE_HPMATRIX") ||
+        getenv("ELITE_TURRETTEST") ||
         getenv("ELITE_NPCHP") ||
         getenv("ELITE_ASSASSTEST") ||
         getenv("ELITE_KILLSCREEN") ||
@@ -1135,6 +1136,42 @@ int main(int argc, char **argv) {
         }
         printf("[npchp] 300 REAVER kills: %d armour/shield, %d weapon, %d commodity, %d no-drop\n",
                armsh, wpn, commod, nodrop);
+        return 0;
+    }
+
+    if (getenv("ELITE_TURRETTEST")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        extern void combat_set_player_target(int);
+        extern void combat_tick(float);
+        CraftRawButtons none = {0};
+        for (int k = 0; k < 20; k++) elite_game_tick(&none, 1.0f/30.0f);
+        Ship *pl = &g_ships[0];
+        g_player.hull_id = 9;   /* BASILISK has a turret hardpoint */
+        /* fit a PULSE-S turret, force PROTOTYPE calibration via seed */
+        g_player.turret_eq = (WeaponInst){ .type = WPN_PULSE_S,
+            .quality = Q_PROTOTYPE, .integrity = 100, .in_use = 1 };
+        for (uint32_t sd = 1; sd < 200000; sd++) {
+            extern int turret_cal_for_seed(uint32_t);
+            if (turret_cal_for_seed(sd) == 3) { g_player.hull_seed = sd; break; }
+        }
+        player_apply_to_ship();
+        printf("[turret] type=%d turret_type=%d gunner=%d\n",
+               g_player.turret_eq.type, pl->turret_type,
+               (int)({ extern int player_turret_gunner_tier(void);
+                       player_turret_gunner_tier(); }));
+        int e = ship_spawn(hull_mesh(0xACE1u, 2),
+                           v3_add(pl->pos, v3_scale(pl->basis.r[2], 150.0f)),
+                           TEAM_HOSTILE);
+        ship_set_tier(e, 1, 2);
+        g_ships[e].vel = v3(0,0,0);
+        combat_set_player_target(e);
+        float h0 = g_ships[e].hull, s0 = g_ships[e].shield;
+        for (int f = 0; f < 30*4; f++) { combat_tick(1.0f/30.0f);
+            g_ships[e].vel = v3(0,0,0); }   /* hold it still */
+        printf("[turret] 4s: enemy shield %.0f->%.0f hull %.0f->%.0f (%s)\n",
+               s0, g_ships[e].shield, h0, g_ships[e].hull,
+               (g_ships[e].shield < s0 || g_ships[e].hull < h0)
+                   ? "DAMAGING" : "NO DAMAGE");
         return 0;
     }
 
