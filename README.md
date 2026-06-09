@@ -11,6 +11,55 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 
 ## Changelog
 
+### 1.23.2 (ThumbyOne v1.23.2)
+
+A balance, content and fixes dot-release from playtesting. **No save change.**
+
+**Fixes**
+- **Auto-turrets now actually fire on target.** A missing include made
+  the turret's aim read garbage, so it made noise but hit nothing and
+  dealt no damage. Fixed; turret sound is also quieter/more distant and
+  its cadence slower.
+- **New games always start in a SAFE system** (no pirates) — a fresh
+  pilot can find their feet before braving rough space.
+- **Ship status screen** reads cleanly: scrolling up returns to the top
+  header instead of stalling mid-screen (both ends, smoothly).
+
+**Combat & balance**
+- **Enemy aim eased** ~12% across all ranks (the d-pad makes aiming
+  hard enough); baseline shield regen trimmed so eased fire can't fall
+  into an unkillable wall — the REGEN-affix shield stays a strong pick.
+- **BLASTER pulled from pirate loadouts** — its bending bolt ignored
+  the aim system, so even weak pilots hit ~65% with it. (Still yours
+  from shops/loot.)
+- **Defensive add-ons pay off much harder** — a maxed Z3 ship is a real
+  tank now, so investing in armour/shields is felt, while enemies stay
+  bare so kills don't turn into slogs.
+- **Pirates fly with their real gear**: kills drop a gun from the ship's
+  actual loadout, not a random one; salvage drop rate up to 72%.
+
+**Pirates & civilians**
+- **Pirate ranks renamed**: VOIDRAT, ROGUE, MARAUDER, REAVER, ELITE.
+  The bottom ranks weave far less (VOIDRAT not at all) so they're
+  hittable.
+- **Civilians fly rolled armour and shields** — tankier, and their
+  wrecks drop the real kit. **Distress victims survive long enough to
+  rescue** (they were dying in 1-2s); their attackers now close from a
+  distance, giving you a window to intervene.
+
+**Missions & ships**
+- **New ASSASSINATE mission** — murder a marked civilian for a heavy
+  payout, at the cost of fugitive status.
+- **Shipyard: press DOWN on a ship** to see the loadout it comes with
+  (weapons + turret grade) before you buy.
+- **Outfitting: TO TURRET** action arms a free turret straight from a
+  Z1 gun in the hold.
+- **Turret gunner is a rolled calibration** (STANDARD..PROTOTYPE) shown
+  in the status/outfit screens — some ships came with a crack shot,
+  some a dud.
+- **Ship status** broken into sections (weapons / turret / armour &
+  shields / utility) with live hull and shield bars.
+
 ### 1.23.1 (ThumbyOne v1.23.1)
 
 A balance-and-feel patch from playtesting. **No save change.**
