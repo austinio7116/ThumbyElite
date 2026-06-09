@@ -766,7 +766,7 @@ static void start_new_game(uint32_t seed) {
                 .integrity = (uint8_t)(55 + (h % 36u)), .in_use = 1,
             };
         }
-        g_player.credits = s_cheat_on ? 100000 : 1000;
+        g_player.credits = s_cheat_on ? 300000 : 1000;
     }
     spawn_player();    /* AFTER player state is final */
     missions_init();
@@ -2173,7 +2173,7 @@ void elite_game_draw_overlay(uint16_t *fb) {
             craft_font_draw(fb, items[i], 52, 78 + i * 10, c);
         }
         if (s_cheat_on)
-            craft_font_draw(fb, "CHEAT: 100,000 CR START", 14, 104,
+            craft_font_draw(fb, "CHEAT: 300,000 CR START", 14, 104,
                             RGB565C(245, 200, 80));
         else
             craft_font_draw(fb, "AN INFINITE GALAXY AWAITS", 14, 116,
