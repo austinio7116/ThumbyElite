@@ -497,9 +497,9 @@ static int free_slot_for(int wpn_type) {
 }
 
 /* --- action popup (user design: A on an item opens its actions) ---- */
-enum { PACT_REPAIR, PACT_SWAP, PACT_UNFIT, PACT_SELL, PACT_FIT };
+enum { PACT_REPAIR, PACT_SWAP, PACT_UNFIT, PACT_SELL, PACT_FIT, PACT_TURRET };
 static uint8_t s_pop_open, s_pop_n, s_pop_cur;
-static uint8_t s_pop_acts[4];
+static uint8_t s_pop_acts[5];
 static int s_pop_row;
 /* swap picker: choose the counterpart explicitly (never lose a gun
  * to an implicit pick) */
@@ -507,6 +507,7 @@ static uint8_t s_pick_open, s_pick_n, s_pick_cur;
 static int8_t s_pick_items[6];      /* mount idx or rack idx */
 static const char *pact_name(int a) {
     switch (a) {
+    case PACT_TURRET: return "TO TURRET";
     case PACT_REPAIR: return "REPAIR";
     case PACT_SWAP:   return "SWAP";
     case PACT_UNFIT:  return "UNFIT";
@@ -563,6 +564,11 @@ static bool popup_build(int row) {
         if (sv->type < WPN_COUNT) {
             s_pop_acts[s_pop_n++] =
                 (free_slot_for(sv->type) >= 0) ? PACT_FIT : PACT_SWAP;
+            /* a Z1 gun can also arm a free turret hardpoint (user) */
+            const HullDef *h = &k_hulls[g_player.hull_id];
+            if (k_weapons[sv->type].size <= 1 && h->has_turret &&
+                !g_player.turret_eq.in_use)
+                s_pop_acts[s_pop_n++] = PACT_TURRET;
         } else {
             s_pop_acts[s_pop_n++] = PACT_FIT;   /* equip fit/swap path */
         }
@@ -660,6 +666,17 @@ static void popup_execute(void) {
     case PACT_FIT:
         outfit_action_a(s_pop_row);        /* old A on rack = fit/swap */
         break;
+    case PACT_TURRET: {
+        if (r->kind != ROW_SALV) break;
+        WeaponInst *sv = &g_player.salvage[r->index];
+        if (!sv->in_use || sv->type >= WPN_COUNT) break;
+        if (g_player.turret_eq.in_use) { toast("TURRET FULL"); break; }
+        g_player.turret_eq = *sv;
+        sv->in_use = 0;
+        player_apply_to_ship();
+        toast("TURRET ARMED");
+        break;
+    }
     case PACT_SWAP:
         pick_build();
         if (s_pick_n == 0) {
