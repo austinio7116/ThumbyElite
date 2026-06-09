@@ -471,6 +471,8 @@ int main(int argc, char **argv) {
         TY(rb, 8);
         for (int k = 0; k < 20; k++) elite_game_tick(&none, 1.0f/30.0f);
         render_frame(); dump_ppm("/tmp/yc_live_detail2.ppm");
+        TY(down, 14);   /* drill into the included-kit view */
+        render_frame(); dump_ppm("/tmp/yc_kit.ppm");
         #undef TY
         return 0;
     }

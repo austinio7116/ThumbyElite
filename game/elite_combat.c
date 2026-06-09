@@ -355,11 +355,14 @@ void combat_set_shot_type(int wt) { s_shot_type = wt; }
  * (0..3) feeding accuracy tiers HARMLESS..DEADLY (DEADLY is the best a
  * turret gets), shown to the player as quality grades STANDARD ..
  * PROTOTYPE. Skewed toward greener turrets. */
-int player_turret_gunner_tier(void) {
-    uint32_t h = g_player.hull_seed * 2654435761u;
+int turret_cal_for_seed(uint32_t seed) {
+    uint32_t h = seed * 2654435761u;
     h ^= h >> 15; h *= 0x2545F491u; h ^= h >> 13;
     int q = (int)(h % 100u);
     return q < 35 ? 0 : q < 65 ? 1 : q < 87 ? 2 : 3;
+}
+int player_turret_gunner_tier(void) {
+    return turret_cal_for_seed(g_player.hull_seed);
 }
 
 int combat_fire(int shooter, float spread, int target) {

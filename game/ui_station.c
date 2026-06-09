@@ -48,6 +48,7 @@ static float s_hold_a, s_hold_b, s_repeat;
 static char s_toast[24];
 static float s_toast_t;
 static int s_detail;       /* 0 = list, 1 = detail sheet open */
+static uint8_t s_kit_view;  /* shipyard: showing a ship's included kit */
 
 #define HOME_ITEMS 10
 static const char *k_home[HOME_ITEMS] = {
@@ -192,6 +193,87 @@ static void try_service(void) {
 }
 
 /* --- shipyard ----------------------------------------------------------*/
+/* The part-worn KIT a used hull+seed arrives with -- rolled per SLOT
+ * (deterministic, position-based) so a preview matches what's fitted on
+ * purchase. Fills out[i] for i<rolled n_slots; empties stay in_use=0. */
+void hull_kit_preview(int hull_id, uint32_t seed, WeaponInst out[HULL_SLOTS]) {
+    for (int i = 0; i < HULL_SLOTS; i++) out[i] = (WeaponInst){0};
+    HullRoll rv;
+    hull_roll(hull_id, seed, &rv);
+    uint32_t kr = seed ^ 0x6EA7u;
+    for (int i = 0; i < rv.n_slots && i < HULL_SLOTS; i++) {
+        kr ^= kr << 13; kr ^= kr >> 17; kr ^= kr << 5;
+        if ((kr % 100u) >= 70) continue;        /* some stay empty */
+        int sz = rv.slot_size[i];
+        static const uint8_t z1[3] = { WPN_PULSE_S, WPN_AUTOCANNON,
+                                       WPN_MINING };
+        static const uint8_t z2[4] = { WPN_PULSE_M, WPN_ION,
+                                       WPN_FLAK, WPN_HOMING };
+        int ty = (sz >= 3) ? WPN_PULSE_L
+               : (sz == 2) ? z2[(kr >> 8) % 4u]
+                           : z1[(kr >> 8) % 3u];
+        int q = (int)((kr >> 16) % 100u);
+        out[i] = (WeaponInst){
+            .type = (uint8_t)ty,
+            .quality = (uint8_t)(q < 30 ? 0 : q < 80 ? 1 : q < 95 ? 2 : 3),
+            .integrity = (uint8_t)(55 + (kr >> 24) % 41u),
+            .in_use = 1,
+            .affix = (uint8_t)(((kr >> 5) % 100u) < 15
+                                   ? 1 + (kr >> 9) % (AFX_COUNT - 1) : 0),
+            .ammo_flag = 1,
+            .ammo_lo = (uint8_t)(k_weapons[ty].ammo_max * 2 / 5),
+        };
+    }
+}
+
+extern int turret_cal_for_seed(uint32_t seed);
+
+/* Drill-down: the loadout a ship arrives with -- rolled weapons per
+ * slot + the turret's calibration grade (user). Left column only;
+ * the rotating 3D pane stays live. */
+static void detail_draw_kit(uint16_t *fb, int hull_id, uint32_t seed,
+                            const char *foot) {
+    for (int yy = 0; yy < ELITE_FB_H; yy++) {
+        int xmax = (yy >= 10 && yy < 95) ? 64 : ELITE_FB_W;
+        uint16_t *r = fb + yy * ELITE_FB_W;
+        for (int x = 0; x < xmax; x++) r[x] = COL_BG;
+    }
+    for (int yy = 10; yy < 95; yy++) fb[yy * ELITE_FB_W + 64] = COL_GRID;
+    const HullDef *h = &k_hulls[hull_id];
+    static const char *qt[5] = { "SLV", "STD", "RNF", "MIL", "PRO" };
+    static const char *cal[4] = { "STANDARD", "REINFORCED",
+                                  "MILITARY", "PROTOTYPE" };
+    WeaponInst kit[HULL_SLOTS];
+    hull_kit_preview(hull_id, seed, kit);
+    HullRoll rv; hull_roll(hull_id, seed, &rv);
+    char buf[28];
+    craft_font_draw(fb, "COMES WITH", 2, 2, COL_HDR);
+    for (int x = 0; x < 64; x++) fb[9 * ELITE_FB_W + x] = COL_GRID;
+    int y = 13;
+    craft_font_draw(fb, "WEAPONS:", 2, y, COL_HDR); y += 9;
+    for (int i = 0; i < rv.n_slots && i < HULL_SLOTS; i++) {
+        if (kit[i].in_use)
+            snprintf(buf, sizeof buf, "Z%d %s %s", rv.slot_size[i],
+                     k_weapons[kit[i].type].name, qt[kit[i].quality]);
+        else
+            snprintf(buf, sizeof buf, "Z%d EMPTY", rv.slot_size[i]);
+        craft_font_draw(fb, buf, 4, y,
+                        kit[i].in_use ? COL_TXT : COL_DIM);
+        y += 8;
+    }
+    if (h->has_turret) {
+        y += 3;
+        craft_font_draw(fb, "TURRET:", 2, y, COL_HDR); y += 9;
+        snprintf(buf, sizeof buf, "Z1 %s", cal[turret_cal_for_seed(seed)]);
+        craft_font_draw(fb, buf, 4, y, COL_TXT); y += 8;
+    }
+    y += 3;
+    craft_font_draw(fb, "+ FULL FUEL, FRESH", 2, y, COL_DIM); y += 7;
+    craft_font_draw(fb, "  HULL & SHIELD", 2, y, COL_DIM);
+    for (int x = 0; x < 64; x++) fb[118 * ELITE_FB_W + x] = COL_GRID;
+    craft_font_draw(fb, foot, 2, 121, COL_DIM);
+}
+
 static void shipyard_buy(int offer) {
     int hull_id = s_yard[offer].cls;
     if (hull_id == g_player.hull_id &&
@@ -251,32 +333,11 @@ static void shipyard_buy(int offer) {
      * swapping marginally better-rolled pieces; the empties are your
      * upgrade canvas. */
     {
-        uint32_t kr = s_yard[offer].seed ^ 0x6EA7u;
+        WeaponInst kit[HULL_SLOTS];
+        hull_kit_preview(hull_id, s_yard[offer].seed, kit);
         for (int i = 0; i < player_n_slots(); i++) {
-            if (g_player.mounts[i].in_use) continue;
-            kr ^= kr << 13; kr ^= kr >> 17; kr ^= kr << 5;
-            if ((kr % 100u) >= 70) continue;        /* some stay empty */
-            int sz = player_slot_size(i);
-            static const uint8_t z1[3] = { WPN_PULSE_S, WPN_AUTOCANNON,
-                                           WPN_MINING };
-            static const uint8_t z2[4] = { WPN_PULSE_M, WPN_ION,
-                                           WPN_FLAK, WPN_HOMING };
-            int ty = (sz >= 3) ? WPN_PULSE_L
-                   : (sz == 2) ? z2[(kr >> 8) % 4u]
-                               : z1[(kr >> 8) % 3u];
-            int q = (int)((kr >> 16) % 100u);
-            g_player.mounts[i] = (WeaponInst){
-                .type = (uint8_t)ty,
-                .quality = (uint8_t)(q < 30 ? 0 : q < 80 ? 1
-                                   : q < 95 ? 2 : 3),
-                .integrity = (uint8_t)(55 + (kr >> 24) % 41u),
-                .in_use = 1,
-                .affix = (uint8_t)(((kr >> 5) % 100u) < 15
-                                       ? 1 + (kr >> 9) % (AFX_COUNT - 1)
-                                       : 0),
-                .ammo_flag = 1,
-                .ammo_lo = (uint8_t)(k_weapons[ty].ammo_max * 2 / 5),
-            };
+            if (g_player.mounts[i].in_use || !kit[i].in_use) continue;
+            g_player.mounts[i] = kit[i];
             player_fit_restore_ammo(i);
         }
     }
@@ -1055,16 +1116,21 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
             if (rb_edge) s_cursor = (s_cursor + 1) % (YARD_OFFERS + 1);
             if (lb_edge)
                 s_cursor = (s_cursor + YARD_OFFERS) % (YARD_OFFERS + 1);
+            if (s_kit_view) {                  /* in the kit sub-view */
+                if (up || b_edge || back) s_kit_view = 0;
+                break;
+            }
+            if (down) { s_kit_view = 1; break; }   /* drill into the kit */
             if (a_edge && s_cursor < YARD_OFFERS) {
                 shipyard_buy(s_cursor);
-                s_detail = 0;
+                s_detail = 0; s_kit_view = 0;
             }
             if (b_edge || back) s_detail = 0;
             break;
         }
         if (up && s_cursor > 0) s_cursor--;
         if (down && s_cursor < YARD_OFFERS) s_cursor++;
-        if (b_edge || lb_edge) s_detail = 1;
+        if (b_edge || lb_edge) { s_detail = 1; s_kit_view = 0; }
         if (a_edge && s_cursor < YARD_OFFERS) shipyard_buy(s_cursor);
         if (back) { s_screen = SCR_HOME; s_cursor = 1; }
         break;
@@ -1725,17 +1791,21 @@ void station_draw(uint16_t *fb) {
 
     /* Detail sheets replace the list view. */
     if (s_detail && s_screen == SCR_SHIPYARD) {
-        if (s_cursor == YARD_OFFERS) {       /* YOUR ship: comparison */
-            detail_draw_hull(fb, g_player.hull_id, g_player.hull_seed,
-                             -1, "LB/RB:NEXT B:BACK");
+        int yours = (s_cursor == YARD_OFFERS);
+        int cls = yours ? g_player.hull_id : s_yard[s_cursor].cls;
+        uint32_t sd = yours ? g_player.hull_seed : s_yard[s_cursor].seed;
+        if (s_kit_view) {
+            detail_draw_kit(fb, cls, sd, "UP/B:STATS LB/RB:SHIP");
             return;
         }
-        int cls = s_yard[s_cursor].cls;
+        if (yours) {
+            detail_draw_hull(fb, cls, sd, -1, "LB/RB:NEXT DN:KIT B:BACK");
+            return;
+        }
         int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
         int cost = k_hulls[cls].price - tradein;
         if (cost < 0) cost = 0;
-        detail_draw_hull(fb, cls, s_yard[s_cursor].seed, cost,
-                         "LB/RB:NEXT A:BUY B:BACK");
+        detail_draw_hull(fb, cls, sd, cost, "DN:KIT A:BUY B:BACK");
         return;
     }
     if (s_detail && s_screen == SCR_OUTFIT) {
