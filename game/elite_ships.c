@@ -18,7 +18,10 @@ const HullDef k_hulls[N_HULLS] = {
     { "BASILISK",  &mesh_dread,     130000, 3, {3, 3, 2},  60,  3, 3,   95,  45, 1.4f,  280, 220,  12.5f, 8, 2, 1 },
 };
 
-const float k_tier_mult[4] = { 1.0f, 1.3f, 1.6f, 2.0f };
+/* Defensive tier multiplier (armour/shield Z1-Z3). Widened so
+ * investing in security pays off hard without touching enemy HP -- a
+ * Z3 frame is a real tank (user). */
+const float k_tier_mult[4] = { 1.0f, 1.45f, 1.95f, 2.6f };
 
 int upgrade_price(int hull_id, int tier) {
     /* Tier 1/2/3 cost ~8/16/28% of the hull price. */

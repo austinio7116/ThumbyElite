@@ -1173,7 +1173,7 @@ int main(int argc, char **argv) {
                    h->max_hull_tier, h->max_shield_tier);
         }
         printf("[hp] * = hull can't reach that tier (shown at its cap). "
-               "PROTOTYPE quality adds ~+65%%.\n");
+               "PROTOTYPE quality adds ~+125%%.\n");
         return 0;
     }
 

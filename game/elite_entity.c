@@ -122,24 +122,11 @@ void ship_set_tier(int idx, int tier, int hull_class) {
     s->accel = h->accel;
     /* Low tiers fly wide, lazy loops — easy to out-turn. */
     s->turn_rate = h->turn_rate * (0.42f + 0.17f * (float)tier);
-    /* NPCs now fly rolled ARMOUR + SHIELDS like any ship (user): tankier,
-     * scaled by rank (better pilots, better gear), and the kit is real
-     * salvage on the wreck. */
-    static const uint8_t k_eqtier[5][4] = {
-        { 0, 0, 1, 1 }, { 0, 1, 1, 2 }, { 1, 1, 2, 2 },
-        { 1, 2, 2, 3 }, { 2, 2, 3, 3 },
-    };
-    uint32_t er = (uint32_t)(idx * 2654435761u) ^ (uint32_t)(tier * 40503u);
-    er ^= er >> 13;
-    int arm_t = k_eqtier[tier][er & 3];
-    int shd_t = k_eqtier[tier][(er >> 4) & 3];
-    s->armor_tier = (uint8_t)arm_t;
-    s->shield_tier = (uint8_t)shd_t;
-    float arm_f = arm_t ? k_tier_mult[arm_t] * 0.85f : 0.65f;
-    float shd_f = shd_t ? k_tier_mult[shd_t] * 0.85f : 0.65f;
-    s->hull_max = h->hull_base * k * arm_f;
+    s->hull_max = h->hull_base * 0.55f * k;
     s->hull = s->hull_max;
-    s->shield_max = h->shield_base * k * shd_f;
+    s->shield_max = h->shield_base * 0.55f * k;
+    s->armor_tier = 0;       /* pirates: no fitted defensive kit */
+    s->shield_tier = 0;
     /* High-tier pilots fly variant gear: BULWARK walls or REGEN
      * skirmish shields — they FIGHT differently. */
     s->shield_var = SHV_STANDARD;
@@ -193,6 +180,32 @@ void ship_set_tier(int idx, int tier, int hull_class) {
         }
         ship_fit_weapon(idx, m, w);
     }
+}
+
+/* CIVILIANS fly rolled armour + shields (user): tankier than a bare
+ * hull and the kit is real salvage on the wreck. Call AFTER
+ * ship_set_tier (it reads s->cls/tier and overrides the HP). */
+void ship_fit_defence(int idx, int tier) {
+    Ship *s = &g_ships[idx];
+    if (tier < 0) tier = 0; if (tier > 4) tier = 4;
+    const HullDef *h = &k_hulls[s->cls];
+    float k = 1.0f + 0.13f * (float)tier;
+    static const uint8_t k_eqtier[5][4] = {
+        { 0, 0, 1, 1 }, { 0, 1, 1, 2 }, { 1, 1, 2, 2 },
+        { 1, 2, 2, 3 }, { 2, 2, 3, 3 },
+    };
+    uint32_t er = (uint32_t)(idx * 2654435761u) ^ (uint32_t)(tier * 40503u);
+    er ^= er >> 13;
+    int arm_t = k_eqtier[tier][er & 3];
+    int shd_t = k_eqtier[tier][(er >> 4) & 3];
+    s->armor_tier = (uint8_t)arm_t;
+    s->shield_tier = (uint8_t)shd_t;
+    float arm_f = arm_t ? k_tier_mult[arm_t] * 0.85f : 0.65f;
+    float shd_f = shd_t ? k_tier_mult[shd_t] * 0.85f : 0.65f;
+    s->hull_max = h->hull_base * k * arm_f;
+    s->shield_max = h->shield_base * k * shd_f;
+    s->hull = s->hull_max;
+    s->shield = s->shield_max;
 }
 
 int ships_alive_hostile(void) {

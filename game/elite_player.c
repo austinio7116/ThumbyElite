@@ -78,8 +78,8 @@ float equip_mult(const WeaponInst *e) {
     if (!e->in_use) return 0.55f;        /* flying bare: weak baseline */
     /* Defense gear climbs steeper than weapons (+12% cap for 1800cr
      * read as worthless — user report): HIGH-TECH +40%, PROTO +65%. */
-    static const float k_def_qual[5] = { 0.80f, 1.00f, 1.20f,
-                                         1.40f, 1.65f };
+    static const float k_def_qual[5] = { 0.80f, 1.00f, 1.35f,
+                                         1.75f, 2.25f };
     return k_def_qual[e->quality > 4 ? 4 : e->quality] *
            (0.6f + 0.4f * (float)e->integrity * 0.01f);
 }

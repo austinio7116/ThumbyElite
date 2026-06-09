@@ -109,6 +109,7 @@ void ships_despawn_npcs(void);
 /* Fit a tier-appropriate loadout + stat scaling (AI "power").
  * hull_class indexes the stat templates (k_hulls). */
 void ship_set_tier(int idx, int tier, int hull_class);
+void ship_fit_defence(int idx, int tier);
 /* Fit one mount. */
 void ship_fit_weapon(int idx, int mount, WeaponType w);
 

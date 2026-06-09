@@ -419,12 +419,13 @@ static void spawn_poi_content(void) {
                 cv->civ_kind = (uint8_t)(cls == 6 ? 0 : 1);
                 cv->team = TEAM_NEUTRAL;
                 cv->turret_type = 0;
-                /* A STURDY hauler at near-full HP (user: victims were
-                 * dying in 1-2s) -- gives the player time to arrive. */
-                cv->hull_max *= 2.4f;
-                cv->shield_max *= 1.7f;
+                /* A STURDY hauler (rolled armour+shields) at near-full
+                 * HP -- gives the player time to arrive (user). */
+                ship_fit_defence(civ, 2);
+                cv->hull_max *= 1.6f;
+                cv->shield_max *= 1.4f;
                 cv->hull = cv->hull_max;
-                cv->shield = cv->shield_max * 0.8f;
+                cv->shield = cv->shield_max * 0.85f;
                 s_distress_civ = civ;
                 int npir = 1 + (int)si->threat / 2;
                 if (npir > 3) npir = 3;
@@ -485,6 +486,7 @@ static void spawn_poi_content(void) {
                     g_ships[idx].civ_kind = (uint8_t)kind;
                     g_ships[idx].team = TEAM_NEUTRAL;
                     g_ships[idx].turret_type = 0;
+                    ship_fit_defence(idx, 1);   /* rolled trader kit */
                 }
             }
         }
@@ -559,6 +561,7 @@ static void spawn_poi_content(void) {
             g_ships[idx].is_civilian = 1;
             g_ships[idx].is_mark = 1;
             g_ships[idx].team = TEAM_NEUTRAL;
+            ship_fit_defence(idx, 3);   /* a well-protected mark */
             snprintf(s_scoop_toast, sizeof s_scoop_toast,
                      "ASSASSINATION TARGET");
             s_scoop_toast_t = 3.0f;
