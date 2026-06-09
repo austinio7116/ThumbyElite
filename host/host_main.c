@@ -230,6 +230,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_ROCKCYCLE") ||
         getenv("ELITE_TAILTEST") ||
         getenv("ELITE_TIERMOVIE") ||
+        getenv("ELITE_WPNMOVIE") ||
         getenv("ELITE_FINETEST") ||
         getenv("ELITE_ORBITPROBE") ||
         getenv("ELITE_REDISTRESS") ||
@@ -1820,6 +1821,360 @@ int main(int argc, char **argv) {
         printf("[tmovie] %d frames\n", frame);
         #undef TMV
         #undef TMV_STEER
+        return 0;
+    }
+
+    /* Armoury showcase movie: every weapon in the catalogue, one
+     * segment each. Frames -> /tmp/movie/f_*.ppm, game audio ->
+     * /tmp/guide_audio.raw (735 samples/frame), [card]/[cap] markers
+     * on stdout for tools/guide/compose_weapons.py. ELITE_WPNMOVIE=1. */
+    if (getenv("ELITE_WPNMOVIE")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        CraftRawButtons none = {0};
+        static int wf = 0;
+        char wfn[64];
+        FILE *gwav = fopen("/tmp/guide_audio.raw", "wb");
+        #define WMV(btns) do { \
+            CraftRawButtons _wb = (btns); \
+            elite_game_tick(&_wb, 1.0f / 30.0f); \
+            if (gwav) { int16_t _ab[735]; audio_render(_ab, 735); \
+                        fwrite(_ab, 2, 735, gwav); } \
+            render_frame(); \
+            snprintf(wfn, sizeof wfn, "/tmp/movie/f_%05d.ppm", wf++); \
+            dump_ppm(wfn); \
+        } while (0)
+        #define WMV_IDLE(n) \
+            do { for (int _i = 0; _i < (n); _i++) WMV(none); } while (0)
+        /* Camera-rig steering: rotate SHIP s's basis toward an aim
+         * point, capped at rate rad/frame (same trick as TIERMOVIE). */
+        #define WMV_STEERS(s, aimpt, rate) do { \
+            Vec3 _want = v3_norm(v3_sub((aimpt), (s)->pos)); \
+            Vec3 _cur = (s)->basis.r[2]; \
+            Vec3 _ax = v3_cross(_cur, _want); \
+            float _sa = v3_len(_ax); \
+            if (_sa > 1e-5f) { \
+                float _ang = asinf(_sa > 1.0f ? 1.0f : _sa); \
+                float _step = _ang < (rate) ? _ang : (rate); \
+                m3_rotate_world(&(s)->basis, \
+                                v3_scale(_ax, 1.0f / _sa), _step); \
+                m3_orthonormalize(&(s)->basis); \
+            } \
+        } while (0)
+        /* Lead-aim at ship tgt and fire when inside the cone. */
+        #define WMV_AIM(tgt, wspd, cone, press_a) do { \
+            Ship *_t = &g_ships[tgt]; \
+            float _d = v3_len(v3_sub(_t->pos, pl->pos)); \
+            float _tt = (wspd) > 0 ? _d / (wspd) : 0; \
+            Vec3 _aim = v3_add(_t->pos, \
+                               v3_scale(v3_sub(_t->vel, pl->vel), _tt)); \
+            WMV_STEERS(pl, _aim, 0.075f); \
+            Vec3 _l = m3_mul_v3_t(&pl->basis, v3_sub(_aim, pl->pos)); \
+            CraftRawButtons _b2 = none; \
+            if ((press_a) && _l.z > 0 && \
+                _l.x * _l.x + _l.y * _l.y < _d * _d * (cone)) \
+                _b2.a = true; \
+            WMV(_b2); \
+        } while (0)
+        #define WCARD(name, sub) printf("[card] %d %s|%s\n", wf, name, sub)
+        #define WCAP(txt) printf("[cap] %d %s\n", wf, txt)
+
+        Ship *pl = &g_ships[0];
+        g_player.hull_id = 5;                 /* MAULER: size-3 slot 0 */
+        g_player.hull_seed = 0x5EED77u;
+        g_player.shield_eq = (WeaponInst){ .type = WPN_COUNT,
+            .quality = Q_MILITARY, .integrity = 100, .in_use = 1,
+            .tier = 2 };
+        elite_game_debug_face_away_from_sun();
+
+        enum { K_STD, K_RAIL, K_FLAK, K_HOMING, K_MINE, K_TRACTOR,
+               K_MINING, K_BEND, K_JOUST };
+        static const struct {
+            uint8_t type, kind;
+            int16_t ammo;          /* -1 = energy */
+            float dist;            /* spawn range */
+            float hp;              /* target hull override, 0 = keep */
+            float sh;              /* target shield override */
+            const char *card_sub;
+            const char *cap;
+        } segs[] = {
+            { WPN_PULSE_S, K_STD, -1, 330, 115, 0, "light laser",
+              "PULSE-S: the starter gun. No ammo -- just heat" },
+            { WPN_PULSE_M, K_STD, -1, 380, 145, 0, "medium laser",
+              "PULSE-M: the size-2 workhorse of the lanes" },
+            { WPN_PULSE_L, K_STD, -1, 420, 170, 0, "heavy laser",
+              "PULSE-L: heavy mounts only -- big punch per shot" },
+            { WPN_BEAM, K_STD, -1, 300, 140, 0, "continuous beam",
+              "BEAM: hold the line on target -- and watch the heat" },
+            { WPN_PHOTON, K_STD, -1, 420, 150, 0, "photon cannon",
+              "PHOTON: slow bright bolts. Lead the shot, land a truck" },
+            { WPN_GAUSS, K_STD, 24, 650, 130, 0, "hypervelocity slug",
+              "GAUSS: a railhead sniper -- 24 rounds, lead the dot" },
+            { WPN_AUTOCANNON, K_STD, 200, 330, 140, 0, "ballistic stream",
+              "AUTOCANNON: a 200-round hose. Walk it onto the hull" },
+            { WPN_MISSILE, K_JOUST, 8, 460, 100, 0, "dumbfire rocket",
+              "MISSILE: unguided, 22m blast -- forgiving aim" },
+            { WPN_HOMING, K_HOMING, 10, 480, 85, 0, "seeker missile",
+              "HOMING: lock with LB, fire and forget" },
+            { WPN_FLAK, K_FLAK, 60, 380, 120, 0, "200m airburst",
+              "FLAK: every shell bursts at 200m. Timing IS the skill" },
+            { WPN_RAILGUN, K_RAIL, 12, 700, 160, 0, "charged lance",
+              "RAILGUN: hold A to charge -- release sends the lance" },
+            { WPN_ION, K_STD, -1, 330, 30, 170, "shield stripper",
+              "ION: melts shields. A full strip scrambles their systems" },
+            { WPN_MINE, K_MINE, 6, 450, 90, 0, "proximity mine",
+              "MINE: dropped astern, proximity-fuzed. Shake your tail" },
+            { WPN_TRACTOR, K_TRACTOR, -1, 200, 0, 0, "salvage beam",
+              "TRACTOR: reel in floating cargo -- no lock needed" },
+            { WPN_MINING, K_MINING, -1, 260, 0, 0, "ore laser",
+              "MINING LASER: crack asteroids, scoop the ore" },
+            { WPN_PLASMA, K_STD, -1, 330, 150, 0, "plasma stream",
+              "PLASMA: a rapid stream of starfire" },
+            { WPN_LANCE, K_STD, -1, 330, 130, 220, "shield-phasing beam",
+              "PLASMA LANCE: phases clean through shields to bare hull" },
+            { WPN_BLASTER, K_BEND, -1, 380, 95, 0, "lock-bending bolts",
+              "BLASTER: its bolts BEND toward your lock" },
+        };
+        const int NSEG = (int)(sizeof segs / sizeof segs[0]);
+
+        for (int si = 0; si < NSEG; si++) {
+            /* clear the stage: despawn leftovers, fresh paint */
+            for (int i = 1; i < MAX_SHIPS; i++) g_ships[i].alive = false;
+            memset(g_player.mounts, 0, sizeof g_player.mounts);
+            g_player.mounts[0] = (WeaponInst){ .type = segs[si].type,
+                .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
+            g_player.ammo[0] = segs[si].ammo;
+            player_apply_to_ship();
+            pl->active_w = 0;
+            pl->heat = 0;
+            pl->fire_cool = 0;
+            pl->hull = pl->hull_max;
+            pl->shield = pl->shield_max;
+            pl->vel = v3_scale(pl->basis.r[2], 20.0f);
+            pl->throttle = 0.5f;
+            WCARD(k_weapons[segs[si].type].name, segs[si].card_sub);
+            WCAP(segs[si].cap);
+            printf("[wpn] %s start=%d\n",
+                   k_weapons[segs[si].type].name, wf);
+            Vec3 fwd = pl->basis.r[2];
+
+            if (segs[si].kind == K_TRACTOR) {
+                /* beat 1: canisters adrift ahead -- pull them in */
+                extern void loot_spawn_good(Vec3, Vec3, int, int);
+                Vec3 rgt = pl->basis.r[0], up = pl->basis.r[1];
+                for (int c = 0; c < 3; c++) {
+                    Vec3 cp = v3_add(pl->pos,
+                              v3_add(v3_scale(fwd, 130.0f + 35.0f * c),
+                              v3_add(v3_scale(rgt, (c - 1) * 26.0f),
+                                     v3_scale(up, (c & 1) ? 14.0f
+                                                          : -10.0f))));
+                    loot_spawn_good(cp, v3(0, 0, 0), c, 1);
+                }
+                pl->throttle = 0.15f;
+                CraftRawButtons hold = none; hold.a = true;
+                for (int f = 0; f < 200; f++) WMV(hold);
+                /* beat 2: grapple a runner -- lock and hold the beam */
+                WCAP("...or GRAPPLE a locked ship and pin it in place");
+                int e2 = ship_spawn(hull_mesh(0xC0FFEEu, 1),
+                                    v3_add(pl->pos,
+                                           v3_scale(pl->basis.r[2],
+                                                    170.0f)),
+                                    TEAM_HOSTILE);
+                if (e2 > 0) {
+                    ship_set_tier(e2, 0, 1);
+                    CraftRawButtons lb = none; lb.lb = true;
+                    WMV(lb);
+                    for (int f = 0; f < 170; f++) {
+                        WMV_STEERS(pl, g_ships[e2].pos, 0.07f);
+                        pl->shield = pl->shield_max;
+                        WMV(hold);
+                    }
+                }
+                WMV_IDLE(20);
+                continue;
+            }
+
+            if (segs[si].kind == K_MINING) {
+                /* drop the camera rig next to a fresh belt */
+                rocks_spawn_field(0xBEEFu + (uint32_t)si, 6);
+                Vec3 rp; float rr;
+                int ri = 0;
+                for (int r = 0; r < 6; r++)
+                    if (rocks_get(r, &rp, &rr) && rr > 20.0f) {
+                        ri = r; break;
+                    }
+                rocks_get(ri, &rp, &rr);
+                pl->pos = v3_sub(rp, v3_scale(fwd, segs[si].dist));
+                pl->vel = v3_scale(fwd, 8.0f);
+                pl->throttle = 0.12f;
+                int cracked = 0;
+                for (int f = 0; f < 400; f++) {
+                    if (!rocks_get(ri, &rp, &rr)) {
+                        /* rock down -- swing to the next one */
+                        if (++cracked >= 2) break;
+                        WCAP("Cracked rocks spill ore -- "
+                             "free money in the void");
+                        int next = -1;
+                        for (int r = 0; r < 6; r++)
+                            if (r != ri && rocks_get(r, &rp, &rr)) {
+                                next = r; break;
+                            }
+                        if (next < 0) break;
+                        ri = next;
+                        pl->throttle = 0.3f;
+                    }
+                    WMV_STEERS(pl, rp, 0.06f);
+                    Vec3 l = m3_mul_v3_t(&pl->basis,
+                                         v3_sub(rp, pl->pos));
+                    CraftRawButtons b = none;
+                    if (l.z > 0 &&
+                        l.x * l.x + l.y * l.y < rr * rr * 0.5f)
+                        b.a = true;
+                    WMV(b);
+                }
+                WMV_IDLE(60);
+                continue;
+            }
+
+            /* All remaining kinds duel a live target. */
+            float dist = segs[si].dist;
+            Vec3 at = (segs[si].kind == K_MINE)
+                          ? v3_sub(pl->pos, v3_scale(fwd, dist))
+                          : v3_add(pl->pos, v3_scale(fwd, dist));
+            int e = ship_spawn(hull_mesh(0xACE1u * (si + 7), 2), at,
+                               TEAM_HOSTILE);
+            if (e <= 0) { printf("[wpn] SPAWN FAIL si=%d\n", si); break; }
+            ship_set_tier(e, (segs[si].sh > 0) ? 3 : 1, 2);
+            Ship *t = &g_ships[e];
+            if (segs[si].hp > 0) t->hull = t->hull_max = segs[si].hp;
+            t->shield = t->shield_max = segs[si].sh;
+            CraftRawButtons lb = none; lb.lb = true;
+            WMV(lb);                                /* lock it up */
+            WMV_IDLE(10);                           /* hold on the box */
+
+            int fmax = 30 * 16;
+            float wspd = k_weapons[segs[si].type].speed;
+            for (int f = 0; f < fmax && t->alive; f++) {
+                float d = v3_len(v3_sub(t->pos, pl->pos));
+                pl->shield = pl->shield_max;        /* camera rig armor */
+                switch (segs[si].kind) {
+                case K_HOMING: {
+                    WMV_STEERS(pl, t->pos, 0.05f);
+                    pl->throttle = (d > 320.0f) ? 0.8f : 0.35f;
+                    CraftRawButtons b = none;
+                    if (f % 75 == 20 && pl->ammo[0] > 0) {
+                        pl->fire_cool = 0;
+                        pl->heat = 0;
+                        b.a = true;
+                    }
+                    WMV(b);
+                    break;
+                }
+                case K_RAIL: {
+                    pl->throttle = (d > 450.0f) ? 0.45f : 0.2f;
+                    /* hold A 32 frames (full charge), release 10 */
+                    int ph = f % 42;
+                    Ship *_t = t;
+                    float tt = d / wspd;
+                    Vec3 aim = v3_add(_t->pos,
+                                      v3_scale(v3_sub(_t->vel, pl->vel),
+                                               tt));
+                    WMV_STEERS(pl, aim, 0.075f);
+                    CraftRawButtons b = none;
+                    b.a = ph < 32;
+                    WMV(b);
+                    break;
+                }
+                case K_FLAK: {
+                    /* hover the burst envelope: fire 175..255m */
+                    pl->throttle = (d > 260.0f) ? 0.85f
+                                 : (d > 160.0f) ? 0.45f : 0.0f;
+                    int inwin = d > 175.0f && d < 255.0f;
+                    WMV_AIM(e, wspd, 0.012f, inwin);
+                    break;
+                }
+                case K_MINE: {
+                    /* he's on our six: lay the field, then turn and
+                     * watch him eat it */
+                    pl->throttle = 0.55f;
+                    /* puppet the pursuer down our wake */
+                    t->vel = v3_scale(v3_norm(v3_sub(pl->pos, t->pos)),
+                                      105.0f);
+                    WMV_STEERS(t, pl->pos, 0.2f);
+                    CraftRawButtons b = none;
+                    if (f == 25 || f == 70 || f == 115) {
+                        pl->fire_cool = 0;
+                        b.a = true;
+                    }
+                    if (f > 135) {
+                        WMV_STEERS(pl, t->pos, 0.06f);
+                        pl->throttle = 0.1f;
+                    }
+                    WMV(b);
+                    break;
+                }
+                case K_BEND: {
+                    /* aim OFF the hull so the bend is visible; the
+                     * target drifts disarmed -- the curve is the star
+                     * (same setup BENDTEST validated) */
+                    t->n_weapons = 0;
+                    t->vel = v3_scale(t->basis.r[0], 6.0f);
+                    Vec3 off = v3_add(t->pos,
+                                      v3_scale(pl->basis.r[0], 30.0f));
+                    WMV_STEERS(pl, off, 0.075f);
+                    pl->throttle = (d > 280.0f) ? 0.6f
+                                 : (d > 180.0f) ? 0.3f : 0.0f;
+                    Vec3 l = m3_mul_v3_t(&pl->basis,
+                                         v3_sub(t->pos, pl->pos));
+                    CraftRawButtons b = none;
+                    if (l.z > 0 && d < 500.0f) b.a = true;
+                    WMV(b);
+                    break;
+                }
+                case K_JOUST: {
+                    /* dumbfire needs a head-on pass: puppet him
+                     * straight down our throat, volley into the
+                     * closure */
+                    t->vel = v3_scale(v3_norm(v3_sub(pl->pos, t->pos)),
+                                      70.0f);
+                    WMV_STEERS(t, pl->pos, 0.2f);
+                    pl->throttle = 0.3f;
+                    float tt = d / wspd;
+                    Vec3 aim = v3_add(t->pos,
+                                      v3_scale(v3_sub(t->vel, pl->vel),
+                                               tt));
+                    WMV_STEERS(pl, aim, 0.08f);
+                    Vec3 l = m3_mul_v3_t(&pl->basis,
+                                         v3_sub(aim, pl->pos));
+                    CraftRawButtons b = none;
+                    if (l.z > 0 && d < 430.0f && d > 110.0f &&
+                        l.x * l.x + l.y * l.y < d * d * 0.004f)
+                        b.a = true;
+                    WMV(b);
+                    break;
+                }
+                default: {
+                    pl->throttle = (d > 300.0f) ? 0.8f
+                                 : (d > 150.0f) ? 0.5f : 0.3f;
+                    float cone = (segs[si].type == WPN_MISSILE) ? 0.006f
+                               : (wspd > 0) ? 0.010f : 0.012f;
+                    WMV_AIM(e, wspd, cone, 1);
+                    break;
+                }
+                }
+            }
+            printf("[wpn] %s %s at frame %d\n",
+                   k_weapons[segs[si].type].name,
+                   t->alive ? "TIMEOUT (still alive)" : "kill", wf);
+            WMV_IDLE(45);                           /* fireball linger */
+        }
+        printf("[wpnmovie] %d frames total\n", wf);
+        if (gwav) fclose(gwav);
+        #undef WMV
+        #undef WMV_IDLE
+        #undef WMV_STEERS
+        #undef WMV_AIM
+        #undef WCARD
+        #undef WCAP
         return 0;
     }
 
