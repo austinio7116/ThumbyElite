@@ -246,15 +246,23 @@ bool status_tick(const CraftRawButtons *btn, float dt) {
     }
 
     build_rows();
-    if (up && s_cursor >= 0) s_cursor = next_sel(s_cursor, -1);
-    if (down && s_cursor >= 0) s_cursor = next_sel(s_cursor, 1);
+    if (up && s_cursor >= 0) {
+        int prev = s_cursor;
+        s_cursor = next_sel(s_cursor, -1);
+        /* Cursor clamped at the top selectable: keep scrolling the
+         * SCREEN up a row at a time (smooth, not a snap) so the static
+         * header pages into view, then clamp at the very top (user). */
+        if (s_cursor == prev && s_scroll > 0) s_scroll--;
+    }
+    if (down && s_cursor >= 0) {
+        int prev = s_cursor;
+        s_cursor = next_sel(s_cursor, 1);
+        /* Symmetric at the bottom: reveal the trailing static lines. */
+        if (s_cursor == prev && s_scroll + 12 < s_n_rows) s_scroll++;
+    }
     if (s_cursor >= 0) {
         if (s_cursor < s_scroll) s_scroll = s_cursor;
         if (s_cursor > s_scroll + 11) s_scroll = s_cursor - 11;
-        /* At the topmost selectable row, page all the way to 0 so the
-         * static header (name, DEFENCE bars, rank) scrolls back into
-         * view -- otherwise it bottoms out mid-screen (user). */
-        if (s_cursor == next_sel(-1, 1)) s_scroll = 0;
     }
     if (a && selectable(s_cursor))
         s_detail = (s_rows[s_cursor].kind == RK_CARGO) ? 2 : 1;
