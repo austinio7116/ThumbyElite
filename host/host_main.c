@@ -2641,7 +2641,7 @@ int main(int argc, char **argv) {
                 /* hold fire whenever roughly on the rock and close */
                 if (bd < 130.0f && l.z > 0 &&
                     l.x*l.x + l.y*l.y < bd*bd*0.03f) {
-                    pl->fire_cool = 0; b.a = true;
+                    b.a = true;   /* hold trigger -> real cadence */
                 }
                 MV(b);
             }
@@ -2982,7 +2982,7 @@ int main(int argc, char **argv) {
                     Vec3 l = m3_mul_v3_t(&pl->basis, v3_sub(lead, pl->pos));
                     if (d < 380.0f && l.z > 0.0f &&
                         l.x*l.x + l.y*l.y < d*d*0.016f) {
-                        pl->fire_cool = 0; b.a = true;
+                        b.a = true;   /* hold trigger -> real cadence */
                     }
                 }
             }
