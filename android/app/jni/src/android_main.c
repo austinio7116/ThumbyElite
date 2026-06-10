@@ -96,7 +96,8 @@ void plat_ctrl_btn_label(CtrlButton b, char *out, int cap) {
     switch (b) {       /* Scheme A */
     case CTRL_BTN_FIRE: s = "RT"; break; case CTRL_BTN_FIRE2: s = "LT"; break;
     case CTRL_BTN_FIRE3: s = "RB"; break; case CTRL_BTN_CYCLE_WEAPON: s = "LB"; break;
-    case CTRL_BTN_CYCLE_TARGET: s = "B"; break; case CTRL_BTN_ASSIST: s = "X"; break;
+    case CTRL_BTN_CYCLE_TARGET: s = "B"; break; case CTRL_BTN_TARGET_MODE: s = "Y"; break;
+    case CTRL_BTN_ASSIST: s = "X"; break;
     case CTRL_BTN_BOOST: s = "A"; break; case CTRL_BTN_CHAFF: s = "BACK"; break;
     case CTRL_BTN_CLOAK: s = "L3"; break; case CTRL_BTN_DOCK: s = "LB+RB"; break;
     case CTRL_BTN_MENU: s = "START"; break;
@@ -567,12 +568,13 @@ int main(int argc, char *argv[]) {
                 static const struct { int sdl, act; } k_g[] = {
                     { SDL_CONTROLLER_BUTTON_A, CTRL_BTN_BOOST },
                     { SDL_CONTROLLER_BUTTON_B, CTRL_BTN_CYCLE_TARGET },
+                    { SDL_CONTROLLER_BUTTON_Y, CTRL_BTN_TARGET_MODE },
                     { SDL_CONTROLLER_BUTTON_X, CTRL_BTN_ASSIST },
                     { SDL_CONTROLLER_BUTTON_BACK, CTRL_BTN_CHAFF },
                     { SDL_CONTROLLER_BUTTON_LEFTSTICK, CTRL_BTN_CLOAK },
                 };
-                static bool gprev[5];
-                for (unsigned i = 0; i < 5; i++) {
+                static bool gprev[6];
+                for (unsigned i = 0; i < 6; i++) {
                     bool now = GBTN(k_g[i].sdl);
                     if (now && !gprev[i]) elite_input_action(k_g[i].act);
                     gprev[i] = now;

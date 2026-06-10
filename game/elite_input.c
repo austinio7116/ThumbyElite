@@ -197,6 +197,7 @@ void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) 
     /* PC dedicated buttons: merge queued one-shots over the chord results,
      * then consume. Held extra-weapon fire is level state. */
     if (s_action_bits & (1u << CTRL_BTN_CYCLE_TARGET)) out->cycle_target  = true;
+    if (s_action_bits & (1u << CTRL_BTN_TARGET_MODE))  out->tgt_class_cycle = true;
     if (s_action_bits & (1u << CTRL_BTN_ASSIST))       out->assist_toggle = true;
     if (s_action_bits & (1u << CTRL_BTN_BOOST))        out->boost         = true;
     if (s_action_bits & (1u << CTRL_BTN_CHAFF))        out->chaff         = true;

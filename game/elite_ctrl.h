@@ -26,6 +26,7 @@ typedef enum {
     CTRL_BTN_FIRE3,         /* fire weapon slot 2 */
     CTRL_BTN_CYCLE_WEAPON,  /* rotate the primary/active weapon */
     CTRL_BTN_CYCLE_TARGET,
+    CTRL_BTN_TARGET_MODE,   /* cycle targeting mode (device = hold LB) */
     CTRL_BTN_ASSIST,        /* flight-assist toggle */
     CTRL_BTN_BOOST,
     CTRL_BTN_CHAFF,

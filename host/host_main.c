@@ -188,6 +188,7 @@ static int s_hi[CTRL_AX_N] = {            /* invert: roll + pitch + throttle on 
 static int s_btn[CTRL_BTN_N] = {
     [CTRL_BTN_FIRE] = 0, [CTRL_BTN_FIRE2] = -1, [CTRL_BTN_FIRE3] = -1,
     [CTRL_BTN_CYCLE_WEAPON] = 1, [CTRL_BTN_CYCLE_TARGET] = 3,
+    [CTRL_BTN_TARGET_MODE] = -1,
     [CTRL_BTN_ASSIST] = 2, [CTRL_BTN_BOOST] = -1, [CTRL_BTN_CHAFF] = -1,
     [CTRL_BTN_CLOAK] = -1, [CTRL_BTN_DOCK] = -1, [CTRL_BTN_MENU] = 4,
     [CTRL_BTN_MENU_SELECT] = -1, [CTRL_BTN_MENU_BACK] = -1,
@@ -197,7 +198,7 @@ static bool s_hotas_dbg;       /* stdout axis dump (Linux: ELITE_HOTAS_DEBUG) */
 /* Config-file key tables (1:1 with the enums). */
 static const char *k_ax_key[CTRL_AX_N]  = { "roll", "pitch", "yaw", "throttle" };
 static const char *k_btn_key[CTRL_BTN_N] = {
-    "btn_fire", "btn_fire2", "btn_fire3", "btn_cycle", "btn_target",
+    "btn_fire", "btn_fire2", "btn_fire3", "btn_cycle", "btn_target", "btn_tgtmode",
     "btn_assist", "btn_boost", "btn_chaff", "btn_cloak", "btn_dock", "btn_menu",
     "btn_menusel", "btn_menuback", "btn_menuinfo" };
 
@@ -269,7 +270,8 @@ static const char *pad_btn_label(int b) {     /* Scheme A */
     switch (b) {
     case CTRL_BTN_FIRE: return "RT"; case CTRL_BTN_FIRE2: return "LT";
     case CTRL_BTN_FIRE3: return "RB"; case CTRL_BTN_CYCLE_WEAPON: return "LB";
-    case CTRL_BTN_CYCLE_TARGET: return "B"; case CTRL_BTN_ASSIST: return "X";
+    case CTRL_BTN_CYCLE_TARGET: return "B"; case CTRL_BTN_TARGET_MODE: return "Y";
+    case CTRL_BTN_ASSIST: return "X";
     case CTRL_BTN_BOOST: return "A"; case CTRL_BTN_CHAFF: return "BACK";
     case CTRL_BTN_CLOAK: return "L3"; case CTRL_BTN_DOCK: return "LB+RB";
     case CTRL_BTN_MENU: return "START";
@@ -484,12 +486,13 @@ static void gamepad_apply(CraftRawButtons *btn, bool inmenu) {
     static const struct { int sdl, act; } k_g[] = {
         { SDL_CONTROLLER_BUTTON_A,         CTRL_BTN_BOOST },
         { SDL_CONTROLLER_BUTTON_B,         CTRL_BTN_CYCLE_TARGET },
+        { SDL_CONTROLLER_BUTTON_Y,         CTRL_BTN_TARGET_MODE },
         { SDL_CONTROLLER_BUTTON_X,         CTRL_BTN_ASSIST },
         { SDL_CONTROLLER_BUTTON_BACK,      CTRL_BTN_CHAFF },
         { SDL_CONTROLLER_BUTTON_LEFTSTICK, CTRL_BTN_CLOAK },
     };
-    static bool prev[5];
-    for (unsigned i = 0; i < 5; i++) {
+    static bool prev[6];
+    for (unsigned i = 0; i < 6; i++) {
         bool now = GB(k_g[i].sdl);
         if (now && !prev[i]) elite_input_action(k_g[i].act);
         prev[i] = now;
@@ -571,8 +574,9 @@ static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
             elite_input_set_fire3(HB(CTRL_BTN_FIRE3));
             /* Dedicated chord actions: rising edge -> one-shot event. */
             static bool s_eprev[CTRL_BTN_N];
-            static const int k_edge[] = { CTRL_BTN_CYCLE_TARGET, CTRL_BTN_ASSIST,
-                CTRL_BTN_BOOST, CTRL_BTN_CHAFF, CTRL_BTN_CLOAK, CTRL_BTN_DOCK };
+            static const int k_edge[] = { CTRL_BTN_CYCLE_TARGET, CTRL_BTN_TARGET_MODE,
+                CTRL_BTN_ASSIST, CTRL_BTN_BOOST, CTRL_BTN_CHAFF, CTRL_BTN_CLOAK,
+                CTRL_BTN_DOCK };
             for (unsigned i = 0; i < sizeof k_edge / sizeof k_edge[0]; i++) {
                 int a = k_edge[i]; bool now = HB(a);
                 if (now && !s_eprev[a]) elite_input_action(a);

@@ -27,7 +27,7 @@
 
 static const char *k_ax_name[N_AX] = { "ROLL", "PITCH", "YAW", "THROTTLE" };
 static const char *k_btn_name[N_BTN] = {
-    "FIRE", "FIRE 2", "FIRE 3", "CYCLE WEAPON", "CYCLE TARGET",
+    "FIRE", "FIRE 2", "FIRE 3", "CYCLE WEAPON", "CYCLE TARGET", "TARGET MODE",
     "FLIGHT ASSIST", "BOOST", "CHAFF", "CLOAK", "DOCK", "MENU",
     "MENU SELECT", "MENU BACK", "MENU INFO" };
 
