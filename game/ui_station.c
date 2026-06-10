@@ -1890,18 +1890,25 @@ void station_draw(uint16_t *fb) {
         int yours = (s_cursor == YARD_OFFERS);
         int cls = yours ? g_player.hull_id : s_yard[s_cursor].cls;
         uint32_t sd = yours ? g_player.hull_seed : s_yard[s_cursor].seed;
+        char f[44];
         if (s_kit_view) {
-            detail_draw_kit(fb, cls, sd, "UP/B:STATS LB/RB:SHIP");
+            snprintf(f, sizeof f, "%s:STATS </>:CMP %s:BACK",
+                     plat_menu_btn(MB_INFO), plat_menu_btn(MB_B));
+            detail_draw_kit(fb, cls, sd, f);
             return;
         }
         if (yours) {
-            detail_draw_hull(fb, cls, sd, -1, "LB/RB:NEXT DN:KIT B:BACK");
+            snprintf(f, sizeof f, "</>:CMP %s:KIT %s:BACK",
+                     plat_menu_btn(MB_INFO), plat_menu_btn(MB_B));
+            detail_draw_hull(fb, cls, sd, -1, f);
             return;
         }
         int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
         int cost = k_hulls[cls].price - tradein;
         if (cost < 0) cost = 0;
-        detail_draw_hull(fb, cls, sd, cost, "DN:KIT A:BUY B:BACK");
+        snprintf(f, sizeof f, "%s:BUY %s:KIT </>:CMP %s:BACK",
+                 plat_menu_btn(MB_A), plat_menu_btn(MB_INFO), plat_menu_btn(MB_B));
+        detail_draw_hull(fb, cls, sd, cost, f);
         return;
     }
     if (s_detail && s_screen == SCR_OUTFIT) {
@@ -1912,10 +1919,10 @@ void station_draw(uint16_t *fb) {
         const WeaponInst *cmp = NULL;
         int price = -1;
         const char *plabel = "COST";
-        const char *foot = "LB/RB:NEXT A:ACT B:BACK";
+        const char *av = "ACT";
         if (r->kind == ROW_TURRET && g_player.turret_eq.in_use) {
             wi = &g_player.turret_eq;
-            foot = "LB/RB:NEXT B:BACK";
+            av = 0;
         } else if (r->kind == ROW_UTIL) {
             const WeaponInst *e = &g_player.util_eq[r->index];
             if (e->in_use) {
@@ -1925,8 +1932,8 @@ void station_draw(uint16_t *fb) {
                                   instance_price(e) / 100 * 0.6f *
                                   skill_repair_mult()) + 1;
                     plabel = "REPAIR";
-                    foot = "LB/RB:NEXT A:RPR B:BACK";
-                } else foot = "LB/RB:NEXT B:BACK";
+                    av = "RPR";
+                } else av = 0;
             }
         } else if (r->kind == ROW_UTILSHOP) {
             const SystemInfo *sie = system_info();
@@ -1938,7 +1945,7 @@ void station_draw(uint16_t *fb) {
                               .base_price *
                           econ_weapon_mult(sie->stations[s_station].econ) *
                           skill_price_mult());
-            foot = "LB/RB:NEXT A:BUY B:BACK";
+            av = "BUY";
         } else if (r->kind == ROW_EQUIP) {
             const WeaponInst *e = equip_slot(r->index);
             if (e->in_use) {
@@ -1948,8 +1955,8 @@ void station_draw(uint16_t *fb) {
                                   equip_price(e->type, e->tier, e->quality) /
                                   100 * 0.6f * skill_repair_mult()) + 1;
                     plabel = "REPAIR";
-                    foot = "LB/RB:NEXT A:RPR B:BACK";
-                } else foot = "LB/RB:NEXT B:BACK";
+                    av = "RPR";
+                } else av = 0;
             }
         } else if (r->kind == ROW_EQSHOP) {
             const SystemInfo *sie = system_info();
@@ -1961,20 +1968,20 @@ void station_draw(uint16_t *fb) {
                                       Q_STANDARD) *
                           econ_weapon_mult(sie->stations[s_station].econ) *
                           skill_price_mult());
-            foot = "LB/RB:NEXT A:BUY B:BACK";
+            av = "BUY";
         } else if (r->kind == ROW_MOUNT && g_player.mounts[r->index].in_use) {
             wi = &g_player.mounts[r->index];
             if (wi->integrity < 100) {
                 price = repair_cost(wi);
                 plabel = "REPAIR";
-                foot = "LB/RB:NEXT A:RPR B:BACK";
-            } else foot = "B:BACK";
+                av = "RPR";
+            } else av = 0;
         } else if (r->kind == ROW_SALV) {
             wi = &g_player.salvage[r->index];
             price = (int)(weapon_price(wi->type, wi->quality) *
                           (0.35f + 0.30f * wi->integrity * 0.01f));
             plabel = "SELLS FOR";
-            foot = "LB/RB:NEXT A:FIT B:BACK";
+            av = "FIT";
         } else if (r->kind == ROW_SHOP) {
             const ArmoryItem *it = &s_armory[r->index];
             tmp = (WeaponInst){ .type = it->type, .quality = it->quality,
@@ -1982,7 +1989,7 @@ void station_draw(uint16_t *fb) {
                                 .affix = it->affix };
             wi = &tmp;
             price = (int)(it->price * skill_price_mult());
-            foot = "LB/RB:NEXT A:BUY B:BACK";
+            av = "BUY";
         }
         if (wi) {
             /* Comparator (user spec): the fitted weapon of the SAME
@@ -2005,6 +2012,10 @@ void station_draw(uint16_t *fb) {
                     }
                 }
             }
+            char foot[44];
+            if (av) snprintf(foot, sizeof foot, "</>:CMP %s:%s %s:BACK",
+                             plat_menu_btn(MB_A), av, plat_menu_btn(MB_B));
+            else snprintf(foot, sizeof foot, "</>:CMP %s:BACK", plat_menu_btn(MB_B));
             detail_draw_weapon(fb, wi, cmp, price, plabel, foot);
             return;
         }
