@@ -93,12 +93,15 @@ void plat_ctrl_axis_label(CtrlAxis ax, char *out, int cap) {
 }
 void plat_ctrl_btn_label(CtrlButton b, char *out, int cap) {
     const char *s;
-    switch (b) {
-    case CTRL_BTN_FIRE: s = "A / RT"; break; case CTRL_BTN_CYCLE_WEAPON: s = "B"; break;
-    case CTRL_BTN_CYCLE_TARGET: s = "LB tap"; break; case CTRL_BTN_ASSIST: s = "RB tap"; break;
-    case CTRL_BTN_BOOST: s = "RB x2"; break; case CTRL_BTN_CHAFF: s = "LB+B"; break;
-    case CTRL_BTN_CLOAK: s = "RB+B"; break; case CTRL_BTN_DOCK: s = "LB+RB"; break;
-    case CTRL_BTN_MENU: s = "START"; break; default: s = "—"; break;
+    switch (b) {       /* Scheme A */
+    case CTRL_BTN_FIRE: s = "RT"; break; case CTRL_BTN_FIRE2: s = "LT"; break;
+    case CTRL_BTN_FIRE3: s = "RB"; break; case CTRL_BTN_CYCLE_WEAPON: s = "LB"; break;
+    case CTRL_BTN_CYCLE_TARGET: s = "B"; break; case CTRL_BTN_ASSIST: s = "X"; break;
+    case CTRL_BTN_BOOST: s = "A"; break; case CTRL_BTN_CHAFF: s = "BACK"; break;
+    case CTRL_BTN_CLOAK: s = "L3"; break; case CTRL_BTN_DOCK: s = "Y"; break;
+    case CTRL_BTN_MENU: s = "START"; break;
+    case CTRL_BTN_MENU_SELECT: s = "A"; break; case CTRL_BTN_MENU_BACK: s = "B"; break;
+    default: s = "—"; break;
     }
     if (out && cap > 0) SDL_snprintf(out, cap, "%s", s);
 }
@@ -532,12 +535,36 @@ int main(int argc, char *argv[]) {
             if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN))  btn.down = true;
             if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT))  btn.left = true;
             if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) btn.right = true;
-            if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_A)) btn.a = true;
-            if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_B)) btn.b = true;
-            if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_LEFTSHOULDER))  btn.lb = true;
-            if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) btn.rb = true;
             if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_START)) btn.menu = true;
-            if (SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000) btn.a = true;
+            /* Scheme A: dedicated buttons. In menus A=select B=back; in flight
+             * the full mapping (matches the host gamepad). */
+            int gst = elite_game_state();
+            bool inmenu = (gst != 0 && gst != 1);
+#define GBTN(b) SDL_GameControllerGetButton(s_pad, b)
+            if (inmenu) {
+                if (GBTN(SDL_CONTROLLER_BUTTON_A)) btn.a = true;
+                if (GBTN(SDL_CONTROLLER_BUTTON_B)) btn.b = true;
+            } else {
+                if (SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000) btn.a = true;
+                elite_input_set_fire2(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 12000);
+                elite_input_set_fire3(GBTN(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER));
+                if (GBTN(SDL_CONTROLLER_BUTTON_LEFTSHOULDER)) btn.b = true;   /* cycle weapon */
+                static const struct { int sdl, act; } k_g[] = {
+                    { SDL_CONTROLLER_BUTTON_A, CTRL_BTN_BOOST },
+                    { SDL_CONTROLLER_BUTTON_B, CTRL_BTN_CYCLE_TARGET },
+                    { SDL_CONTROLLER_BUTTON_X, CTRL_BTN_ASSIST },
+                    { SDL_CONTROLLER_BUTTON_Y, CTRL_BTN_DOCK },
+                    { SDL_CONTROLLER_BUTTON_BACK, CTRL_BTN_CHAFF },
+                    { SDL_CONTROLLER_BUTTON_LEFTSTICK, CTRL_BTN_CLOAK },
+                };
+                static bool gprev[6];
+                for (unsigned i = 0; i < 6; i++) {
+                    bool now = GBTN(k_g[i].sdl);
+                    if (now && !gprev[i]) elite_input_action(k_g[i].act);
+                    gprev[i] = now;
+                }
+            }
+#undef GBTN
         } else {
             /* Touch: walk active fingers. */
             sens = (float)s_settings[3] * 0.1f;       /* STICK slider */

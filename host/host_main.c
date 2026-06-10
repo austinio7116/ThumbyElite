@@ -170,20 +170,22 @@ static SDL_JoystickID      s_joy_id = -1;
 static int s_hx[CTRL_AX_N] = {            /* joystick axis per flight axis */
     [CTRL_AX_ROLL] = 3, [CTRL_AX_PITCH] = 1,
     [CTRL_AX_YAW]  = 0, [CTRL_AX_THROTTLE] = 2 };
-static int s_hi[CTRL_AX_N] = {            /* invert: pitch + throttle on */
-    [CTRL_AX_PITCH] = 1, [CTRL_AX_THROTTLE] = 1 };
+static int s_hi[CTRL_AX_N] = {            /* invert: roll + pitch + throttle on */
+    [CTRL_AX_ROLL] = 1, [CTRL_AX_PITCH] = 1, [CTRL_AX_THROTTLE] = 1 };
 static int s_btn[CTRL_BTN_N] = {
     [CTRL_BTN_FIRE] = 0, [CTRL_BTN_FIRE2] = -1, [CTRL_BTN_FIRE3] = -1,
     [CTRL_BTN_CYCLE_WEAPON] = 1, [CTRL_BTN_CYCLE_TARGET] = 3,
     [CTRL_BTN_ASSIST] = 2, [CTRL_BTN_BOOST] = -1, [CTRL_BTN_CHAFF] = -1,
-    [CTRL_BTN_CLOAK] = -1, [CTRL_BTN_DOCK] = -1, [CTRL_BTN_MENU] = 4 };
+    [CTRL_BTN_CLOAK] = -1, [CTRL_BTN_DOCK] = -1, [CTRL_BTN_MENU] = 4,
+    [CTRL_BTN_MENU_SELECT] = -1, [CTRL_BTN_MENU_BACK] = -1 };
 static bool s_hotas_dbg;       /* stdout axis dump (Linux: ELITE_HOTAS_DEBUG) */
 
 /* Config-file key tables (1:1 with the enums). */
 static const char *k_ax_key[CTRL_AX_N]  = { "roll", "pitch", "yaw", "throttle" };
 static const char *k_btn_key[CTRL_BTN_N] = {
     "btn_fire", "btn_fire2", "btn_fire3", "btn_cycle", "btn_target",
-    "btn_assist", "btn_boost", "btn_chaff", "btn_cloak", "btn_dock", "btn_menu" };
+    "btn_assist", "btn_boost", "btn_chaff", "btn_cloak", "btn_dock", "btn_menu",
+    "btn_menusel", "btn_menuback" };
 
 /* HOTAS config file (next to the exe). The in-game CONTROLLER SETUP screen
  * reads/writes this; you can also hand-edit it. */
@@ -249,13 +251,16 @@ static const char *pad_axis_label(int ax) {
         { "R-STK X", "L-STK Y", "L-STK X", "R-STK Y" };
     return (ax >= 0 && ax < CTRL_AX_N) ? n[ax] : "?";
 }
-static const char *pad_btn_label(int b) {
+static const char *pad_btn_label(int b) {     /* Scheme A */
     switch (b) {
-    case CTRL_BTN_FIRE: return "A / RT"; case CTRL_BTN_CYCLE_WEAPON: return "B";
-    case CTRL_BTN_CYCLE_TARGET: return "LB tap"; case CTRL_BTN_ASSIST: return "RB tap";
-    case CTRL_BTN_BOOST: return "RB x2"; case CTRL_BTN_CHAFF: return "LB+B";
-    case CTRL_BTN_CLOAK: return "RB+B"; case CTRL_BTN_DOCK: return "LB+RB";
-    case CTRL_BTN_MENU: return "START"; default: return "—";
+    case CTRL_BTN_FIRE: return "RT"; case CTRL_BTN_FIRE2: return "LT";
+    case CTRL_BTN_FIRE3: return "RB"; case CTRL_BTN_CYCLE_WEAPON: return "LB";
+    case CTRL_BTN_CYCLE_TARGET: return "B"; case CTRL_BTN_ASSIST: return "X";
+    case CTRL_BTN_BOOST: return "A"; case CTRL_BTN_CHAFF: return "BACK";
+    case CTRL_BTN_CLOAK: return "L3"; case CTRL_BTN_DOCK: return "Y";
+    case CTRL_BTN_MENU: return "START";
+    case CTRL_BTN_MENU_SELECT: return "A"; case CTRL_BTN_MENU_BACK: return "B";
+    default: return "—";
     }
 }
 void plat_ctrl_axis_label(CtrlAxis ax, char *out, int cap) {
@@ -378,6 +383,46 @@ static bool pad_has_input(void) {
     return false;
 }
 
+/* Gamepad button mapping — Scheme A (dedicated buttons, no chords). Flight:
+ * RT fire, LT fire-2, RB fire-3, LB cycle-weapon, A boost, B cycle-target,
+ * X flight-assist, Y dock, Back chaff, L3 cloak, Start menu. Menus: A select,
+ * B back, D-pad/stick nav, Start menu. The analog axes are set by the caller. */
+static void gamepad_apply(CraftRawButtons *btn, bool inmenu) {
+#define GB(b) SDL_GameControllerGetButton(s_pad, b)
+    if (GB(SDL_CONTROLLER_BUTTON_DPAD_UP))    btn->up = true;
+    if (GB(SDL_CONTROLLER_BUTTON_DPAD_DOWN))  btn->down = true;
+    if (GB(SDL_CONTROLLER_BUTTON_DPAD_LEFT))  btn->left = true;
+    if (GB(SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) btn->right = true;
+    if (GB(SDL_CONTROLLER_BUTTON_START))      btn->menu = true;
+    if (inmenu) {
+        if (GB(SDL_CONTROLLER_BUTTON_A)) btn->a = true;   /* select */
+        if (GB(SDL_CONTROLLER_BUTTON_B)) btn->b = true;   /* back */
+        return;
+    }
+    bool rt = SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000;
+    bool lt = SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT)  > 12000;
+    if (rt)                                       btn->a = true;   /* FIRE */
+    elite_input_set_fire2(lt);                                     /* FIRE 2 */
+    elite_input_set_fire3(GB(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER));/* FIRE 3 */
+    if (GB(SDL_CONTROLLER_BUTTON_LEFTSHOULDER)) btn->b = true;     /* CYCLE WEAPON */
+    /* Edge-triggered dedicated actions. */
+    static const struct { int sdl, act; } k_g[] = {
+        { SDL_CONTROLLER_BUTTON_A,         CTRL_BTN_BOOST },
+        { SDL_CONTROLLER_BUTTON_B,         CTRL_BTN_CYCLE_TARGET },
+        { SDL_CONTROLLER_BUTTON_X,         CTRL_BTN_ASSIST },
+        { SDL_CONTROLLER_BUTTON_Y,         CTRL_BTN_DOCK },
+        { SDL_CONTROLLER_BUTTON_BACK,      CTRL_BTN_CHAFF },
+        { SDL_CONTROLLER_BUTTON_LEFTSTICK, CTRL_BTN_CLOAK },
+    };
+    static bool prev[6];
+    for (unsigned i = 0; i < 6; i++) {
+        bool now = GB(k_g[i].sdl);
+        if (now && !prev[i]) elite_input_action(k_g[i].act);
+        prev[i] = now;
+    }
+#undef GB
+}
+
 /* Augment the keyboard-built btn with controller/HOTAS state, and drive the
  * analog/throttle hooks. gpad_sens scales the aim axes (settings slider). */
 static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
@@ -398,6 +443,10 @@ static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
                s_active_dev == DEV_HOTAS ? "HOTAS" : "gamepad");
         s_prev_dev = s_active_dev;
     }
+    /* In menus, controller buttons act as nav/select/back, not flight actions
+     * (so a HOTAS trigger doesn't 'fire-select' and a gamepad's A/B select). */
+    int gst = elite_game_state();
+    bool inmenu = (gst != 0 && gst != 1);   /* not ST_FLIGHT / ST_SUPERCRUISE */
 
     if (s_active_dev == DEV_HOTAS) {        /* --- HOTAS --- */
         float roll  = dz(jaxis(s_joy, s_hx[CTRL_AX_ROLL],  s_hi[CTRL_AX_ROLL]),  0.10f);
@@ -416,19 +465,30 @@ static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
         int nb = SDL_JoystickNumButtons(s_joy);
 #define HB(act) (s_btn[act] >= 0 && s_btn[act] < nb && \
                  SDL_JoystickGetButton(s_joy, s_btn[act]))
-        if (HB(CTRL_BTN_FIRE))         btn->a = true;     /* held */
-        if (HB(CTRL_BTN_CYCLE_WEAPON)) btn->b = true;     /* B edge in input.c */
-        if (HB(CTRL_BTN_MENU))         btn->menu = true;
-        elite_input_set_fire2(HB(CTRL_BTN_FIRE2));        /* held extra weapons */
-        elite_input_set_fire3(HB(CTRL_BTN_FIRE3));
-        /* Dedicated chord actions: rising edge -> one-shot event. */
-        static bool s_eprev[CTRL_BTN_N];
-        static const int k_edge[] = { CTRL_BTN_CYCLE_TARGET, CTRL_BTN_ASSIST,
-            CTRL_BTN_BOOST, CTRL_BTN_CHAFF, CTRL_BTN_CLOAK, CTRL_BTN_DOCK };
-        for (unsigned i = 0; i < sizeof k_edge / sizeof k_edge[0]; i++) {
-            int a = k_edge[i]; bool now = HB(a);
-            if (now && !s_eprev[a]) elite_input_action(a);
-            s_eprev[a] = now;
+        if (HB(CTRL_BTN_MENU)) btn->menu = true;
+        if (inmenu) {
+            /* Select/back on the bound menu buttons; fall back to FIRE/CYCLE
+             * so menus still work before you bind dedicated menu buttons. */
+            bool sel = (s_btn[CTRL_BTN_MENU_SELECT] >= 0)
+                       ? HB(CTRL_BTN_MENU_SELECT) : HB(CTRL_BTN_FIRE);
+            bool bak = (s_btn[CTRL_BTN_MENU_BACK] >= 0)
+                       ? HB(CTRL_BTN_MENU_BACK) : HB(CTRL_BTN_CYCLE_WEAPON);
+            if (sel) btn->a = true;
+            if (bak) btn->b = true;
+        } else {
+            if (HB(CTRL_BTN_FIRE))         btn->a = true;     /* held */
+            if (HB(CTRL_BTN_CYCLE_WEAPON)) btn->b = true;     /* B edge in input.c */
+            elite_input_set_fire2(HB(CTRL_BTN_FIRE2));        /* held extra weapons */
+            elite_input_set_fire3(HB(CTRL_BTN_FIRE3));
+            /* Dedicated chord actions: rising edge -> one-shot event. */
+            static bool s_eprev[CTRL_BTN_N];
+            static const int k_edge[] = { CTRL_BTN_CYCLE_TARGET, CTRL_BTN_ASSIST,
+                CTRL_BTN_BOOST, CTRL_BTN_CHAFF, CTRL_BTN_CLOAK, CTRL_BTN_DOCK };
+            for (unsigned i = 0; i < sizeof k_edge / sizeof k_edge[0]; i++) {
+                int a = k_edge[i]; bool now = HB(a);
+                if (now && !s_eprev[a]) elite_input_action(a);
+                s_eprev[a] = now;
+            }
         }
 #undef HB
         if (SDL_JoystickNumHats(s_joy) > 0) {                  /* hat = menu nav */
@@ -449,25 +509,21 @@ static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
                 printf("  btns=0x%x\n", bm);
             }
         }
-    } else if (s_active_dev == DEV_PAD) {   /* --- gamepad --- */
+    } else if (s_active_dev == DEV_PAD) {   /* --- gamepad (Scheme A) --- */
         float lx = dz(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_LEFTX)  / 32767.0f, 0.15f);
         float ly = dz(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_LEFTY)  / 32767.0f, 0.15f);
         float rx = dz(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_RIGHTX) / 32767.0f, 0.15f);
         float ry = dz(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_RIGHTY) / 32767.0f, 0.15f);
-        elite_input_set_analog(lx * gpad_sens, -ly * gpad_sens);
-        elite_input_set_analog_roll(rx * gpad_sens);
-        elite_input_set_throttle_delta(-ry);   /* right stick up = throttle up */
-        elite_input_set_throttle_abs(-1.0f);    /* gamepad keeps the chord */
-        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_A)) btn->a = true;
-        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_B)) btn->b = true;
-        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_LEFTSHOULDER))  btn->lb = true;
-        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) btn->rb = true;
-        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_START)) btn->menu = true;
-        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_UP))    btn->up = true;
-        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN))  btn->down = true;
-        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT))  btn->left = true;
-        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) btn->right = true;
-        if (SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000) btn->a = true;
+        elite_input_set_analog(lx * gpad_sens, -ly * gpad_sens);   /* fly */
+        elite_input_set_analog_roll(rx * gpad_sens);               /* roll */
+        elite_input_set_throttle_delta(-ry);                       /* throttle */
+        elite_input_set_throttle_abs(-1.0f);
+        /* Left stick also navigates menus. */
+        if (ly < -0.55f) btn->up = true;
+        if (ly >  0.55f) btn->down = true;
+        if (lx < -0.55f) btn->left = true;
+        if (lx >  0.55f) btn->right = true;
+        gamepad_apply(btn, inmenu);
     }
 }
 
@@ -1367,6 +1423,35 @@ int main(int argc, char **argv) {
         b=none; b.a=true; elite_game_tick(&b,1.0f/30.0f);
         for (int k=0;k<10;k++) elite_game_tick(&none,1.0f/30.0f);
         render_frame(); dump_ppm("/tmp/setshot.ppm");
+        return 0;
+    }
+
+    /* Controller setup screen layout (read-only pad labels with no joystick). */
+    if (getenv("ELITE_CTRLSHOT")) {
+        extern void ctrlsetup_open(void);
+        extern void ctrlsetup_draw(uint16_t *);
+        CraftRawButtons none = {0};
+        for (int k = 0; k < 6; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        ctrlsetup_open();
+#ifdef ELITE_OVERLAY_SPLIT
+        elite_game_render_begin(); elite_game_render(g_fb3d, 0, ELITE_FB_H);
+        for (int i = 0; i < ELITE_FB_W * ELITE_FB_H; i++) g_fbui[i] = ELITE_KEY_T;
+        ctrlsetup_draw(g_fbui);
+        for (int yy = 0; yy < R3D_FB_H; yy++) {
+            const uint16_t *ur = g_fbui + (yy / R3D_SS) * ELITE_FB_W;
+            const uint16_t *dr = g_fb3d + yy * R3D_FB_W;
+            uint16_t *o = g_fb + yy * R3D_FB_W;
+            for (int x = 0; x < R3D_FB_W; x++) {
+                uint16_t u = ur[x / R3D_SS];
+                o[x] = (u == ELITE_KEY_T) ? dr[x]
+                     : (u == ELITE_KEY_DIM) ? (uint16_t)((dr[x] >> 1) & 0x7BEF) : u;
+            }
+        }
+#else
+        elite_game_render_begin(); elite_game_render(g_fb, 0, ELITE_FB_H);
+        ctrlsetup_draw(g_fb);
+#endif
+        dump_ppm("/tmp/ctrlshot.ppm");
         return 0;
     }
 

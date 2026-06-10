@@ -28,7 +28,8 @@
 static const char *k_ax_name[N_AX] = { "ROLL", "PITCH", "YAW", "THROTTLE" };
 static const char *k_btn_name[N_BTN] = {
     "FIRE", "FIRE 2", "FIRE 3", "CYCLE WEAPON", "CYCLE TARGET",
-    "FLIGHT ASSIST", "BOOST", "CHAFF", "CLOAK", "DOCK", "MENU" };
+    "FLIGHT ASSIST", "BOOST", "CHAFF", "CLOAK", "DOCK", "MENU",
+    "MENU SELECT", "MENU BACK" };
 
 static int  s_cursor, s_scroll;
 static bool s_capturing;
