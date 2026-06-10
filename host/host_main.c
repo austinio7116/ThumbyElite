@@ -69,9 +69,14 @@ static uint16_t g_fb[ELITE_FB_W * ELITE_FB_H];
 
 /* --- platform hooks ----------------------------------------------------*/
 /* 0 volume, 1 brightness, 2 gamepad sens (x0.1), 3 touch-stick sens. */
-/* [4] = input-device override: 0 AUTO, 1 HOTAS, 2 GAMEPAD, 3 KEYBOARD. */
-#define HOST_NSETTINGS 5
-static int s_host_settings[HOST_NSETTINGS] = { 10, 255, 10, 10, 0 };
+/* [4] = input override (0 AUTO/1 HOTAS/2 GAMEPAD/3 KEYBOARD); [5] = fullscreen. */
+#define HOST_NSETTINGS 6
+static int s_host_settings[HOST_NSETTINGS] = { 10, 255, 10, 10, 0, 0 };
+static SDL_Window *s_win;          /* set in main; toggled for fullscreen */
+static void host_apply_fullscreen(void) {
+    if (s_win) SDL_SetWindowFullscreen(
+        s_win, s_host_settings[5] ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+}
 int plat_setting_get(int which) {
     if (which < 0 || which >= HOST_NSETTINGS) return 0;
     return s_host_settings[which];
@@ -80,6 +85,7 @@ void plat_setting_set(int which, int value) {
     if (which < 0 || which >= HOST_NSETTINGS) return;
     s_host_settings[which] = value;
     if (which == 0) audio_set_master((float)value / 20.0f);
+    if (which == 5) host_apply_fullscreen();
     /* brightness (1): no-op on host. sensitivity (2,3): read each frame
      * when applying analog input — no side effect here. Persisted on quit. */
 }
@@ -4669,11 +4675,18 @@ int main(int argc, char **argv) {
     host_input_init();         /* open controllers/HOTAS, read env axis map */
     host_settings_load();      /* restore volume + sensitivity sliders */
     SDL_Window *win = SDL_CreateWindow("ThumbyElite", SDL_WINDOWPOS_CENTERED,
-        SDL_WINDOWPOS_CENTERED, WIN_W, WIN_H, SDL_WINDOW_SHOWN);
+        SDL_WINDOWPOS_CENTERED, WIN_W, WIN_H,
+        SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+    s_win = win;
     SDL_Renderer *ren = SDL_CreateRenderer(win, -1,
         SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!ren)                  /* WSLg / headless: fall back to software */
         ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_SOFTWARE);
+    /* Aspect-correct scaling: letterbox the square frame in any window /
+     * fullscreen size instead of stretching it. */
+    SDL_RenderSetLogicalSize(ren, OUT_W, OUT_H);
+    SDL_RenderSetIntegerScale(ren, SDL_FALSE);
+    host_apply_fullscreen();   /* honour the persisted choice on launch */
     SDL_Texture *tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGB565,
         SDL_TEXTUREACCESS_STREAMING, OUT_W, OUT_H);
 
@@ -4697,6 +4710,10 @@ int main(int argc, char **argv) {
                 SDL_Scancode sc = ev.key.keysym.scancode;
                 if (sc == SDL_SCANCODE_ESCAPE || sc == SDL_SCANCODE_F12)
                     running = false;
+                if (sc == SDL_SCANCODE_F11) {           /* toggle fullscreen */
+                    s_host_settings[5] = !s_host_settings[5];
+                    host_apply_fullscreen();
+                }
             }
             /* Controller / HOTAS hotplug. */
             if (ev.type == SDL_CONTROLLERDEVICEADDED ||

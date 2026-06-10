@@ -115,17 +115,17 @@ static bool  s_settings_eat_b;   /* swallow a held B returning from a subscreen 
  * Android shells define ELITE_ANALOG_SETTINGS to add gamepad + touch-stick
  * sensitivity sliders, plus a CONTROLLER row when a controller is present. */
 #ifdef ELITE_ANALOG_SETTINGS
-#ifdef ELITE_INPUT_SELECT     /* PC: + an INPUT (HOTAS/gamepad/keyboard) row */
-#define SETTINGS_MAX 8        /* invert,fps,vol,bright,gpad,stick,input,controller */
-#define ROW_INPUT 6
-#define ROW_CTRL  7
-#else                         /* Android: no HOTAS/keyboard, no INPUT row */
+#ifdef ELITE_INPUT_SELECT     /* PC: + FULLSCREEN (always) and INPUT (w/ a pad) */
+#define SETTINGS_MAX 9        /* invert,fps,vol,bright,gpad,stick,fullscreen,input,controller */
+#define ROW_FULL  6
+#define ROW_INPUT 7
+#define ROW_CTRL  8
+static int settings_rows(void) { return plat_ctrl_present() ? 9 : 7; }
+#else                         /* Android: no HOTAS/keyboard/fullscreen rows */
 #define SETTINGS_MAX 7        /* invert,fps,vol,bright,gpad,stick,controller */
 #define ROW_CTRL  6
+static int settings_rows(void) { return plat_ctrl_present() ? 7 : 6; }
 #endif
-static int settings_rows(void) {
-    return plat_ctrl_present() ? SETTINGS_MAX : 6;
-}
 #else
 #define SETTINGS_MAX 4
 static int settings_rows(void) { return 4; }
@@ -1765,6 +1765,9 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
                 if (n > 3) n = 0;
                 plat_setting_set(4, n);
                 sfx_ui_move();
+            } else if (dir && s_settings_cursor == ROW_FULL) {
+                plat_setting_set(5, !plat_setting_get(5));   /* FULLSCREEN */
+                sfx_ui_move();
             }
 #endif
             bool b_back = btn->b && !pb2;
@@ -2262,6 +2265,7 @@ static void dash_settings_overlay(uint16_t *fb) {
     static const char *k_indev[4] = { "AUTO", "HOTAS", "GAMEPAD", "KEYBOARD" };
     snprintf(irow, sizeof irow, "INPUT   %s", k_indev[plat_setting_get(4) & 3]);
     si2[ROW_INPUT] = irow;
+    si2[ROW_FULL] = plat_setting_get(5) ? "FULLSCREEN: ON" : "FULLSCREEN: OFF";
 #else
     (void)irow;
 #endif
