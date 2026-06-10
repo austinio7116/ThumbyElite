@@ -198,11 +198,23 @@ typedef struct {
 static Impostor s_imp[MAX_IMPOSTORS];
 static int s_nimp;
 
+/* Screen-space direction of world "up" — the roll reference so planet
+ * textures stay anchored to the world (roll with the ship) instead of the
+ * screen. Recomputed each frame in emit, consumed per-pixel in raster. */
+static float s_up_sx = 0.0f, s_up_sy = -1.0f;
+
 void r3d_planet_emit(Vec3 cam_pos_mm) {
     s_nimp = 0;
     if (!s_info) return;
     const Mat3 *cam = r3d_pipe_camera();
     float focal = r3d_pipe_focal();
+
+    /* World up (0,1,0) projected into screen space (x right, y down): when the
+     * ship is level this is straight up; it rotates as the ship rolls. */
+    float ux = cam->r[0].y, uy = -cam->r[1].y;
+    float ul = sqrtf(ux * ux + uy * uy);
+    if (ul > 1e-4f) { s_up_sx = ux / ul; s_up_sy = uy / ul; }
+    else            { s_up_sx = 0.0f;    s_up_sy = -1.0f; }   /* pole-on: keep screen-up */
 
     for (int i = -1; i < (int)s_info->n_planets; i++) {
         Vec3 body_mm = (i < 0) ? system_star_pos_mm()
@@ -356,6 +368,7 @@ void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
         }
 
         const PlanetArt *art = &s_art[(int)im->planet];
+        const float ux = s_up_sx, uy = s_up_sy;        /* world-up on screen */
         for (int py = ylo; py <= yhi; py++) {
             float ny = (py - imy) * inv_r;
             float w2 = 1.0f - ny * ny;
@@ -366,8 +379,6 @@ void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
             if (x1 > R3D_FB_W - 1) x1 = R3D_FB_W - 1;
             uint16_t *fr = fb + py * R3D_FB_W;
             uint16_t *dr = depth + py * R3D_FB_W;
-            int tv = (int)((ny * 0.5f + 0.5f) * (TEX_N - 1));
-            const uint8_t *trow = &art->tex[tv * TEX_N];
             for (int px = x0; px <= x1; px++) {
                 if (im->d < dr[px]) continue;   /* ties: painter order wins */
                 float nx = (px - imx) * inv_r;
@@ -379,8 +390,15 @@ void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
                 if (light < 0.0f) light = 0.0f;
                 float shade = 0.07f + 0.93f * light;
                 shade *= 0.55f + 0.45f * nz;          /* limb darkening */
-                int tu = (int)((nx * 0.5f + 0.5f) * (TEX_N - 1));
-                uint16_t c = art->pal[trow[tu]];
+                /* Rotate the sample into the world-up frame so the texture
+                 * rolls with the world (u = longitude, v = latitude). */
+                float nx2 = nx * (-uy) + ny * ux;
+                float ny2 = -(nx * ux + ny * uy);
+                int tu = (int)((nx2 * 0.5f + 0.5f) * (TEX_N - 1));
+                int tv = (int)((ny2 * 0.5f + 0.5f) * (TEX_N - 1));
+                if (tu < 0) tu = 0; else if (tu >= TEX_N) tu = TEX_N - 1;
+                if (tv < 0) tv = 0; else if (tv >= TEX_N) tv = TEX_N - 1;
+                uint16_t c = art->pal[art->tex[tv * TEX_N + tu]];
                 int cr = (int)(((c >> 11) & 31) * shade);
                 int cg = (int)(((c >> 5) & 63) * shade);
                 int cb = (int)((c & 31) * shade);
