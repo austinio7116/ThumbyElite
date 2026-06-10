@@ -30,6 +30,7 @@
 #include "ui_map.h"
 #include "ui_station.h"
 #include "ui_status.h"
+#include "ui_ctrlsetup.h"
 #include "elite_player.h"
 #include "elite_audio.h"
 #include "elite_save.h"
@@ -50,6 +51,7 @@ typedef enum {
     ST_DOCKING, ST_DOCKED, ST_STATUS, ST_TITLE,
     ST_DASH = 12,   /* appended LAST — inserting mid-enum shifted
                        DOCKED & friends and broke every state check */
+    ST_CTRLSETUP = 13,   /* controller binding screen (from SETTINGS) */
 } GState;
 
 #define DOCK_RANGE 600.0f
@@ -110,11 +112,15 @@ static bool  s_incoming;         /* seeker tracking the player */
 static bool  s_in_settings;      /* SETTINGS submenu over the pause */
 /* Settings rows: device shows 4 (invert/fps/volume/bright); the PC and
  * Android shells define ELITE_ANALOG_SETTINGS to add gamepad + touch-stick
- * sensitivity sliders (no analog input source exists on the handheld). */
+ * sensitivity sliders, plus a CONTROLLER row when a controller is present. */
 #ifdef ELITE_ANALOG_SETTINGS
-#define SETTINGS_N 6
+#define SETTINGS_MAX 7    /* invert,fps,vol,bright,gpad,stick,controller */
+static int settings_rows(void) {
+    return plat_ctrl_present() ? 7 : 6;
+}
 #else
-#define SETTINGS_N 4
+#define SETTINGS_MAX 4
+static int settings_rows(void) { return 4; }
 #endif
 static int   s_dash_sel;         /* dashboard region 0..3 */
 static float s_dash_anim;        /* 0 closed .. 1 fully risen */
@@ -1650,6 +1656,21 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         }
         break;
 
+#ifdef ELITE_ANALOG_SETTINGS
+    case ST_CTRLSETUP:
+        /* Reached from the dash SETTINGS, so the world is live underneath. */
+        {
+            CraftRawButtons none4 = {0};
+            tick_flight(&none4, dt);
+            if (!g_ships[PLAYER].alive) { s_state = s_dash_from; break; }
+        }
+        if (ctrlsetup_tick(btn, dt)) {
+            elite_input_reset();
+            s_state = ST_DASH;       /* back to the SETTINGS overlay */
+        }
+        break;
+#endif
+
     case ST_DASH: {
         /* THE GAME PLAYS ON. Neutral stick; peril remains — taking
          * hull damage kicks you back to the cockpit. */
@@ -1683,7 +1704,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             static bool pu2, pd2, pb2, pl3, pr3;
             if (btn->up && !pu2 && s_settings_cursor > 0)
                 s_settings_cursor--;
-            if (btn->down && !pd2 && s_settings_cursor < SETTINGS_N - 1)
+            if (btn->down && !pd2 && s_settings_cursor < settings_rows() - 1)
                 s_settings_cursor++;
             pu2 = btn->up; pd2 = btn->down;
             int dir = 0;
@@ -1695,6 +1716,14 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
                     g_player.invert_y = !g_player.invert_y;
                 else if (s_settings_cursor == 1)
                     g_player.show_fps = !g_player.show_fps;
+#ifdef ELITE_ANALOG_SETTINGS
+                else if (s_settings_cursor == 6) {     /* CONTROLLER row */
+                    ctrlsetup_open();
+                    s_state = ST_CTRLSETUP;
+                    sfx_ui_select();
+                    break;
+                }
+#endif
                 else
                     dir = 1;                 /* A nudges sliders up */
             }
@@ -2193,21 +2222,22 @@ static void dash_settings_overlay(uint16_t *fb) {
     snprintf(vrow, sizeof vrow, "VOLUME    %3d%%", plat_setting_get(0) * 5);
     snprintf(brow, sizeof brow, "BRIGHT    %3d%%",
              (plat_setting_get(1) * 100) / 255);
-    const char *si2[SETTINGS_N];
+    const char *si2[SETTINGS_MAX];
     si2[0] = g_player.invert_y ? "INVERT Y: ON" : "INVERT Y: OFF";
     si2[1] = g_player.show_fps ? "SHOW FPS: ON" : "SHOW FPS: OFF";
     si2[2] = vrow;
     si2[3] = brow;
-#if SETTINGS_N > 4
-    /* Controller / touch-stick sensitivity (PC + Android only). */
+#if SETTINGS_MAX > 4
+    /* Controller / touch-stick sensitivity + controller setup (PC/Android). */
     snprintf(grow, sizeof grow, "GAMEPAD   %3d%%", plat_setting_get(2) * 10);
     snprintf(srow, sizeof srow, "STICK     %3d%%", plat_setting_get(3) * 10);
     si2[4] = grow;
     si2[5] = srow;
+    si2[6] = "CONTROLLER...";
 #else
     (void)grow; (void)srow;
 #endif
-    int top = 44, row_y = top, n = SETTINGS_N;
+    int top = 44, row_y = top, n = settings_rows();
     int bot = top + n * 9 + 14;
     for (int y = top - 18; y < bot; y++)
         for (int x = 12; x < 116; x++)
@@ -2263,6 +2293,9 @@ void elite_game_draw_overlay(uint16_t *fb) {
     case ST_HYPERJUMP:  draw_hyperjump_overlay(fb); return;
     case ST_DOCKED:     station_draw(fb); return;
     case ST_STATUS:     status_draw(fb); return;
+#ifdef ELITE_ANALOG_SETTINGS
+    case ST_CTRLSETUP:  ctrlsetup_draw(fb); return;
+#endif
     default: break;
     }
 

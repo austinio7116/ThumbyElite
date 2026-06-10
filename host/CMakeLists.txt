@@ -96,6 +96,7 @@ set(ELITE_SRC
     ${GAME}/ui_map.c
     ${GAME}/ui_station.c
     ${GAME}/ui_status.c
+    ${GAME}/ui_ctrlsetup.c
     ${GAME}/ui_icons.c
     ${GAME}/ui_detail.c
     ${GAME}/econ.c
