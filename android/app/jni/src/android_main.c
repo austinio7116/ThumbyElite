@@ -78,6 +78,37 @@ void plat_rumble(float intensity, float seconds) {
     SDL_GameControllerRumble(s_pad, v, v, (Uint32)(seconds * 1000.0f));
 }
 
+/* ---- controller binding (read-only on Android) ---------------------- *
+ * Android has a standard SDL gamepad mapping — nothing to rebind — so the
+ * CONTROLLER SETUP screen shows it read-only. */
+int  plat_ctrl_present(void)  { return s_pad ? 1 : 0; }
+int  plat_ctrl_editable(void) { return 0; }
+const char *plat_ctrl_device_name(void) {
+    return s_pad ? SDL_GameControllerName(s_pad) : "NO PAD";
+}
+void plat_ctrl_axis_label(CtrlAxis ax, char *out, int cap) {
+    static const char *n[CTRL_AX_N] = { "R-STK X", "L-STK Y", "L-STK X", "R-STK Y" };
+    if (out && cap > 0) SDL_snprintf(out, cap, "%s",
+        (ax >= 0 && ax < CTRL_AX_N) ? n[ax] : "?");
+}
+void plat_ctrl_btn_label(CtrlButton b, char *out, int cap) {
+    const char *s;
+    switch (b) {
+    case CTRL_BTN_FIRE: s = "A / RT"; break; case CTRL_BTN_CYCLE_WEAPON: s = "B"; break;
+    case CTRL_BTN_CYCLE_TARGET: s = "LB tap"; break; case CTRL_BTN_ASSIST: s = "RB tap"; break;
+    case CTRL_BTN_BOOST: s = "RB x2"; break; case CTRL_BTN_CHAFF: s = "LB+B"; break;
+    case CTRL_BTN_CLOAK: s = "RB+B"; break; case CTRL_BTN_DOCK: s = "LB+RB"; break;
+    case CTRL_BTN_MENU: s = "START"; break; default: s = "—"; break;
+    }
+    if (out && cap > 0) SDL_snprintf(out, cap, "%s", s);
+}
+void plat_ctrl_capture_begin(int kind, int which) { (void)kind; (void)which; }
+int  plat_ctrl_capture_poll(void) { return -1; }
+void plat_ctrl_capture_cancel(void) {}
+void plat_ctrl_axis_invert(CtrlAxis ax) { (void)ax; }
+void plat_ctrl_clear(int kind, int which) { (void)kind; (void)which; }
+void plat_ctrl_save(void) {}
+
 int plat_save(const uint8_t *data, int len) {
     SDL_RWops *f = SDL_RWFromFile(g_sav_path, "wb");
     if (!f) { SDL_Log("[elite] save open failed"); return 0; }
