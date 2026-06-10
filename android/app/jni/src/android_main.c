@@ -531,7 +531,7 @@ int main(int argc, char *argv[]) {
             float ry = SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_RIGHTY) / 32767.0f;
             if (fabsf(lx) < STICK_DZ) lx = 0; if (fabsf(ly) < STICK_DZ) ly = 0;
             if (fabsf(rx) < STICK_DZ) rx = 0; if (fabsf(ry) < STICK_DZ) ry = 0;
-            ana_x = lx; ana_y = -ly; ana_roll = rx;
+            ana_x = lx; ana_y = -ly; ana_roll = -rx;   /* stick R = roll R */
             sens = (float)s_settings[2] * 0.1f;       /* GAMEPAD slider */
             elite_input_set_throttle_delta(-ry);      /* right stick up = throttle up */
             elite_input_set_throttle_abs(-1.0f);      /* keep the RB chord */

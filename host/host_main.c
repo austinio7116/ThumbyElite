@@ -598,7 +598,7 @@ static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
         float rx = dz(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_RIGHTX) / 32767.0f, 0.15f);
         float ry = dz(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_RIGHTY) / 32767.0f, 0.15f);
         elite_input_set_analog(lx * gpad_sens, -ly * gpad_sens);   /* fly */
-        elite_input_set_analog_roll(rx * gpad_sens);               /* roll */
+        elite_input_set_analog_roll(-rx * gpad_sens);              /* roll (stick R = roll R) */
         elite_input_set_throttle_delta(-ry);                       /* throttle */
         elite_input_set_throttle_abs(-1.0f);
         /* Left stick also navigates menus. */
