@@ -153,6 +153,32 @@ static void try_sell(int good) {
     g_player.credits += price;
 }
 
+/* Bulk variants for the market action menu (one toast, no spam). */
+static void buy_max(int good) {
+    const SystemInfo *si = system_info();
+    int n = 0;
+    for (;;) {
+        int price = econ_price(si, s_station, good, true);
+        int stock = econ_stock(si, s_station, good) - s_bought[good];
+        if (price <= 0 || stock <= 0 || g_player.credits < price ||
+            player_cargo_total() >= player_cargo_cap()) break;
+        g_player.credits -= price; g_player.cargo[good]++; s_bought[good]++; n++;
+    }
+    if (n) { char b[20]; snprintf(b, sizeof b, "BOUGHT %d", n); toast(b); }
+    else try_buy(good);                  /* shows why nothing happened */
+}
+static void sell_all(int good) {
+    const SystemInfo *si = system_info();
+    int n = 0;
+    while (g_player.cargo[good] > 0) {
+        int price = econ_price(si, s_station, good, false);
+        if (price <= 0) break;
+        g_player.cargo[good]--; g_player.credits += price; n++;
+    }
+    if (n) { char b[20]; snprintf(b, sizeof b, "SOLD %d", n); toast(b); }
+    else try_sell(good);
+}
+
 static void try_refuel(void) {
     float need = g_player.fuel_max - g_player.fuel;
     if (need < 0.1f) { toast("TANK FULL"); return; }
@@ -566,6 +592,10 @@ static int s_pop_row;
  * to an implicit pick) */
 static uint8_t s_pick_open, s_pick_n, s_pick_cur;
 static int8_t s_pick_items[6];      /* mount idx or rack idx */
+/* A opens an action menu (never an instant transaction): market BUY/SELL,
+ * shipyard BUY confirm. Info stays for alternate views only. */
+static uint8_t s_mkt_open, s_mkt_cur;   /* 0 = BUY, 1 = SELL */
+static int     s_yard_confirm;          /* 0 none, else (ship index + 1) */
 static const char *pact_name(int a) {
     switch (a) {
     case PACT_TURRET: return "TO TURRET";
@@ -1051,7 +1081,7 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
             if (s_rep_dn > 0.35f) { s_rep_dn -= 0.12f; down = true; }
         }
     } else s_rep_dn = 0;
-    bool back = btn->menu && !s_prev.menu;     /* B stays free for SELL */
+    bool back = (btn->menu && !s_prev.menu) || b_edge;   /* B or MENU = back */
 
     if (s_toast_t > 0) s_toast_t -= dt;
     if (up || down) sfx_ui_move();
@@ -1112,26 +1142,25 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
     case SCR_SHIPYARD:
         /* Row YARD_OFFERS (the 6th) is YOUR ship — comparable in the
          * detail cycle, never buyable (user req). */
+        if (s_yard_confirm) {                  /* A = select, then confirm */
+            if (a_edge) {
+                shipyard_buy(s_yard_confirm - 1);
+                s_yard_confirm = 0; s_detail = 0; s_kit_view = 0;
+            } else if (back) s_yard_confirm = 0;
+            break;
+        }
         if (s_detail) {
-            if (rb_edge) s_cursor = (s_cursor + 1) % (YARD_OFFERS + 1);
-            if (lb_edge)
-                s_cursor = (s_cursor + YARD_OFFERS) % (YARD_OFFERS + 1);
-            if (s_kit_view) {                  /* in the kit sub-view */
-                if (up || b_edge || back) s_kit_view = 0;
-                break;
-            }
-            if (down) { s_kit_view = 1; break; }   /* drill into the kit */
-            if (a_edge && s_cursor < YARD_OFFERS) {
-                shipyard_buy(s_cursor);
-                s_detail = 0; s_kit_view = 0;
-            }
-            if (b_edge || back) s_detail = 0;
+            if (up)   s_cursor = (s_cursor + YARD_OFFERS) % (YARD_OFFERS + 1);
+            if (down) s_cursor = (s_cursor + 1) % (YARD_OFFERS + 1);
+            if (lb_edge) s_kit_view = !s_kit_view;       /* Info = kit view */
+            if (a_edge && s_cursor < YARD_OFFERS) s_yard_confirm = s_cursor + 1;
+            if (back) { if (s_kit_view) s_kit_view = 0; else s_detail = 0; }
             break;
         }
         if (up && s_cursor > 0) s_cursor--;
         if (down && s_cursor < YARD_OFFERS) s_cursor++;
-        if (b_edge || lb_edge) { s_detail = 1; s_kit_view = 0; }
-        if (a_edge && s_cursor < YARD_OFFERS) shipyard_buy(s_cursor);
+        if (lb_edge) { s_detail = 1; s_kit_view = 0; }   /* Info = details */
+        if (a_edge && s_cursor < YARD_OFFERS) s_yard_confirm = s_cursor + 1;
         if (back) { s_screen = SCR_HOME; s_cursor = 1; }
         break;
 
@@ -1161,11 +1190,10 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
             break;
         }
         if (s_detail) {
-            /* LB/RB loop through every row WITH a sheet, wrapping at
-             * the ends (user req) — headers, empty mounts and bare
-             * equipment slots are skipped, never exit the view. */
-            if (rb_edge || lb_edge) {
-                int dir = rb_edge ? 1 : -1;
+            /* Up/Down loop through every row WITH a sheet, wrapping at the
+             * ends — headers, empty mounts and bare slots are skipped. */
+            if (up || down) {
+                int dir = down ? 1 : -1;
                 int n = s_cursor;
                 for (int tries = 0; tries < s_n_rows; tries++) {
                     n = (n + dir + s_n_rows) % s_n_rows;
@@ -1173,7 +1201,7 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
                 }
             }
             if (a_edge) { outfit_action_a(s_cursor); s_detail = 0; }
-            if (b_edge || back) s_detail = 0;
+            if (back) s_detail = 0;
             break;
         }
         if (up && s_cursor > 0) {
@@ -1191,14 +1219,14 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
         if (s_cursor < s_scroll) s_scroll = s_cursor;
         if (s_cursor > s_scroll + 8) s_scroll = s_cursor - 8;
         if (lb_edge && row_detailable(&s_rows[s_cursor]))
-            s_detail = 1;
+            s_detail = 1;                       /* Info = detail sheet */
         if (a_edge) {
             /* Items open their action popup (user design); shop rows
-             * still buy directly. */
+             * still buy directly. UNFIT/SELL live in the popup, so B is
+             * free for Back. */
             if (popup_build(s_cursor)) s_pop_open = 1;
             else outfit_action_a(s_cursor);
         }
-        if (b_edge) outfit_action_b(s_cursor);
         if (back) { s_screen = SCR_HOME; s_cursor = 2; }
         break;
 
@@ -1227,12 +1255,26 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
         return act;
 
     case SCR_MARKET:
+        if (s_mkt_open) {                  /* A's BUY / BUY MAX / SELL / SELL ALL */
+            if (up   && s_mkt_cur > 0) s_mkt_cur--;
+            if (down && s_mkt_cur < 3) s_mkt_cur++;
+            bool single = (s_mkt_cur == 0 || s_mkt_cur == 2);
+            if (a_edge || (a_rep && single)) {     /* hold A repeats single buy/sell */
+                switch (s_mkt_cur) {
+                case 0: try_buy(s_cursor);  break;
+                case 1: buy_max(s_cursor);  break;
+                case 2: try_sell(s_cursor); break;
+                default: sell_all(s_cursor); break;
+                }
+            }
+            if (back) s_mkt_open = 0;
+            break;
+        }
         if (up && s_cursor > 0) s_cursor--;
         if (down && s_cursor < N_GOODS - 1) s_cursor++;
         if (s_cursor < s_scroll) s_scroll = s_cursor;
         if (s_cursor > s_scroll + 8) s_scroll = s_cursor - 8;
-        if (a_edge || a_rep) try_buy(s_cursor);
-        if (b_edge || b_rep) try_sell(s_cursor);
+        if (a_edge) { s_mkt_open = 1; s_mkt_cur = 0; }
         if (back) { s_screen = SCR_HOME; s_cursor = 0; }
         break;
     }
@@ -1321,6 +1363,29 @@ static void draw_home(uint16_t *fb) {
     craft_font_draw(fb, "A:SELECT MENU:LEAVE MENU", 2, 121, COL_DIM);
 }
 
+/* Centred action menu (market BUY/SELL, etc.). */
+static void draw_action_box(uint16_t *fb, const char *title,
+                            const char *const *items, int n, int cur) {
+    int w = 100, h = 15 + n * 10;
+    int x0 = (128 - w) / 2, y0 = (128 - h) / 2;
+    for (int y = y0; y < y0 + h; y++)
+        for (int x = x0; x < x0 + w; x++) fb[y * ELITE_FB_W + x] = RGB565C(8, 11, 20);
+    for (int x = x0; x < x0 + w; x++) {
+        fb[y0 * ELITE_FB_W + x] = COL_GRID;
+        fb[(y0 + h - 1) * ELITE_FB_W + x] = COL_GRID;
+    }
+    for (int y = y0; y < y0 + h; y++) {
+        fb[y * ELITE_FB_W + x0] = COL_GRID;
+        fb[y * ELITE_FB_W + x0 + w - 1] = COL_GRID;
+    }
+    craft_font_draw(fb, title, x0 + 5, y0 + 3, COL_HDR);
+    for (int i = 0; i < n; i++) {
+        uint16_t c = (i == cur) ? COL_CUR : COL_DIM;
+        if (i == cur) craft_font_draw(fb, ">", x0 + 5, y0 + 14 + i * 10, c);
+        craft_font_draw(fb, items[i], x0 + 14, y0 + 14 + i * 10, c);
+    }
+}
+
 static void draw_market(uint16_t *fb) {
     draw_header(fb);
     const SystemInfo *si = system_info();
@@ -1373,8 +1438,12 @@ static void draw_market(uint16_t *fb) {
     snprintf(buf, sizeof buf, "HOLD %d/%d", player_cargo_total(),
              player_cargo_cap());
     craft_font_draw(fb, buf, 2, 116, COL_DIM);
-    craft_font_draw(fb, "A:BUY B:SELL", 70, 116, COL_DIM);
-    craft_font_draw(fb, "MENU:BACK", 2, 123, COL_DIM);
+    craft_font_draw(fb, "A:TRADE", 78, 116, COL_DIM);
+    craft_font_draw(fb, "B:BACK", 2, 123, COL_DIM);
+    if (s_mkt_open) {
+        static const char *const it[4] = { "BUY", "BUY MAX", "SELL", "SELL ALL" };
+        draw_action_box(fb, k_goods[s_cursor].name, it, 4, s_mkt_cur);
+    }
 }
 
 static const char *k_qtag[5] = { "SLV", "STD", "RNF", "MIL", "PRO" };
@@ -1440,7 +1509,21 @@ static void draw_shipyard(uint16_t *fb) {
         }
     }
     hl(fb, 113, COL_GRID);
-    craft_font_draw(fb, "A:BUY B:DETAILS MENU:BACK", 2, 117, COL_DIM);
+    if (s_detail)
+        craft_font_draw(fb, "A:BUY INFO:KIT B:BACK", 2, 117, COL_DIM);
+    else
+        craft_font_draw(fb, "A:BUY INFO:DETAIL B:BACK", 2, 117, COL_DIM);
+    if (s_yard_confirm) {
+        int idx = s_yard_confirm - 1;
+        int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
+        int cost = k_hulls[s_yard[idx].cls].price - tradein;
+        if (cost < 0) cost = 0;
+        char t[40], c[28];
+        snprintf(t, sizeof t, "BUY %s", s_yard[idx].name);
+        snprintf(c, sizeof c, "%d CR    A:YES  B:NO", cost);
+        const char *const it[1] = { c };
+        draw_action_box(fb, t, it, 1, -1);
+    }
 }
 
 static void draw_outfit(uint16_t *fb) {
@@ -1625,7 +1708,7 @@ static void draw_outfit(uint16_t *fb) {
         }
     }
     hl(fb, 113, COL_GRID);
-    craft_font_draw(fb, "A:ACTIONS B:UNFIT/SELL INFO:DETAIL", 2, 116,
+    craft_font_draw(fb, "A:ACTIONS  INFO:DETAIL  B:BACK", 2, 116,
                     COL_DIM);
     /* action popup */
     if (s_pop_open) {
@@ -1678,7 +1761,7 @@ static void draw_outfit(uint16_t *fb) {
             craft_font_draw(fb, nb, 27, py0 + 14 + i * 9, c);
         }
     }
-    craft_font_draw(fb, "MENU:BACK", 2, 123, COL_DIM);
+    craft_font_draw(fb, "B:BACK", 2, 123, COL_DIM);
 }
 
 static void draw_missions(uint16_t *fb) {
@@ -1725,7 +1808,7 @@ static void draw_missions(uint16_t *fb) {
         y += 9;
     }
     hl(fb, 113, COL_GRID);
-    craft_font_draw(fb, "A:ACCEPT MENU:BACK", 2, 116, COL_DIM);
+    craft_font_draw(fb, "A:ACCEPT  B:BACK", 2, 116, COL_DIM);
     craft_font_draw(fb, "PAY ON RETURN TO ANY DOCK", 2, 123, COL_DIM);
 }
 
