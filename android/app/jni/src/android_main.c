@@ -111,6 +111,8 @@ void plat_ctrl_capture_cancel(void) {}
 void plat_ctrl_axis_invert(CtrlAxis ax) { (void)ax; }
 void plat_ctrl_clear(int kind, int which) { (void)kind; (void)which; }
 void plat_ctrl_save(void) {}
+void plat_ctrl_monitor(void) {}
+const char *plat_ctrl_last_input(void) { return ""; }
 
 int plat_save(const uint8_t *data, int len) {
     SDL_RWops *f = SDL_RWFromFile(g_sav_path, "wb");

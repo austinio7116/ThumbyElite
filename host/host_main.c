@@ -320,6 +320,32 @@ void plat_ctrl_clear(int kind, int which) {
 }
 void plat_ctrl_save(void) { if (s_joy) hotas_cfg_write(); }
 
+/* Live "what am I touching" monitor: a held button wins; else the axis moving
+ * furthest from its slow-following rest (so a swept throttle reads even though
+ * it rests at an extreme). Sticky — keeps the last hit so you can read it. */
+static char  s_last_in[16];
+static float s_axrest[24];
+void plat_ctrl_monitor(void) {
+    if (!s_joy) { s_last_in[0] = 0; return; }
+    int nb = SDL_JoystickNumButtons(s_joy); if (nb > 32) nb = 32;
+    for (int i = 0; i < nb; i++)
+        if (SDL_JoystickGetButton(s_joy, i)) {
+            snprintf(s_last_in, sizeof s_last_in, "BTN %d", i);
+            return;
+        }
+    int n = SDL_JoystickNumAxes(s_joy); if (n > 24) n = 24;
+    int best = -1; float bd = 0.0f;
+    for (int i = 0; i < n; i++) {
+        float v = SDL_JoystickGetAxis(s_joy, i) / 32767.0f;
+        float d = fabsf(v - s_axrest[i]);
+        if (d > bd) { bd = d; best = i; }
+        s_axrest[i] += (v - s_axrest[i]) * 0.03f;   /* slow follow = rest */
+    }
+    if (best >= 0 && bd > 0.35f)
+        snprintf(s_last_in, sizeof s_last_in, "AXIS %d", best);
+}
+const char *plat_ctrl_last_input(void) { return s_last_in; }
+
 static void host_input_open(int index) {
     if (SDL_IsGameController(index)) {
         if (!s_pad) {

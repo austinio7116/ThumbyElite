@@ -36,5 +36,10 @@ void plat_ctrl_capture_cancel(void);
 void plat_ctrl_axis_invert(CtrlAxis ax);
 void plat_ctrl_clear(int kind, int which);
 void plat_ctrl_save(void);
+/* Live input monitor for the setup screen: call each frame, then read the
+ * label of the button/axis being pressed/moved right now ("BTN 5","AXIS 3",
+ * or "" if idle/none) so the user can identify a control before binding. */
+void plat_ctrl_monitor(void);
+const char *plat_ctrl_last_input(void);
 
 #endif

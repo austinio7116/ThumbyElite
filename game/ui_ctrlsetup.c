@@ -22,8 +22,8 @@
 
 #define N_AX   CTRL_AX_N            /* 4 */
 #define N_BTN  CTRL_BTN_N           /* 11 */
-#define N_ROWS (N_AX + N_BTN)       /* 15 */
-#define VIS    11                   /* visible rows */
+#define N_ROWS (N_AX + N_BTN)
+#define VIS    10                   /* visible rows */
 
 static const char *k_ax_name[N_AX] = { "ROLL", "PITCH", "YAW", "THROTTLE" };
 static const char *k_btn_name[N_BTN] = {
@@ -52,6 +52,8 @@ bool ctrlsetup_tick(const CraftRawButtons *btn, float dt) {
     /* Debounce: the A/B that opened or returned to this screen may still be
      * held — record the state for one frame so it isn't read as a fresh edge. */
     if (!s_armed) { s_prev = *btn; s_armed = true; return false; }
+
+    if (!s_capturing) plat_ctrl_monitor();   /* live "what am I touching" */
 
     bool a_edge = btn->a     && !s_prev.a;
     bool b_edge = btn->b     && !s_prev.b;
@@ -143,10 +145,17 @@ void ctrlsetup_draw(uint16_t *fb) {
             for (int x = 8; x < 120; x++) fb[yy * ELITE_FB_W + x] = RGB565C(8, 11, 20);
         craft_font_draw(fb, msg, 64 - craft_font_width(msg) / 2, 58, COL_CAP);
         craft_font_draw(fb, "B: CANCEL", 64 - craft_font_width("B: CANCEL") / 2, 66, COL_FOOT);
-    } else if (!editable) {
-        craft_font_draw(fb, "STANDARD MAPPING (READ-ONLY)", 2, 119, COL_FOOT);
-    } else {
-        craft_font_draw(fb, "A:BIND  </>:INVERT/CLEAR", 2, 111, COL_FOOT);
-        craft_font_draw(fb, "B:BACK   (keyboard always works)", 2, 119, COL_FOOT);
+        return;
     }
+    for (int x = 0; x < 128; x++) fb[95 * ELITE_FB_W + x] = RGB565C(28, 40, 58);
+    if (!editable) {
+        craft_font_draw(fb, "STANDARD MAPPING (READ-ONLY)", 2, 118, COL_FOOT);
+        return;
+    }
+    /* Live input readout: press/move on the stick to identify it before binding. */
+    const char *li = plat_ctrl_last_input();
+    craft_font_draw(fb, "TESTING:", 2, 99, COL_DIM);
+    craft_font_draw(fb, (li && li[0]) ? li : "—", 44, 99, RGB565C(120, 230, 255));
+    craft_font_draw(fb, "A:BIND  </>:INV/CLR  B:BACK", 2, 108, COL_FOOT);
+    craft_font_draw(fb, "keyboard always works", 2, 117, COL_FOOT);
 }
