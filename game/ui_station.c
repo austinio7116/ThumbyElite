@@ -1716,9 +1716,6 @@ static void draw_outfit(uint16_t *fb) {
         }
     }
     hl(fb, 113, COL_GRID);
-    { char h[40]; snprintf(h, sizeof h, "%s:ACTIONS %s:DETAIL %s:BACK",
-        plat_menu_btn(MB_A), plat_menu_btn(MB_INFO), plat_menu_btn(MB_B));
-      craft_font_draw(fb, h, 2, 116, COL_DIM); }
     /* action popup */
     if (s_pop_open) {
         int ph = 14 + s_pop_n * 9;
@@ -1770,8 +1767,14 @@ static void draw_outfit(uint16_t *fb) {
             craft_font_draw(fb, nb, 27, py0 + 14 + i * 9, c);
         }
     }
-    { char h[16]; snprintf(h, sizeof h, "%s:BACK", plat_menu_btn(MB_B));
-      craft_font_draw(fb, h, 2, 123, COL_DIM); }
+    { char h[40];
+      if (s_pop_open || s_pick_open)
+          snprintf(h, sizeof h, "%s:SELECT  %s:BACK",
+                   plat_menu_btn(MB_A), plat_menu_btn(MB_B));
+      else
+          snprintf(h, sizeof h, "%s:ACTIONS  %s:DETAIL  %s:BACK",
+                   plat_menu_btn(MB_A), plat_menu_btn(MB_INFO), plat_menu_btn(MB_B));
+      craft_font_draw(fb, h, 2, 116, COL_DIM); }
 }
 
 static void draw_missions(uint16_t *fb) {

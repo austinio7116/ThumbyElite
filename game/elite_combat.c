@@ -372,6 +372,14 @@ int player_turret_gunner_tier(void) {
  * weapon's s->fire_cool so dedicated buttons can fire different mounts. */
 static float s_pslot_cool[MAX_HARDPOINTS];
 
+/* Per-shot spray RNG (xorshift): advanced every pellet so bursts and flak
+ * cones scatter differently each shot instead of repeating a fixed pattern. */
+static uint32_t s_sprng = 0x9E3779B9u;
+static inline uint32_t sprng_next(void) {
+    s_sprng ^= s_sprng << 13; s_sprng ^= s_sprng >> 17; s_sprng ^= s_sprng << 5;
+    return s_sprng;
+}
+
 /* Fire a specific mount 'slot' with cooldown stored at *cool. combat_fire
  * (active weapon) and combat_player_fire_slot (FIRE2/3) wrap this. */
 static int combat_fire_slot(int shooter, float spread, int target,
@@ -460,14 +468,9 @@ static int combat_fire_slot(int shooter, float spread, int target,
          * like a real stream — instead of the whole burst sharing one
          * offset (the old seed barely changed during a burst, so they
          * 'missed every shot'). */
-        static uint32_t s_sprng = 0x9E3779B9u;
         s_sprng ^= (uint32_t)shooter * 2654435761u;
-        s_sprng ^= s_sprng << 13; s_sprng ^= s_sprng >> 17;
-        s_sprng ^= s_sprng << 5;
-        float a = ((s_sprng & 0xFFFF) / 65535.0f - 0.5f) * 2.0f * spread;
-        s_sprng ^= s_sprng << 13; s_sprng ^= s_sprng >> 17;
-        s_sprng ^= s_sprng << 5;
-        float b = ((s_sprng & 0xFFFF) / 65535.0f - 0.5f) * 2.0f * spread;
+        float a = ((sprng_next() & 0xFFFF) / 65535.0f - 0.5f) * 2.0f * spread;
+        float b = ((sprng_next() & 0xFFFF) / 65535.0f - 0.5f) * 2.0f * spread;
         dir = v3_norm(v3_add(dir, v3_add(v3_scale(s->basis.r[0], a),
                                          v3_scale(s->basis.r[1], b))));
     }
@@ -542,12 +545,12 @@ static int combat_fire_slot(int shooter, float spread, int target,
             float ll = v3_len(lv);
             if (ll > 1e-3f) fdir = v3_scale(lv, 1.0f / ll);
         }
+        s_sprng ^= (uint32_t)shooter * 2654435761u;
         for (int p2 = 0; p2 < 5; p2++) {
-            uint32_t r = (uint32_t)(s->heat * 977.0f) ^
-                         (uint32_t)(p2 * 2654435761u) ^ (uint32_t)shooter;
-            r ^= r >> 13; r *= 1274126177u; r ^= r >> 16;
-            float a = ((r & 0xFF) / 255.0f - 0.5f) * 0.20f;
-            float b = (((r >> 8) & 0xFF) / 255.0f - 0.5f) * 0.20f;
+            /* Fresh random scatter per pellet, per shot (was a fixed hash of
+             * ship heat, so the cone barely changed between shots). */
+            float a = ((sprng_next() & 0xFF) / 255.0f - 0.5f) * 0.20f;
+            float b = ((sprng_next() & 0xFF) / 255.0f - 0.5f) * 0.20f;
             Vec3 pd = v3_norm(v3_add(fdir,
                          v3_add(v3_scale(s->basis.r[0], a),
                                 v3_scale(s->basis.r[1], b))));

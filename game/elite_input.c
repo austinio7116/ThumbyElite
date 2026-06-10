@@ -135,8 +135,9 @@ void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) 
 
 #ifdef ELITE_DPAD_ROLL
     /* Experimental device scheme: plain L/R = roll, hold LB + L/R = yaw.
+     * Roll is negated so D-pad right rolls right (matches the gamepad stick).
      * (Device has no analog stick, so this only ever redirects the d-pad.) */
-    if (s_lb.down) { out->yaw = lr; } else { out->roll = lr; }
+    if (s_lb.down) { out->yaw = lr; } else { out->roll = -lr; }
 #else
     if (s_lb.down) { out->roll = lr; } else { out->yaw = lr; }
 #endif
