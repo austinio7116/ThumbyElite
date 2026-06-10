@@ -466,7 +466,14 @@ static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
 #define HB(act) (s_btn[act] >= 0 && s_btn[act] < nb && \
                  SDL_JoystickGetButton(s_joy, s_btn[act]))
         if (HB(CTRL_BTN_MENU)) btn->menu = true;
-        if (inmenu) {
+        if (elite_game_in_ctrlsetup()) {
+            /* The binding screen uses FIXED controls (joystick button 0 =
+             * bind/select, button 1 = back/save) independent of the bindings,
+             * so rebinding menu buttons can never lock you out. Keyboard
+             * always works too. Nav is the stick/hat (set above/below). */
+            if (nb > 0 && SDL_JoystickGetButton(s_joy, 0)) btn->a = true;
+            if (nb > 1 && SDL_JoystickGetButton(s_joy, 1)) btn->b = true;
+        } else if (inmenu) {
             /* Select/back on the bound menu buttons; fall back to FIRE/CYCLE
              * so menus still work before you bind dedicated menu buttons. */
             bool sel = (s_btn[CTRL_BTN_MENU_SELECT] >= 0)

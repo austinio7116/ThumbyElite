@@ -28,6 +28,7 @@ void elite_game_set_frame_ms(float ms);
 
 /* Test/debug hooks (host harness). */
 int  elite_game_state(void);    /* GState as int: 0=flight 1=sc 2=jump ... */
+int  elite_game_in_ctrlsetup(void);  /* 1 while the CONTROLLER SETUP screen is open */
 void elite_game_debug_spawn(int n);
 void elite_game_debug_set_distress_civ(int idx);
 void elite_game_debug_face_away_from_sun(void);

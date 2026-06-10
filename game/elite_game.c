@@ -110,6 +110,7 @@ static bool  s_station_lock;     /* station nav lock (nothing else) */
 static float s_rail_charge01;    /* railgun charge for the HUD arc */
 static bool  s_incoming;         /* seeker tracking the player */
 static bool  s_in_settings;      /* SETTINGS submenu over the pause */
+static bool  s_settings_eat_b;   /* swallow a held B returning from a subscreen */
 /* Settings rows: device shows 4 (invert/fps/volume/bright); the PC and
  * Android shells define ELITE_ANALOG_SETTINGS to add gamepad + touch-stick
  * sensitivity sliders, plus a CONTROLLER row when a controller is present. */
@@ -168,6 +169,7 @@ static float s_time;
 float elite_game_time(void) { return s_time; }
 
 int elite_game_state(void) { return (int)s_state; }
+int elite_game_in_ctrlsetup(void) { return s_state == ST_CTRLSETUP; }
 
 static void drop_anchor(Vec3 pos_mm, const Poi *poi);
 static void spawn_poi_content(void);
@@ -1666,6 +1668,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         }
         if (ctrlsetup_tick(btn, dt)) {
             elite_input_reset();
+            s_settings_eat_b = true; /* don't let the closing B exit SETTINGS */
             s_state = ST_DASH;       /* back to the SETTINGS overlay */
         }
         break;
@@ -1748,7 +1751,12 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
                 plat_setting_set(which, s);
                 sfx_ui_move();
             }
-            if ((btn->b && !pb2) || menu_edge) s_in_settings = false;
+            bool b_back = btn->b && !pb2;
+            if (s_settings_eat_b) {       /* swallow B held from a subscreen */
+                if (!btn->b) s_settings_eat_b = false;
+                b_back = false;
+            }
+            if (b_back || menu_edge) s_in_settings = false;
             pb2 = btn->b;
             break;
         }

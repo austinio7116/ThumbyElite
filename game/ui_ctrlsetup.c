@@ -32,13 +32,14 @@ static const char *k_btn_name[N_BTN] = {
     "MENU SELECT", "MENU BACK" };
 
 static int  s_cursor, s_scroll;
-static bool s_capturing;
+static bool s_capturing, s_armed;
 static CraftRawButtons s_prev;
 static float s_rep_up, s_rep_dn;
 
 void ctrlsetup_open(void) {
     s_cursor = 0; s_scroll = 0; s_capturing = false;
     s_rep_up = s_rep_dn = 0;
+    s_armed = false;                       /* eat the button that opened us */
     memset(&s_prev, 0, sizeof s_prev);
 }
 
@@ -48,10 +49,14 @@ bool ctrlsetup_tick(const CraftRawButtons *btn, float dt) {
     /* World stays live underneath; never let the stick fly the ship here. */
     elite_input_neutralize();
 
-    bool a_edge  = btn->a    && !s_prev.a;
-    bool b_edge  = btn->b    && !s_prev.b;
-    bool lb_edge = btn->lb   && !s_prev.lb;
-    bool rb_edge = btn->rb   && !s_prev.rb;
+    /* Debounce: the A/B that opened or returned to this screen may still be
+     * held — record the state for one frame so it isn't read as a fresh edge. */
+    if (!s_armed) { s_prev = *btn; s_armed = true; return false; }
+
+    bool a_edge = btn->a     && !s_prev.a;
+    bool b_edge = btn->b     && !s_prev.b;
+    bool l_edge = btn->left  && !s_prev.left;
+    bool r_edge = btn->right && !s_prev.right;
     bool editable = plat_ctrl_editable() != 0;
 
     if (s_capturing) {
@@ -76,17 +81,21 @@ bool ctrlsetup_tick(const CraftRawButtons *btn, float dt) {
     if (s_cursor > s_scroll + VIS - 1)  s_scroll = s_cursor - (VIS - 1);
 
     if (editable) {
-        if (a_edge) {                              /* bind */
+        if (a_edge) {                              /* bind (press-to-bind) */
             if (row_is_axis(s_cursor))
                 plat_ctrl_capture_begin(CTRL_KIND_AXIS, s_cursor);
             else
                 plat_ctrl_capture_begin(CTRL_KIND_BUTTON, s_cursor - N_AX);
             s_capturing = true;
         }
-        if (lb_edge && row_is_axis(s_cursor))      /* invert axis */
-            plat_ctrl_axis_invert((CtrlAxis)s_cursor);
-        if (rb_edge && !row_is_axis(s_cursor))     /* clear button */
-            plat_ctrl_clear(CTRL_KIND_BUTTON, s_cursor - N_AX);
+        /* Left/Right: invert an axis, or clear a button binding. Uses only
+         * nav inputs so it works on a HOTAS (which has no LB/RB in menus). */
+        if (l_edge || r_edge) {
+            if (row_is_axis(s_cursor))
+                plat_ctrl_axis_invert((CtrlAxis)s_cursor);
+            else
+                plat_ctrl_clear(CTRL_KIND_BUTTON, s_cursor - N_AX);
+        }
     }
 
     if (b_edge) { plat_ctrl_save(); s_prev = *btn; return true; }
@@ -137,6 +146,7 @@ void ctrlsetup_draw(uint16_t *fb) {
     } else if (!editable) {
         craft_font_draw(fb, "STANDARD MAPPING (READ-ONLY)", 2, 119, COL_FOOT);
     } else {
-        craft_font_draw(fb, "A:BIND LB:INV RB:CLR B:SAVE", 2, 119, COL_FOOT);
+        craft_font_draw(fb, "A:BIND  </>:INVERT/CLEAR", 2, 111, COL_FOOT);
+        craft_font_draw(fb, "B:BACK   (keyboard always works)", 2, 119, COL_FOOT);
     }
 }
