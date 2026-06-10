@@ -897,8 +897,8 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
     if (p->alive) {
         s_dead_latch = false;
 
-        /* LB+RB chord near a station = engage docking computer. */
-        if (btn->lb && btn->rb && can_dock()) {
+        /* LB+RB chord (or a dedicated DOCK button) near a station = dock. */
+        if (((btn->lb && btn->rb) || in.dock) && can_dock()) {
             s_dock_t = 0;
             s_state = ST_DOCKING;
             return;
@@ -930,6 +930,9 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
         } else if (in.fire) {
             combat_fire(PLAYER, 0.0f, s_target);
         }
+        /* PC dedicated buttons: fire the 2nd / 3rd mounts directly. */
+        if (in.fire2) combat_player_fire_slot(1, s_target);
+        if (in.fire3) combat_player_fire_slot(2, s_target);
         if (in.secondary && p->n_weapons > 1)       /* B = next weapon */
             p->active_w = (uint8_t)((p->active_w + 1) % p->n_weapons);
         /* MANIFEST SCANNER: hold a lock on a civilian to read its hold. */

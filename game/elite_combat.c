@@ -368,18 +368,31 @@ int player_turret_gunner_tier(void) {
     return turret_cal_for_seed(g_player.hull_seed);
 }
 
-int combat_fire(int shooter, float spread, int target) {
+/* Player extra-weapon (FIRE2/FIRE3) cooldowns — independent of the active
+ * weapon's s->fire_cool so dedicated buttons can fire different mounts. */
+static float s_pslot_cool[MAX_HARDPOINTS];
+
+/* Fire a specific mount 'slot' with cooldown stored at *cool. combat_fire
+ * (active weapon) and combat_player_fire_slot (FIRE2/3) wrap this. */
+static int combat_fire_slot(int shooter, float spread, int target,
+                            int slot, float *cool) {
     Ship *s = &g_ships[shooter];
-    if (!combat_can_fire(s)) return -1;
+    /* Per-slot can-fire (mirrors combat_can_fire for an arbitrary mount). */
+    if (*cool > 0.0f || s->heat >= HEAT_MAX) return -1;
+    if (s->n_weapons == 0 || slot >= s->n_weapons) return -1;
+    {
+        const WeaponDef *cw = &k_weapons[s->weapons[slot]];
+        if (cw->ammo_max && s->ammo[slot] <= 0) return -1;
+    }
     /* Critted mounts are OFFLINE: player at 0 integrity, NPC by flag. */
     if (shooter == PLAYER) {
-        const WeaponInst *wi0 = player_mount_for_ship_slot(s->active_w);
+        const WeaponInst *wi0 = player_mount_for_ship_slot(slot);
         if (wi0 && wi0->integrity == 0) return -1;
-    } else if (s->crits & (CRIT_WPN0 << s->active_w)) {
+    } else if (s->crits & (CRIT_WPN0 << slot)) {
         return -1;
     }
     if (shooter != PLAYER) g_dbg_npc_shots++;
-    const WeaponDef *w = &k_weapons[s->weapons[s->active_w]];
+    const WeaponDef *w = &k_weapons[s->weapons[slot]];
 
     /* Player: component quality/integrity + affix + gunnery skill. */
     float dmg_mult = 1.0f, heat_mult = 1.0f, cd_mult = 1.0f;
@@ -395,7 +408,7 @@ int combat_fire(int shooter, float spread, int target) {
                               hidden scalar) */
     }
     if (shooter == PLAYER) {
-        const WeaponInst *wi = player_mount_for_ship_slot(s->active_w);
+        const WeaponInst *wi = player_mount_for_ship_slot(slot);
         if (wi) {
             dmg_mult = mount_dmg_mult(wi);
             const AffixDef *ax =
@@ -408,12 +421,12 @@ int combat_fire(int shooter, float spread, int target) {
         if (player_has_util(EQ_HEATSINK)) heat_mult *= 0.75f;
     }
 
-    s->fire_cool = w->cooldown * cd_mult;
+    *cool = w->cooldown * cd_mult;
     s->heat += w->heat * heat_mult;
     if (w->ammo_max) {
-        s->ammo[s->active_w]--;
+        s->ammo[slot]--;
         if (shooter == PLAYER)
-            player_sync_ammo(s->active_w, s->ammo[s->active_w]);
+            player_sync_ammo(slot, s->ammo[slot]);
     }
 
     {
@@ -422,7 +435,7 @@ int combat_fire(int shooter, float spread, int target) {
             float d = v3_len(v3_sub(s->pos, g_ships[PLAYER].pos));
             amp = 0.6f - d / 600.0f;
         }
-        sfx_weapon(s->weapons[s->active_w], amp);
+        sfx_weapon(s->weapons[slot], amp);
     }
 
     Vec3 dir = s->basis.r[2];
@@ -471,7 +484,7 @@ int combat_fire(int shooter, float spread, int target) {
         muzzle = v3_add(s->pos, v3_scale(dir, s->mesh->bound_r * 0.9f));
     }
 
-    int wtype = s->weapons[s->active_w];
+    int wtype = s->weapons[slot];
 
     /* MINE: dropped astern with a backward push, armed in place. */
     if (wtype == WPN_MINE) {
@@ -586,9 +599,24 @@ int combat_fire(int shooter, float spread, int target) {
     return best;
 }
 
+int combat_fire(int shooter, float spread, int target) {
+    Ship *s = &g_ships[shooter];
+    return combat_fire_slot(shooter, spread, target, s->active_w, &s->fire_cool);
+}
+
+/* PC dedicated FIRE2/FIRE3 buttons: fire a specific player mount on its own
+ * cooldown so it works alongside (not instead of) the active-weapon trigger. */
+int combat_player_fire_slot(int slot, int target) {
+    Ship *s = &g_ships[PLAYER];
+    if (slot < 0 || slot >= s->n_weapons) return -1;
+    return combat_fire_slot(PLAYER, 0.0f, target, slot, &s_pslot_cool[slot]);
+}
+
 void combat_tick(float dt) {
     if (s_hitmark > 0) s_hitmark -= dt;
     if (s_killmark > 0) s_killmark -= dt;
+    for (int k = 0; k < MAX_HARDPOINTS; k++)        /* FIRE2/FIRE3 cooldowns */
+        if (s_pslot_cool[k] > 0.0f) s_pslot_cool[k] -= dt;
     proj_tick(dt);
     for (int i = 0; i < MAX_SHIPS; i++) {
         Ship *s = &g_ships[i];

@@ -31,6 +31,9 @@ typedef struct {
     bool  tgt_class_cycle; /* LB double-tap: demote the lock class */
     bool  assist_toggle;  /* event */
     bool  boost;          /* event */
+    bool  dock;           /* dedicated dock button (alt to the LB+RB chord) */
+    bool  fire2;          /* held: fire weapon slot 1 */
+    bool  fire3;          /* held: fire weapon slot 2 */
     float throttle_abs;   /* >=0: set throttle directly (HOTAS lever); <0 off */
 } FlightInput;
 
@@ -54,5 +57,13 @@ void elite_input_set_throttle_delta(float d);
 /* Zero all persistent analog state (call when no flight control should be
  * read, e.g. menus/dashboard) so a held stick/throttle doesn't fly the ship. */
 void elite_input_neutralize(void);
+
+/* Dedicated controller buttons (PC HOTAS) that bypass the handheld chords.
+ * elite_input_action queues a CtrlButton one-shot event (CTRL_BTN_CYCLE_TARGET,
+ * _ASSIST, _BOOST, _CHAFF, _CLOAK, _DOCK) consumed by the next update. The two
+ * fire setters are held (level) state for the extra weapon slots. */
+void elite_input_action(int ctrl_button);
+void elite_input_set_fire2(bool held);
+void elite_input_set_fire3(bool held);
 
 #endif

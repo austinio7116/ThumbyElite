@@ -8,6 +8,7 @@
  * fires boost instead of the second toggle.
  */
 #include "elite_input.h"
+#include "elite_ctrl.h"
 #include "elite_player.h"
 #ifdef ELITE_INPUT_DEBUG
 #include <stdio.h>
@@ -32,6 +33,8 @@ static float s_ana_x, s_ana_y;
 static float s_ana_roll;       /* gamepad right-stick X / HOTAS twist: roll */
 static float s_throttle_abs = -1.0f;   /* HOTAS lever, <0 = off */
 static float s_throttle_ext;           /* gamepad right-stick Y delta */
+static uint32_t s_action_bits;         /* queued CtrlButton one-shots (PC) */
+static bool  s_fire2, s_fire3;         /* held dedicated extra-weapon fire */
 static bool  s_prev_b;
 static bool  s_swallow_a;            /* A held over from a menu screen:
                                       * no fire until it's released once */
@@ -95,6 +98,13 @@ void elite_input_set_throttle_delta(float d) {
     s_throttle_ext = d;
 }
 
+void elite_input_action(int ctrl_button) {
+    if (ctrl_button >= 0 && ctrl_button < 32)
+        s_action_bits |= (1u << ctrl_button);
+}
+void elite_input_set_fire2(bool held) { s_fire2 = held; }
+void elite_input_set_fire3(bool held) { s_fire3 = held; }
+
 /* Zero all persistent analog state. The shell feeds analog every frame, so
  * menu/dashboard states (which tick flight with a neutral button struct to
  * keep the world alive) must call this or the live stick/throttle would
@@ -104,6 +114,8 @@ void elite_input_neutralize(void) {
     s_ana_roll = 0.0f;
     s_throttle_abs = -1.0f;
     s_throttle_ext = 0.0f;
+    s_action_bits = 0;
+    s_fire2 = s_fire3 = false;
 }
 
 void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) {
@@ -175,4 +187,16 @@ void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) 
     out->chaff = b_edge && btn->lb;
     out->cloak = b_edge && btn->rb && !btn->lb;
     s_prev_b = btn->b;
+
+    /* PC dedicated buttons: merge queued one-shots over the chord results,
+     * then consume. Held extra-weapon fire is level state. */
+    if (s_action_bits & (1u << CTRL_BTN_CYCLE_TARGET)) out->cycle_target  = true;
+    if (s_action_bits & (1u << CTRL_BTN_ASSIST))       out->assist_toggle = true;
+    if (s_action_bits & (1u << CTRL_BTN_BOOST))        out->boost         = true;
+    if (s_action_bits & (1u << CTRL_BTN_CHAFF))        out->chaff         = true;
+    if (s_action_bits & (1u << CTRL_BTN_CLOAK))        out->cloak         = true;
+    if (s_action_bits & (1u << CTRL_BTN_DOCK))         out->dock          = true;
+    s_action_bits = 0;
+    out->fire2 = s_fire2;
+    out->fire3 = s_fire3;
 }

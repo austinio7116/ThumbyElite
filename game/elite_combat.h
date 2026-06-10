@@ -15,6 +15,9 @@ void combat_tick(float dt);
  * target feeds homing seekers (-1 = none -> dumbfire). Returns the
  * entity hit for hitscan weapons, else -1. */
 int combat_fire(int shooter, float spread, int target);
+/* PC dedicated buttons: fire a specific player mount (slot) on its own
+ * cooldown, independent of the active-weapon trigger. */
+int combat_player_fire_slot(int slot, int target);
 
 bool combat_can_fire(const Ship *s);
 
