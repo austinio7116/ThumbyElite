@@ -98,9 +98,10 @@ void plat_ctrl_btn_label(CtrlButton b, char *out, int cap) {
     case CTRL_BTN_FIRE3: s = "RB"; break; case CTRL_BTN_CYCLE_WEAPON: s = "LB"; break;
     case CTRL_BTN_CYCLE_TARGET: s = "B"; break; case CTRL_BTN_ASSIST: s = "X"; break;
     case CTRL_BTN_BOOST: s = "A"; break; case CTRL_BTN_CHAFF: s = "BACK"; break;
-    case CTRL_BTN_CLOAK: s = "L3"; break; case CTRL_BTN_DOCK: s = "Y"; break;
+    case CTRL_BTN_CLOAK: s = "L3"; break; case CTRL_BTN_DOCK: s = "LB+RB"; break;
     case CTRL_BTN_MENU: s = "START"; break;
     case CTRL_BTN_MENU_SELECT: s = "A"; break; case CTRL_BTN_MENU_BACK: s = "B"; break;
+    case CTRL_BTN_MENU_INFO: s = "Y"; break;
     default: s = "—"; break;
     }
     if (out && cap > 0) SDL_snprintf(out, cap, "%s", s);
@@ -546,21 +547,24 @@ int main(int argc, char *argv[]) {
             if (inmenu) {
                 if (GBTN(SDL_CONTROLLER_BUTTON_A)) btn.a = true;
                 if (GBTN(SDL_CONTROLLER_BUTTON_B)) btn.b = true;
+                if (GBTN(SDL_CONTROLLER_BUTTON_Y)) btn.lb = true;  /* Info */
             } else {
+                bool plb = GBTN(SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+                bool prb = GBTN(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
                 if (SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000) btn.a = true;
                 elite_input_set_fire2(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 12000);
-                elite_input_set_fire3(GBTN(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER));
-                if (GBTN(SDL_CONTROLLER_BUTTON_LEFTSHOULDER)) btn.b = true;   /* cycle weapon */
+                elite_input_set_fire3(prb && !plb);
+                if (plb && prb)      elite_input_action(CTRL_BTN_DOCK);   /* LB+RB dock */
+                else if (plb)        btn.b = true;                        /* cycle weapon */
                 static const struct { int sdl, act; } k_g[] = {
                     { SDL_CONTROLLER_BUTTON_A, CTRL_BTN_BOOST },
                     { SDL_CONTROLLER_BUTTON_B, CTRL_BTN_CYCLE_TARGET },
                     { SDL_CONTROLLER_BUTTON_X, CTRL_BTN_ASSIST },
-                    { SDL_CONTROLLER_BUTTON_Y, CTRL_BTN_DOCK },
                     { SDL_CONTROLLER_BUTTON_BACK, CTRL_BTN_CHAFF },
                     { SDL_CONTROLLER_BUTTON_LEFTSTICK, CTRL_BTN_CLOAK },
                 };
-                static bool gprev[6];
-                for (unsigned i = 0; i < 6; i++) {
+                static bool gprev[5];
+                for (unsigned i = 0; i < 5; i++) {
                     bool now = GBTN(k_g[i].sdl);
                     if (now && !gprev[i]) elite_input_action(k_g[i].act);
                     gprev[i] = now;

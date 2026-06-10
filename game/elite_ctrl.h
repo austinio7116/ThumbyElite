@@ -34,6 +34,7 @@ typedef enum {
     CTRL_BTN_MENU,
     CTRL_BTN_MENU_SELECT,   /* in menus: A / confirm (does nothing in flight) */
     CTRL_BTN_MENU_BACK,     /* in menus: B / cancel  (does nothing in flight) */
+    CTRL_BTN_MENU_INFO,     /* in menus: Info / details / alt view */
     CTRL_BTN_N
 } CtrlButton;
 

@@ -177,7 +177,8 @@ static int s_btn[CTRL_BTN_N] = {
     [CTRL_BTN_CYCLE_WEAPON] = 1, [CTRL_BTN_CYCLE_TARGET] = 3,
     [CTRL_BTN_ASSIST] = 2, [CTRL_BTN_BOOST] = -1, [CTRL_BTN_CHAFF] = -1,
     [CTRL_BTN_CLOAK] = -1, [CTRL_BTN_DOCK] = -1, [CTRL_BTN_MENU] = 4,
-    [CTRL_BTN_MENU_SELECT] = -1, [CTRL_BTN_MENU_BACK] = -1 };
+    [CTRL_BTN_MENU_SELECT] = -1, [CTRL_BTN_MENU_BACK] = -1,
+    [CTRL_BTN_MENU_INFO] = -1 };
 static bool s_hotas_dbg;       /* stdout axis dump (Linux: ELITE_HOTAS_DEBUG) */
 
 /* Config-file key tables (1:1 with the enums). */
@@ -185,7 +186,7 @@ static const char *k_ax_key[CTRL_AX_N]  = { "roll", "pitch", "yaw", "throttle" }
 static const char *k_btn_key[CTRL_BTN_N] = {
     "btn_fire", "btn_fire2", "btn_fire3", "btn_cycle", "btn_target",
     "btn_assist", "btn_boost", "btn_chaff", "btn_cloak", "btn_dock", "btn_menu",
-    "btn_menusel", "btn_menuback" };
+    "btn_menusel", "btn_menuback", "btn_menuinfo" };
 
 /* HOTAS config file (next to the exe). The in-game CONTROLLER SETUP screen
  * reads/writes this; you can also hand-edit it. */
@@ -257,9 +258,10 @@ static const char *pad_btn_label(int b) {     /* Scheme A */
     case CTRL_BTN_FIRE3: return "RB"; case CTRL_BTN_CYCLE_WEAPON: return "LB";
     case CTRL_BTN_CYCLE_TARGET: return "B"; case CTRL_BTN_ASSIST: return "X";
     case CTRL_BTN_BOOST: return "A"; case CTRL_BTN_CHAFF: return "BACK";
-    case CTRL_BTN_CLOAK: return "L3"; case CTRL_BTN_DOCK: return "Y";
+    case CTRL_BTN_CLOAK: return "L3"; case CTRL_BTN_DOCK: return "LB+RB";
     case CTRL_BTN_MENU: return "START";
     case CTRL_BTN_MENU_SELECT: return "A"; case CTRL_BTN_MENU_BACK: return "B";
+    case CTRL_BTN_MENU_INFO: return "Y";
     default: return "—";
     }
 }
@@ -423,25 +425,28 @@ static void gamepad_apply(CraftRawButtons *btn, bool inmenu) {
     if (inmenu) {
         if (GB(SDL_CONTROLLER_BUTTON_A)) btn->a = true;   /* select */
         if (GB(SDL_CONTROLLER_BUTTON_B)) btn->b = true;   /* back */
+        if (GB(SDL_CONTROLLER_BUTTON_Y)) btn->lb = true;  /* Info */
         return;
     }
     bool rt = SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000;
     bool lt = SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT)  > 12000;
-    if (rt)                                       btn->a = true;   /* FIRE */
-    elite_input_set_fire2(lt);                                     /* FIRE 2 */
-    elite_input_set_fire3(GB(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER));/* FIRE 3 */
-    if (GB(SDL_CONTROLLER_BUTTON_LEFTSHOULDER)) btn->b = true;     /* CYCLE WEAPON */
-    /* Edge-triggered dedicated actions. */
+    bool lb = GB(SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+    bool rb = GB(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+    if (rt) btn->a = true;                         /* FIRE (primary) */
+    elite_input_set_fire2(lt);                     /* LT = FIRE 2 */
+    elite_input_set_fire3(rb && !lb);              /* RB = FIRE 3 (alone) */
+    if (lb && rb)        elite_input_action(CTRL_BTN_DOCK);   /* LB+RB = dock */
+    else if (lb)         btn->b = true;            /* LB = cycle weapon */
+    /* Edge-triggered dedicated actions (Y is free in flight; it's Info in menus). */
     static const struct { int sdl, act; } k_g[] = {
         { SDL_CONTROLLER_BUTTON_A,         CTRL_BTN_BOOST },
         { SDL_CONTROLLER_BUTTON_B,         CTRL_BTN_CYCLE_TARGET },
         { SDL_CONTROLLER_BUTTON_X,         CTRL_BTN_ASSIST },
-        { SDL_CONTROLLER_BUTTON_Y,         CTRL_BTN_DOCK },
         { SDL_CONTROLLER_BUTTON_BACK,      CTRL_BTN_CHAFF },
         { SDL_CONTROLLER_BUTTON_LEFTSTICK, CTRL_BTN_CLOAK },
     };
-    static bool prev[6];
-    for (unsigned i = 0; i < 6; i++) {
+    static bool prev[5];
+    for (unsigned i = 0; i < 5; i++) {
         bool now = GB(k_g[i].sdl);
         if (now && !prev[i]) elite_input_action(k_g[i].act);
         prev[i] = now;
@@ -500,14 +505,15 @@ static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
             if (nb > 0 && SDL_JoystickGetButton(s_joy, 0)) btn->a = true;
             if (nb > 1 && SDL_JoystickGetButton(s_joy, 1)) btn->b = true;
         } else if (inmenu) {
-            /* Select/back on the bound menu buttons; fall back to FIRE/CYCLE
-             * so menus still work before you bind dedicated menu buttons. */
+            /* Select/back/info on the bound menu buttons; fall back to FIRE/
+             * CYCLE so menus still work before you bind dedicated buttons. */
             bool sel = (s_btn[CTRL_BTN_MENU_SELECT] >= 0)
                        ? HB(CTRL_BTN_MENU_SELECT) : HB(CTRL_BTN_FIRE);
             bool bak = (s_btn[CTRL_BTN_MENU_BACK] >= 0)
                        ? HB(CTRL_BTN_MENU_BACK) : HB(CTRL_BTN_CYCLE_WEAPON);
             if (sel) btn->a = true;
             if (bak) btn->b = true;
+            if (HB(CTRL_BTN_MENU_INFO)) btn->lb = true;   /* Info (if bound) */
         } else {
             if (HB(CTRL_BTN_FIRE))         btn->a = true;     /* held */
             if (HB(CTRL_BTN_CYCLE_WEAPON)) btn->b = true;     /* B edge in input.c */

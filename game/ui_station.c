@@ -1625,7 +1625,7 @@ static void draw_outfit(uint16_t *fb) {
         }
     }
     hl(fb, 113, COL_GRID);
-    craft_font_draw(fb, "A:ACTIONS B:UNFIT/SELL LB:INFO", 2, 116,
+    craft_font_draw(fb, "A:ACTIONS B:UNFIT/SELL INFO:DETAIL", 2, 116,
                     COL_DIM);
     /* action popup */
     if (s_pop_open) {

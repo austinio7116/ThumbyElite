@@ -296,7 +296,7 @@ void status_draw(uint16_t *fb) {
     if (s_hide_text) {
         /* sheet hidden: the rendered ship fills the screen, clean —
          * just a faint hint to bring the stats back. */
-        craft_font_draw(fb, "LB: STATS", 2, 2, RGB565C(110, 130, 165));
+        craft_font_draw(fb, "INFO: STATS", 2, 2, RGB565C(110, 130, 165));
         return;
     }
 
@@ -363,5 +363,5 @@ void status_draw(uint16_t *fb) {
     }
 
     for (int x = 0; x < 128; x++) fb[118 * ELITE_FB_W + x] = COL_GRID;
-    craft_font_draw(fb, "A:DETAILS LB:HIDE B:CLOSE", 2, 121, COL_DIM);
+    craft_font_draw(fb, "A:DETAILS INFO:HIDE B:BACK", 2, 121, COL_DIM);
 }

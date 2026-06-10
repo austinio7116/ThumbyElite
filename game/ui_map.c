@@ -187,8 +187,8 @@ MapAction map_galaxy_tick(const CraftRawButtons *btn, float dt,
     bool any = btn->left || btn->right || btn->up || btn->down;
     if (any) s_hold += dt; else { s_hold = 0; s_rep = 0; }
 
-    if (JUST(btn, rb)) {
-        s_chart_layer = (s_chart_layer + 1) % 4;   /* data layers */
+    if (JUST(btn, lb)) {                            /* Info = cycle data layers */
+        s_chart_layer = (s_chart_layer + 1) % 4;
         sfx_ui_move();
     }
     if (JUST(btn, left))  gmap_snap(-1, 0);
@@ -353,8 +353,8 @@ static void draw_gmap_info(uint16_t *fb) {
     for (int x = 0; x < 128; x++) fb[118 * ELITE_FB_W + x] = GRID;
     bool can = s_hl_valid && !sysaddr_eq(s_hl, s_cur_sys) &&
                s_hl_dist <= s_range && s_hl_dist <= s_fuel;
-    craft_font_draw(fb, can ? "A:JUMP B:BACK" : "B:BACK", 2, 121,
-                    RGB565C(110, 116, 135));
+    craft_font_draw(fb, can ? "A:JUMP INFO:DATA B:BACK" : "INFO:DATA B:BACK",
+                    2, 121, RGB565C(110, 116, 135));
 }
 
 void map_galaxy_draw(uint16_t *fb) {
