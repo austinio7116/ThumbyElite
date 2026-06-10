@@ -29,7 +29,9 @@ static Mod   s_lb, s_rb;
  * y: + = up, both -1..1 with the shell's deadzone already applied.
  * Zero (the default) leaves the digital d-pad path untouched. */
 static float s_ana_x, s_ana_y;
-static float s_ana_roll;     /* gamepad right-stick X: direct roll */
+static float s_ana_roll;       /* gamepad right-stick X / HOTAS twist: roll */
+static float s_throttle_abs = -1.0f;   /* HOTAS lever, <0 = off */
+static float s_throttle_ext;           /* gamepad right-stick Y delta */
 static bool  s_prev_b;
 static bool  s_swallow_a;            /* A held over from a menu screen:
                                       * no fire until it's released once */
@@ -83,6 +85,16 @@ void elite_input_set_analog_roll(float r) {
     s_ana_roll = r;
 }
 
+void elite_input_set_throttle_abs(float t) {
+    if (t > 1.0f) t = 1.0f;
+    s_throttle_abs = t;            /* <0 leaves the chord delta in charge */
+}
+
+void elite_input_set_throttle_delta(float d) {
+    if (d < -1.0f) d = -1.0f; if (d > 1.0f) d = 1.0f;
+    s_throttle_ext = d;
+}
+
 void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) {
     memset(out, 0, sizeof *out);
 
@@ -103,6 +115,10 @@ void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) 
     else { out->pitch = g_player.invert_y ? ud : -ud; }
     /* Dedicated roll axis (gamepad right stick) wins over the chord. */
     if (s_ana_roll != 0.0f) out->roll = s_ana_roll;
+    /* Throttle: absolute lever (HOTAS) overrides; otherwise the chord
+     * delta plus any gamepad right-stick delta integrate it. */
+    out->throttle_abs = s_throttle_abs;
+    out->throttle_delta += s_throttle_ext;
 
     /* LB doubles get a LAZY window (0.5s) — physical-button double-taps
      * land 350-450ms apart and the tight window missed them (user

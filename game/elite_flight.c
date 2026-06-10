@@ -52,7 +52,10 @@ void flight_apply_input(const FlightInput *in, float dt) {
     if (rr != 0.0f) m3_rotate_local(&p->basis, 2, tr * 1.5f * rr);
     m3_orthonormalize(&p->basis);
 
-    p->throttle += in->throttle_delta * THROTTLE_RATE * dt;
+    if (in->throttle_abs >= 0.0f)
+        p->throttle = in->throttle_abs;            /* HOTAS lever: absolute */
+    else
+        p->throttle += in->throttle_delta * THROTTLE_RATE * dt;
     if (p->throttle < 0.0f) p->throttle = 0.0f;
     if (p->throttle > 1.0f) p->throttle = 1.0f;
 

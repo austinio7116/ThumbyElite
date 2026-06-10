@@ -48,17 +48,27 @@ static SDL_AudioDeviceID audio_dev;
 static char              g_sav_path[1024];
 
 /* ---- engine platform hooks (same contract as host) ------------------ */
-static int  s_settings[2] = { 10, 255 };     /* volume 0..20, brightness 0..255 */
+/* 0 volume(0..20), 1 brightness, 2 gamepad sens(x0.1), 3 touch-stick sens. */
+static int  s_settings[4] = { 10, 255, 10, 10 };
+static const char *SETTINGS_FILES[4] =
+    { "volume.dat", "brightness.dat", "sens_pad.dat", "sens_stick.dat" };
 
-int plat_setting_get(int which) { return s_settings[which & 1]; }
+int plat_setting_get(int which) { return s_settings[which & 3]; }
 void plat_setting_set(int which, int value) {
-    s_settings[which & 1] = value;
+    which &= 3;
+    s_settings[which] = value;
     if (which == 0) audio_set_master((float)value / 20.0f);
-    /* brightness: no panel backlight control from userspace — no-op */
-    /* persist volume so it survives a relaunch */
-    SDL_RWops *f = SDL_RWFromFile(
-        (which == 0) ? "volume.dat" : "brightness.dat", "wb");
+    /* brightness/sensitivity have no immediate side effect here; the touch +
+     * gamepad paths read the sensitivity each frame. Persist so it survives
+     * a relaunch. */
+    SDL_RWops *f = SDL_RWFromFile(SETTINGS_FILES[which], "wb");
     if (f) { SDL_RWwrite(f, &value, sizeof value, 1); SDL_RWclose(f); }
+}
+static void settings_restore(void) {
+    for (int i = 0; i < 4; i++) {
+        SDL_RWops *f = SDL_RWFromFile(SETTINGS_FILES[i], "rb");
+        if (f) { SDL_RWread(f, &s_settings[i], sizeof(int), 1); SDL_RWclose(f); }
+    }
 }
 
 static SDL_GameController *s_pad;     /* set below; used for rumble */
@@ -115,9 +125,10 @@ static SDL_Texture *g_btn_tex[BTN_COUNT];
 static SDL_Texture *g_stick_base, *g_stick_knob;
 
 /* 5x7 pixel glyphs for A B L R (column-major bitfield, bit0 = top row). */
-static const uint8_t GLYPH_A[5] = {0x3E,0x48,0x48,0x48,0x3E};
+/* Columns left->right, bit0 = TOP row. */
+static const uint8_t GLYPH_A[5] = {0x7E,0x09,0x09,0x09,0x7E};
 static const uint8_t GLYPH_B[5] = {0x7F,0x49,0x49,0x49,0x36};
-static const uint8_t GLYPH_L[5] = {0x7F,0x01,0x01,0x01,0x01};
+static const uint8_t GLYPH_L[5] = {0x7F,0x40,0x40,0x40,0x40};
 static const uint8_t GLYPH_R[5] = {0x7F,0x09,0x19,0x29,0x46};
 
 static void put(uint32_t *px, int W, int H, int x, int y, uint32_t c) {
@@ -259,10 +270,9 @@ static void layout(int ow, int oh) {
     s_view_x = (ow - s_view_s) / 2;
     s_view_y = (int)(top + ((oh - top) - gs) * 0.5f);
 
-    /* Top strip controls. */
+    /* Top strip: shoulder buttons in the corners. */
     s_ctrl[BTN_LB]   = (Ctrl){ 0.085f, top * 0.5f / oh, mind * 0.052f / mind };
     s_ctrl[BTN_RB]   = (Ctrl){ 0.915f, top * 0.5f / oh, mind * 0.052f / mind };
-    s_ctrl[BTN_MENU] = (Ctrl){ 0.500f, top * 0.5f / oh, mind * 0.040f / mind };
 
     /* Left gutter: fixed thumbstick, lower third. */
     float lg = (float)s_view_x / ow;          /* gutter width fraction */
@@ -270,11 +280,13 @@ static void layout(int ow, int oh) {
     s_stick_cy = 0.70f;
     s_stick_r  = mind * 0.115f / mind;         /* fraction of mind */
 
-    /* Right gutter: A (lower, big) + B (above-left, smaller). */
+    /* Right gutter, bottom-to-top: A (big), B (above-left), MENU (above A,
+     * mid-height — easy thumb reach without leaving the action cluster). */
     float rg0 = (float)(s_view_x + s_view_s) / ow;
     float rgc = rg0 + (1.0f - rg0) * 0.5f;
-    s_ctrl[BTN_A] = (Ctrl){ rgc + 0.04f, 0.74f, mind * 0.085f / mind };
-    s_ctrl[BTN_B] = (Ctrl){ rgc - 0.06f, 0.58f, mind * 0.066f / mind };
+    s_ctrl[BTN_A]    = (Ctrl){ rgc + 0.04f, 0.74f, mind * 0.085f / mind };
+    s_ctrl[BTN_B]    = (Ctrl){ rgc - 0.06f, 0.58f, mind * 0.066f / mind };
+    s_ctrl[BTN_MENU] = (Ctrl){ rgc + 0.04f, 0.42f, mind * 0.044f / mind };
 }
 
 static void blit_ctrl(SDL_Texture *t, float cx, float cy, float r,
@@ -366,9 +378,7 @@ int main(int argc, char *argv[]) {
     if (store) SDL_snprintf(g_sav_path, sizeof g_sav_path,
                             "%s/thumbyelite.sav", store);
     else       SDL_strlcpy(g_sav_path, "thumbyelite.sav", sizeof g_sav_path);
-    /* restore persisted volume (best-effort) */
-    { SDL_RWops *f = SDL_RWFromFile("volume.dat", "rb");
-      if (f) { SDL_RWread(f, &s_settings[0], sizeof(int), 1); SDL_RWclose(f); } }
+    settings_restore();      /* volume + gamepad/touch sensitivity */
 
     /* Audio: the game's audio_init runs inside elite_game_init; we just
      * open the device and pull audio_render from the callback. */
@@ -466,6 +476,7 @@ int main(int argc, char *argv[]) {
         /* ---- assemble input ---------------------------------------- */
         CraftRawButtons btn = {0};
         float ana_x = 0.0f, ana_y = 0.0f, ana_roll = 0.0f;
+        float sens = 1.0f;             /* aim multiplier (settings slider) */
         memset(s_btn_down, 0, sizeof s_btn_down);
         s_stick_dx = s_stick_dy = 0.0f;
 
@@ -474,9 +485,13 @@ int main(int argc, char *argv[]) {
             float lx = SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_LEFTX)  / 32767.0f;
             float ly = SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_LEFTY)  / 32767.0f;
             float rx = SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_RIGHTX) / 32767.0f;
+            float ry = SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_RIGHTY) / 32767.0f;
             if (fabsf(lx) < STICK_DZ) lx = 0; if (fabsf(ly) < STICK_DZ) ly = 0;
-            if (fabsf(rx) < STICK_DZ) rx = 0;
+            if (fabsf(rx) < STICK_DZ) rx = 0; if (fabsf(ry) < STICK_DZ) ry = 0;
             ana_x = lx; ana_y = -ly; ana_roll = rx;
+            sens = (float)s_settings[2] * 0.1f;       /* GAMEPAD slider */
+            elite_input_set_throttle_delta(-ry);      /* right stick up = throttle up */
+            elite_input_set_throttle_abs(-1.0f);      /* keep the RB chord */
             s_stick_dx = lx; s_stick_dy = ly;
             if (ly < -MENU_TH) btn.up = true;
             if (ly >  MENU_TH) btn.down = true;
@@ -494,6 +509,9 @@ int main(int argc, char *argv[]) {
             if (SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000) btn.a = true;
         } else {
             /* Touch: walk active fingers. */
+            sens = (float)s_settings[3] * 0.1f;       /* STICK slider */
+            elite_input_set_throttle_delta(0.0f);     /* clear gamepad residue */
+            elite_input_set_throttle_abs(-1.0f);
             for (int i = 0; i < MAX_TOUCH; i++) {
                 Touch *t = &s_touch[i];
                 if (!t->active) continue;
@@ -522,8 +540,8 @@ int main(int argc, char *argv[]) {
             btn.menu = s_btn_down[BTN_MENU];
         }
 
-        elite_input_set_analog(ana_x, ana_y);
-        elite_input_set_analog_roll(ana_roll);
+        elite_input_set_analog(ana_x * sens, ana_y * sens);
+        elite_input_set_analog_roll(ana_roll * sens);
 
         /* ---- tick + render ----------------------------------------- */
         elite_game_tick(&btn, dt);

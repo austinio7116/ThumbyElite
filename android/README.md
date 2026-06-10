@@ -22,15 +22,20 @@ brief.
 - **Thumbstick** — fixed, lower-left. Analog pitch/yaw in flight (finer than the
   device d-pad, capped at the same max turn rates); thresholds to d-pad presses
   for menu navigation.
-- **A** (lower-right, large) — fire primary. **B** (lower-right) — secondary.
+- **A** (lower-right, large) — fire primary. **B** (above-left of A) — secondary.
 - **LB / RB** — top-left / top-right corners (hold for the roll / throttle
   chords, tap for cycle-target / flight-assist, exactly as on device).
-- **MENU** — top-centre.
+- **MENU** — right gutter, above A (mid-height, easy thumb reach).
 
 **Game controller** (auto-detected; the touch overlay fades out while it's in
-use): left stick = fly, right stick X = roll, d-pad = menus, **A**/**B** =
-fire/secondary, **L1/R1** = LB/RB, **Start** = menu, **right trigger** = fire.
-Rumble is forwarded to the pad.
+use): left stick = fly, right stick X = roll, right stick Y = throttle, d-pad =
+menus, **A**/**B** = fire/secondary, **L1/R1** = LB/RB, **Start** = menu,
+**right trigger** = fire. Rumble is forwarded to the pad.
+
+### Sensitivity
+
+Pause (MENU) → **SETTINGS**: a **GAMEPAD** slider scales controller aim and a
+**STICK** slider scales the touch-thumbstick aim (both 30–200%, persisted).
 
 The square game view is centred with controls in the side gutters; held
 landscape (`sensorLandscape`).

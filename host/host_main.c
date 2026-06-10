@@ -67,14 +67,16 @@ static uint16_t g_fb[ELITE_FB_W * ELITE_FB_H];
 #define WIN_H (OUT_H * SCALE)
 
 /* --- platform hooks ----------------------------------------------------*/
-static int s_host_settings[2] = { 10, 255 };   /* volume, brightness */
+/* 0 volume, 1 brightness, 2 gamepad sens (x0.1), 3 touch-stick sens. */
+static int s_host_settings[4] = { 10, 255, 10, 10 };
 int plat_setting_get(int which) {
-    return s_host_settings[which & 1];
+    return s_host_settings[which & 3];
 }
 void plat_setting_set(int which, int value) {
-    s_host_settings[which & 1] = value;
+    s_host_settings[which & 3] = value;
     if (which == 0) audio_set_master((float)value / 20.0f);
-    /* brightness: no-op on host */
+    /* brightness (1): no-op on host. sensitivity (2,3): read each frame
+     * when applying analog input — no side effect here. Persisted on quit. */
 }
 
 void plat_rumble(float intensity, float seconds) {
@@ -145,6 +147,156 @@ static void dump_ppm(const char *path) {
 
 extern int g_dbg_dust[2];
 extern float g_dbg_dustf[4];
+
+/* ====================================================================== *
+ *  Controllers: SDL game controllers (Xbox/PS) + raw joysticks (HOTAS).
+ *
+ *  Gamepad  — left stick fly, right stick X roll + Y throttle, A/B fire/
+ *             secondary, LB/RB the device chords (tap cycle-target / assist,
+ *             RB double-tap boost), Start menu, RT also fires, d-pad menus.
+ *  HOTAS    — stick X yaw, stick Y pitch, TWIST roll ("twist to rotate"),
+ *             throttle lever = absolute throttle. Axis indices vary by
+ *             device, so they're env-overridable; ELITE_HOTAS_DEBUG=1 prints
+ *             live axes/buttons so you can discover yours.
+ * ====================================================================== */
+static SDL_GameController *s_pad;
+static SDL_Joystick       *s_joy;          /* a non-mapped stick = HOTAS */
+static SDL_JoystickID      s_joy_id = -1;
+
+/* HOTAS axis map + per-axis invert (env-overridable). Defaults suit a
+ * twist stick with a combined throttle (e.g. Logitech Extreme 3D / T16000). */
+static int s_hx_yaw = 0, s_hx_pitch = 1, s_hx_roll = 3, s_hx_thr = 2;
+static int s_hi_yaw = 0, s_hi_pitch = 1, s_hi_roll = 0, s_hi_thr = 0;
+static bool s_hotas_dbg;
+
+static int env_axis(const char *name, int def) {
+    const char *e = getenv(name);
+    return e ? atoi(e) : def;
+}
+
+static void host_input_reset_axes(void) {
+    elite_input_set_analog(0.0f, 0.0f);
+    elite_input_set_analog_roll(0.0f);
+    elite_input_set_throttle_abs(-1.0f);
+    elite_input_set_throttle_delta(0.0f);
+}
+
+static void host_input_open(int index) {
+    if (SDL_IsGameController(index)) {
+        if (!s_pad) {
+            s_pad = SDL_GameControllerOpen(index);
+            if (s_pad) printf("[pad] %s\n", SDL_GameControllerName(s_pad));
+        }
+    } else if (!s_joy) {                    /* raw joystick = treat as HOTAS */
+        s_joy = SDL_JoystickOpen(index);
+        if (s_joy) {
+            s_joy_id = SDL_JoystickInstanceID(s_joy);
+            printf("[hotas] %s — %d axes, %d buttons, %d hats\n",
+                   SDL_JoystickName(s_joy), SDL_JoystickNumAxes(s_joy),
+                   SDL_JoystickNumButtons(s_joy), SDL_JoystickNumHats(s_joy));
+            printf("[hotas] axes: yaw=%d pitch=%d roll(twist)=%d throttle=%d "
+                   "(override with ELITE_HOTAS_YAW/PITCH/ROLL/THROTTLE)\n",
+                   s_hx_yaw, s_hx_pitch, s_hx_roll, s_hx_thr);
+        }
+    }
+}
+
+static void host_input_init(void) {
+    s_hx_yaw   = env_axis("ELITE_HOTAS_YAW",   0);
+    s_hx_pitch = env_axis("ELITE_HOTAS_PITCH", 1);
+    s_hx_roll  = env_axis("ELITE_HOTAS_ROLL",  3);   /* twist */
+    s_hx_thr   = env_axis("ELITE_HOTAS_THROTTLE", 2);
+    s_hi_yaw   = getenv("ELITE_HOTAS_YAW_INV")   ? 1 : 0;
+    s_hi_pitch = getenv("ELITE_HOTAS_PITCH_INV") ? 1 : (getenv("ELITE_HOTAS_PITCH") ? 0 : 1);
+    s_hi_roll  = getenv("ELITE_HOTAS_ROLL_INV")  ? 1 : 0;
+    s_hi_thr   = getenv("ELITE_HOTAS_THROTTLE_INV") ? 1 : 0;
+    s_hotas_dbg = getenv("ELITE_HOTAS_DEBUG") != NULL;
+    for (int i = 0; i < SDL_NumJoysticks(); i++) host_input_open(i);
+}
+
+static float jaxis(SDL_Joystick *j, int idx, int inv) {
+    if (idx < 0 || idx >= SDL_JoystickNumAxes(j)) return 0.0f;
+    float v = SDL_JoystickGetAxis(j, idx) / 32767.0f;
+    if (v < -1.0f) v = -1.0f; if (v > 1.0f) v = 1.0f;
+    return inv ? -v : v;
+}
+static float dz(float v, float d) { return (v > -d && v < d) ? 0.0f : v; }
+
+/* Augment the keyboard-built btn with controller/HOTAS state, and drive the
+ * analog/throttle hooks. gpad_sens scales the aim axes (settings slider). */
+static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
+    if (s_joy) {                            /* --- HOTAS --- */
+        float yaw   = dz(jaxis(s_joy, s_hx_yaw,   s_hi_yaw),   0.08f);
+        float pitch = dz(jaxis(s_joy, s_hx_pitch, s_hi_pitch), 0.08f);
+        float roll  = dz(jaxis(s_joy, s_hx_roll,  s_hi_roll),  0.10f);
+        float lever = jaxis(s_joy, s_hx_thr, s_hi_thr);        /* -1..1 */
+        elite_input_set_analog(yaw * gpad_sens, pitch * gpad_sens);
+        elite_input_set_analog_roll(roll * gpad_sens);
+        elite_input_set_throttle_abs((lever + 1.0f) * 0.5f);   /* -1..1 -> 0..1 */
+        int nb = SDL_JoystickNumButtons(s_joy);
+        if (nb > 0 && SDL_JoystickGetButton(s_joy, 0)) btn->a = true;   /* trigger */
+        if (nb > 1 && SDL_JoystickGetButton(s_joy, 1)) btn->b = true;
+        if (nb > 2 && SDL_JoystickGetButton(s_joy, 2)) btn->rb = true;
+        if (nb > 3 && SDL_JoystickGetButton(s_joy, 3)) btn->lb = true;
+        if (nb > 4 && SDL_JoystickGetButton(s_joy, 4)) btn->menu = true;
+        if (SDL_JoystickNumHats(s_joy) > 0) {                  /* hat = menu nav */
+            Uint8 h = SDL_JoystickGetHat(s_joy, 0);
+            if (h & SDL_HAT_UP)    btn->up = true;
+            if (h & SDL_HAT_DOWN)  btn->down = true;
+            if (h & SDL_HAT_LEFT)  btn->left = true;
+            if (h & SDL_HAT_RIGHT) btn->right = true;
+        }
+        if (s_hotas_dbg) {
+            static int f; if ((f++ % 30) == 0) {
+                printf("[hotas]");
+                for (int i = 0; i < SDL_JoystickNumAxes(s_joy); i++)
+                    printf(" a%d=%+.2f", i, SDL_JoystickGetAxis(s_joy, i) / 32767.0f);
+                int bm = 0;
+                for (int i = 0; i < SDL_JoystickNumButtons(s_joy); i++)
+                    if (SDL_JoystickGetButton(s_joy, i)) bm |= (1 << i);
+                printf("  btns=0x%x\n", bm);
+            }
+        }
+    } else if (s_pad) {                     /* --- gamepad --- */
+        float lx = dz(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_LEFTX)  / 32767.0f, 0.15f);
+        float ly = dz(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_LEFTY)  / 32767.0f, 0.15f);
+        float rx = dz(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_RIGHTX) / 32767.0f, 0.15f);
+        float ry = dz(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_RIGHTY) / 32767.0f, 0.15f);
+        elite_input_set_analog(lx * gpad_sens, -ly * gpad_sens);
+        elite_input_set_analog_roll(rx * gpad_sens);
+        elite_input_set_throttle_delta(-ry);   /* right stick up = throttle up */
+        elite_input_set_throttle_abs(-1.0f);    /* gamepad keeps the chord */
+        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_A)) btn->a = true;
+        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_B)) btn->b = true;
+        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_LEFTSHOULDER))  btn->lb = true;
+        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) btn->rb = true;
+        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_START)) btn->menu = true;
+        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_UP))    btn->up = true;
+        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN))  btn->down = true;
+        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT))  btn->left = true;
+        if (SDL_GameControllerGetButton(s_pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) btn->right = true;
+        if (SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000) btn->a = true;
+    }
+}
+
+/* --- host settings persistence (4 ints) --------------------------------*/
+/* s_host_settings is the file-scope array from the platform-hooks block. */
+static const char *HOST_SETTINGS_FILE = "thumbyelite_settings.dat";
+static void host_settings_load(void) {
+    FILE *f = fopen(HOST_SETTINGS_FILE, "rb");
+    if (!f) return;
+    int tmp[4];
+    if (fread(tmp, sizeof(int), 4, f) == 4) {
+        for (int i = 0; i < 4; i++) plat_setting_set(i, tmp[i]);
+    }
+    fclose(f);
+}
+static void host_settings_save(void) {
+    FILE *f = fopen(HOST_SETTINGS_FILE, "wb");
+    if (!f) return;
+    fwrite(s_host_settings, sizeof(int), 4, f);
+    fclose(f);
+}
 
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -4139,10 +4291,13 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS |
+                 SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK) != 0) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
     }
+    host_input_init();         /* open controllers/HOTAS, read env axis map */
+    host_settings_load();      /* restore volume + sensitivity sliders */
     SDL_Window *win = SDL_CreateWindow("ThumbyElite", SDL_WINDOWPOS_CENTERED,
         SDL_WINDOWPOS_CENTERED, WIN_W, WIN_H, SDL_WINDOW_SHOWN);
     SDL_Renderer *ren = SDL_CreateRenderer(win, -1,
@@ -4171,6 +4326,19 @@ int main(int argc, char **argv) {
                 if (sc == SDL_SCANCODE_ESCAPE || sc == SDL_SCANCODE_F12)
                     running = false;
             }
+            /* Controller / HOTAS hotplug. */
+            if (ev.type == SDL_CONTROLLERDEVICEADDED ||
+                ev.type == SDL_JOYDEVICEADDED)
+                host_input_open(ev.cdevice.which);
+            if (ev.type == SDL_CONTROLLERDEVICEREMOVED && s_pad) {
+                SDL_GameControllerClose(s_pad); s_pad = NULL;
+                host_input_reset_axes();
+            }
+            if (ev.type == SDL_JOYDEVICEREMOVED &&
+                s_joy && ev.jdevice.which == s_joy_id) {
+                SDL_JoystickClose(s_joy); s_joy = NULL; s_joy_id = -1;
+                host_input_reset_axes();
+            }
         }
         Uint32 now_ms = SDL_GetTicks();
         float dt = (now_ms - last_ms) * 0.001f;
@@ -4189,6 +4357,9 @@ int main(int argc, char **argv) {
             .rb    = k[SDL_SCANCODE_SPACE],
             .menu  = k[SDL_SCANCODE_RETURN],
         };
+        /* Controllers/HOTAS augment the keyboard and drive the analog hooks.
+         * Aim axes scale by the in-game "GAMEPAD" sensitivity slider. */
+        host_input_apply(&btn, (float)plat_setting_get(2) * 0.1f);
 
         Uint32 t0 = SDL_GetTicks();
         elite_game_tick(&btn, dt);
@@ -4201,6 +4372,9 @@ int main(int argc, char **argv) {
         SDL_RenderPresent(ren);
     }
 
+    host_settings_save();
+    if (s_pad) SDL_GameControllerClose(s_pad);
+    if (s_joy) SDL_JoystickClose(s_joy);
     SDL_DestroyTexture(tex);
     SDL_DestroyRenderer(ren);
     SDL_DestroyWindow(win);

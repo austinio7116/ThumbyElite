@@ -52,6 +52,7 @@ static void core1_entry(void) {
  * and every other slot see the same values; standalone keeps volume
  * session-only and has no brightness control. */
 int plat_setting_get(int which) {
+    if (which >= 2) return 10;   /* analog sens: no gamepad/touch on device */
 #ifdef THUMBYONE_SLOT_MODE
     return which == 0 ? (int)thumbyone_settings_load_volume()
                       : (int)thumbyone_settings_load_brightness();
@@ -61,6 +62,7 @@ int plat_setting_get(int which) {
 }
 
 void plat_setting_set(int which, int value) {
+    if (which >= 2) return;      /* no analog input source on device */
     if (which == 0) {
         audio_set_master((float)value / 20.0f);
 #ifdef THUMBYONE_SLOT_MODE

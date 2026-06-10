@@ -108,6 +108,14 @@ static bool  s_station_lock;     /* station nav lock (nothing else) */
 static float s_rail_charge01;    /* railgun charge for the HUD arc */
 static bool  s_incoming;         /* seeker tracking the player */
 static bool  s_in_settings;      /* SETTINGS submenu over the pause */
+/* Settings rows: device shows 4 (invert/fps/volume/bright); the PC and
+ * Android shells define ELITE_ANALOG_SETTINGS to add gamepad + touch-stick
+ * sensitivity sliders (no analog input source exists on the handheld). */
+#ifdef ELITE_ANALOG_SETTINGS
+#define SETTINGS_N 6
+#else
+#define SETTINGS_N 4
+#endif
 static int   s_dash_sel;         /* dashboard region 0..3 */
 static float s_dash_anim;        /* 0 closed .. 1 fully risen */
 static bool  s_dash_closing;     /* sliding back down before resume */
@@ -1664,7 +1672,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             static bool pu2, pd2, pb2, pl3, pr3;
             if (btn->up && !pu2 && s_settings_cursor > 0)
                 s_settings_cursor--;
-            if (btn->down && !pd2 && s_settings_cursor < 3)
+            if (btn->down && !pd2 && s_settings_cursor < SETTINGS_N - 1)
                 s_settings_cursor++;
             pu2 = btn->up; pd2 = btn->down;
             int dir = 0;
@@ -1690,6 +1698,15 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
                 if (b2 < 31) b2 = 31;        /* never fully dark */
                 if (b2 > 255) b2 = 255;
                 plat_setting_set(1, b2);
+            } else if (dir && (s_settings_cursor == 4 || s_settings_cursor == 5)) {
+                /* Controller / touch-stick sensitivity: int 3..20 = 0.3..2.0x.
+                 * Shells multiply analog input by this; no effect on device. */
+                int which = (s_settings_cursor == 4) ? 2 : 3;
+                int s = plat_setting_get(which) + dir;
+                if (s < 3) s = 3;
+                if (s > 20) s = 20;
+                plat_setting_set(which, s);
+                sfx_ui_move();
             }
             if ((btn->b && !pb2) || menu_edge) s_in_settings = false;
             pb2 = btn->b;
@@ -2161,28 +2178,38 @@ static void dash_draw_panels(uint16_t *fb, int y0) {
 }
 
 static void dash_settings_overlay(uint16_t *fb) {
-    for (int y = 36; y < 116; y++)
-        for (int x = 14; x < 114; x++)
-            fb[y * ELITE_FB_W + x] = RGB565C(8, 11, 20);
-    craft_font_draw(fb, "SETTINGS", 33, 42, RGB565C(200, 210, 225));
-    char vrow[20], brow[20];
-    snprintf(vrow, sizeof vrow, "VOLUME    %3d%%",
-             plat_setting_get(0) * 5);
+    char vrow[20], brow[20], grow[20], srow[20];
+    snprintf(vrow, sizeof vrow, "VOLUME    %3d%%", plat_setting_get(0) * 5);
     snprintf(brow, sizeof brow, "BRIGHT    %3d%%",
              (plat_setting_get(1) * 100) / 255);
-    const char *si2[4] = {
-        g_player.invert_y ? "INVERT Y: ON" : "INVERT Y: OFF",
-        g_player.show_fps ? "SHOW FPS: ON" : "SHOW FPS: OFF",
-        vrow, brow,
-    };
-    for (int i = 0; i < 4; i++) {
+    const char *si2[SETTINGS_N];
+    si2[0] = g_player.invert_y ? "INVERT Y: ON" : "INVERT Y: OFF";
+    si2[1] = g_player.show_fps ? "SHOW FPS: ON" : "SHOW FPS: OFF";
+    si2[2] = vrow;
+    si2[3] = brow;
+#if SETTINGS_N > 4
+    /* Controller / touch-stick sensitivity (PC + Android only). */
+    snprintf(grow, sizeof grow, "GAMEPAD   %3d%%", plat_setting_get(2) * 10);
+    snprintf(srow, sizeof srow, "STICK     %3d%%", plat_setting_get(3) * 10);
+    si2[4] = grow;
+    si2[5] = srow;
+#else
+    (void)grow; (void)srow;
+#endif
+    int top = 44, row_y = top, n = SETTINGS_N;
+    int bot = top + n * 9 + 14;
+    for (int y = top - 18; y < bot; y++)
+        for (int x = 12; x < 116; x++)
+            fb[y * ELITE_FB_W + x] = RGB565C(8, 11, 20);
+    craft_font_draw(fb, "SETTINGS", 31, top - 14, RGB565C(200, 210, 225));
+    for (int i = 0; i < n; i++) {
         uint16_t c = (i == s_settings_cursor) ? RGB565C(120, 255, 120)
                                               : RGB565C(120, 126, 145);
         if (i == s_settings_cursor)
-            craft_font_draw(fb, ">", 20, 56 + i * 9, c);
-        craft_font_draw(fb, si2[i], 27, 56 + i * 9, c);
+            craft_font_draw(fb, ">", 18, row_y + i * 9, c);
+        craft_font_draw(fb, si2[i], 25, row_y + i * 9, c);
     }
-    craft_font_draw(fb, "</>:ADJUST B:BACK", 20, 104,
+    craft_font_draw(fb, "</>:ADJUST B:BACK", 18, bot - 12,
                     RGB565C(95, 110, 140));
 }
 

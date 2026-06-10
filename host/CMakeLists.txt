@@ -120,7 +120,7 @@ foreach(tgt IN ITEMS thumbyelite_host thumbyelite_host_hires thumbyelite_host_qu
         ${SDL2_INCLUDE_DIRS}
     )
     target_link_libraries(${tgt} PRIVATE ${SDL2_LIBRARIES} m)
-    target_compile_definitions(${tgt} PRIVATE ELITE_INPUT_DEBUG=1)
+    target_compile_definitions(${tgt} PRIVATE ELITE_INPUT_DEBUG=1 ELITE_ANALOG_SETTINGS=1)
 endforeach()
 target_compile_definitions(thumbyelite_host_hires PRIVATE
     R3D_SS=2 ELITE_OVERLAY_SPLIT=1)

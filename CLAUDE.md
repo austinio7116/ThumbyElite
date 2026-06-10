@@ -28,6 +28,9 @@ cp build_device/thumbyelite.uf2 ../firmware_thumbyelite.uf2
 (cd android && ANDROID_HOME=/path/to/android-sdk ./gradlew assembleDebug)
 ```
 
+PC desktop build, Windows instructions, and gamepad/HOTAS controls +
+sensitivity: see docs/PC.md.
+
 ## Rules
 
 - Host build first; the user flashes for device testing. NEVER claim device

@@ -31,6 +31,7 @@ typedef struct {
     bool  tgt_class_cycle; /* LB double-tap: demote the lock class */
     bool  assist_toggle;  /* event */
     bool  boost;          /* event */
+    float throttle_abs;   /* >=0: set throttle directly (HOTAS lever); <0 off */
 } FlightInput;
 
 void elite_input_reset(void);
@@ -41,7 +42,13 @@ void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out);
  * Nonzero values override the d-pad pitch/yaw (and roll/throttle under
  * the LB/RB chords) at the same max rates. Call with (0,0) when idle. */
 void elite_input_set_analog(float x, float y);
-/* Dedicated analog roll (gamepad right-stick X); 0 = off. */
+/* Dedicated analog roll (gamepad right-stick X / HOTAS twist); 0 = off. */
 void elite_input_set_analog_roll(float r);
+/* Absolute throttle from a HOTAS lever, 0..1. Pass <0 to disable (the
+ * default) and fall back to the RB-chord delta. */
+void elite_input_set_throttle_abs(float t);
+/* Extra throttle delta added every frame (gamepad right-stick Y); 0 = off.
+ * Integrates like the RB-chord, so it holds when released to centre. */
+void elite_input_set_throttle_delta(float d);
 
 #endif

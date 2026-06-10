@@ -26,7 +26,7 @@ LOCAL_C_INCLUDES := \
 #                         status-screen dim works without reading the 3D buf.
 # craft_buttons.h (DEVICE dir) supplies the CraftRawButtons type only; the
 # .c reader isn't linked — android_main.c builds the struct from input.
-LOCAL_CFLAGS := -DR3D_SS=2 -DELITE_OVERLAY_SPLIT=1 -DNDEBUG \
+LOCAL_CFLAGS := -DR3D_SS=2 -DELITE_OVERLAY_SPLIT=1 -DELITE_ANALOG_SETTINGS=1 -DNDEBUG \
                 -O3 -ffast-math -std=c11 \
                 -Wall -Wno-unused-parameter -Wno-unused-function \
                 -Wno-implicit-function-declaration
