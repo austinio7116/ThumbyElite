@@ -30,6 +30,7 @@
 #include "elite_save.h"
 #include "elite_proj.h"
 #include "elite_input.h"
+#include "elite_ctrl.h"
 #include "elite_loot.h"
 #include "elite_ships.h"
 #include "r3d_scene.h"
@@ -163,66 +164,57 @@ static SDL_GameController *s_pad;
 static SDL_Joystick       *s_joy;          /* a non-mapped stick = HOTAS */
 static SDL_JoystickID      s_joy_id = -1;
 
-/* HOTAS axis map + per-axis invert (env-overridable). Defaults suit a
- * twist stick with a combined throttle (e.g. Logitech Extreme 3D / T16000). */
-static int s_hx_yaw = 0, s_hx_pitch = 1, s_hx_roll = 3, s_hx_thr = 2;
-static int s_hi_yaw = 0, s_hi_pitch = 1, s_hi_roll = 0, s_hi_thr = 1;
-/* HOTAS button -> game action (button index per action). */
-static int s_btn_fire = 0, s_btn_cyc = 1, s_btn_lb = 3, s_btn_rb = 2, s_btn_menu = 4;
-static bool s_hotas_dbg;       /* stdout axis dump (Linux) */
-static bool s_hotas_title;     /* F1: live axis/button readout in title bar */
+/* HOTAS bindings, indexed by CtrlAxis / CtrlButton (-1 button = unbound).
+ * Defaults suit a twist stick with a combined throttle and reproduce the old
+ * behaviour (fire=0, weapon=1, target=3, assist=2, menu=4). */
+static int s_hx[CTRL_AX_N] = {            /* joystick axis per flight axis */
+    [CTRL_AX_ROLL] = 3, [CTRL_AX_PITCH] = 1,
+    [CTRL_AX_YAW]  = 0, [CTRL_AX_THROTTLE] = 2 };
+static int s_hi[CTRL_AX_N] = {            /* invert: pitch + throttle on */
+    [CTRL_AX_PITCH] = 1, [CTRL_AX_THROTTLE] = 1 };
+static int s_btn[CTRL_BTN_N] = {
+    [CTRL_BTN_FIRE] = 0, [CTRL_BTN_FIRE2] = -1, [CTRL_BTN_FIRE3] = -1,
+    [CTRL_BTN_CYCLE_WEAPON] = 1, [CTRL_BTN_CYCLE_TARGET] = 3,
+    [CTRL_BTN_ASSIST] = 2, [CTRL_BTN_BOOST] = -1, [CTRL_BTN_CHAFF] = -1,
+    [CTRL_BTN_CLOAK] = -1, [CTRL_BTN_DOCK] = -1, [CTRL_BTN_MENU] = 4 };
+static bool s_hotas_dbg;       /* stdout axis dump (Linux: ELITE_HOTAS_DEBUG) */
 
-static int env_axis(const char *name, int def) {
-    const char *e = getenv(name);
-    return e ? atoi(e) : def;
-}
+/* Config-file key tables (1:1 with the enums). */
+static const char *k_ax_key[CTRL_AX_N]  = { "roll", "pitch", "yaw", "throttle" };
+static const char *k_btn_key[CTRL_BTN_N] = {
+    "btn_fire", "btn_fire2", "btn_fire3", "btn_cycle", "btn_target",
+    "btn_assist", "btn_boost", "btn_chaff", "btn_cloak", "btn_dock", "btn_menu" };
 
-/* HOTAS config file (next to the exe) — axis numbers and button bindings
- * vary by device, and the Windows build has no console, so this is how you
- * configure a stick there. A template is written on first run. */
+/* HOTAS config file (next to the exe). The in-game CONTROLLER SETUP screen
+ * reads/writes this; you can also hand-edit it. */
 #define HOTAS_CFG "thumbyelite_hotas.cfg"
-static void hotas_cfg_write_default(void) {
+static void hotas_cfg_write(void) {
     FILE *f = fopen(HOTAS_CFG, "w");
     if (!f) return;
-    fprintf(f,
-        "# ThumbyElite HOTAS configuration.\n"
-        "# Axis/button numbers vary by device. Press F1 in-game to show live\n"
-        "# axis values + pressed buttons in the window title, then edit below.\n"
-        "# Flight axes (which joystick axis drives each control):\n"
-        "yaw=%d\npitch=%d\nroll=%d\nthrottle=%d\n"
-        "# Invert an axis (0 or 1):\n"
-        "yaw_invert=%d\npitch_invert=%d\nroll_invert=%d\nthrottle_invert=%d\n"
-        "# Button bindings (which HOTAS button does each action):\n"
-        "#   fire   = fire the active weapon\n"
-        "#   cycle  = switch active weapon / 'back' in menus  (the B button)\n"
-        "#   target = cycle target (LB) ; assist = flight-assist/boost (RB)\n"
-        "#   menu   = pause / dashboard\n"
-        "btn_fire=%d\nbtn_cycle=%d\nbtn_target=%d\nbtn_assist=%d\nbtn_menu=%d\n",
-        s_hx_yaw, s_hx_pitch, s_hx_roll, s_hx_thr,
-        s_hi_yaw, s_hi_pitch, s_hi_roll, s_hi_thr,
-        s_btn_fire, s_btn_cyc, s_btn_lb, s_btn_rb, s_btn_menu);
+    fprintf(f, "# ThumbyElite HOTAS configuration — written by the in-game\n"
+               "# CONTROLLER SETUP screen (SETTINGS). Axis/button numbers are\n"
+               "# device-specific; edit in-game (press-to-bind) or here.\n");
+    for (int i = 0; i < CTRL_AX_N; i++)
+        fprintf(f, "%s=%d\n%s_invert=%d\n", k_ax_key[i], s_hx[i],
+                k_ax_key[i], s_hi[i]);
+    for (int i = 0; i < CTRL_BTN_N; i++)
+        fprintf(f, "%s=%d\n", k_btn_key[i], s_btn[i]);
     fclose(f);
 }
 static void hotas_cfg_load(void) {
     FILE *f = fopen(HOTAS_CFG, "r");
-    if (!f) { hotas_cfg_write_default(); return; }
+    if (!f) { hotas_cfg_write(); return; }    /* write a template */
     char line[160], key[64]; int val;
     while (fgets(line, sizeof line, f)) {
         if (line[0] == '#') continue;
-        if (sscanf(line, " %63[a-z_] = %d", key, &val) != 2) continue;
-        if      (!strcmp(key, "yaw"))            s_hx_yaw = val;
-        else if (!strcmp(key, "pitch"))          s_hx_pitch = val;
-        else if (!strcmp(key, "roll"))           s_hx_roll = val;
-        else if (!strcmp(key, "throttle"))       s_hx_thr = val;
-        else if (!strcmp(key, "yaw_invert"))     s_hi_yaw = val;
-        else if (!strcmp(key, "pitch_invert"))   s_hi_pitch = val;
-        else if (!strcmp(key, "roll_invert"))    s_hi_roll = val;
-        else if (!strcmp(key, "throttle_invert"))s_hi_thr = val;
-        else if (!strcmp(key, "btn_fire"))       s_btn_fire = val;
-        else if (!strcmp(key, "btn_cycle"))      s_btn_cyc = val;
-        else if (!strcmp(key, "btn_target"))     s_btn_lb = val;
-        else if (!strcmp(key, "btn_assist"))     s_btn_rb = val;
-        else if (!strcmp(key, "btn_menu"))       s_btn_menu = val;
+        if (sscanf(line, " %63[a-z_0-9] = %d", key, &val) != 2) continue;
+        for (int i = 0; i < CTRL_AX_N; i++) {
+            char inv[40]; snprintf(inv, sizeof inv, "%s_invert", k_ax_key[i]);
+            if (!strcmp(key, k_ax_key[i])) s_hx[i] = val;
+            else if (!strcmp(key, inv))    s_hi[i] = val;
+        }
+        for (int i = 0; i < CTRL_BTN_N; i++)
+            if (!strcmp(key, k_btn_key[i])) s_btn[i] = val;
     }
     fclose(f);
 }
@@ -233,6 +225,95 @@ static void host_input_reset_axes(void) {
     elite_input_set_throttle_abs(-1.0f);
     elite_input_set_throttle_delta(0.0f);
 }
+
+/* ====================================================================== *
+ *  In-game CONTROLLER SETUP backend (plat_ctrl_*). Binds the raw joystick
+ *  (HOTAS); a connected gamepad is shown read-only (standard mapping).
+ * ====================================================================== */
+static struct {
+    int active, kind, which, armed;
+    float base[24];
+    uint32_t btn_base;
+    Uint32 t0;
+} s_cap;
+
+int  plat_ctrl_present(void)  { return (s_joy || s_pad) ? 1 : 0; }
+int  plat_ctrl_editable(void) { return s_joy ? 1 : 0; }
+const char *plat_ctrl_device_name(void) {
+    if (s_joy) return SDL_JoystickName(s_joy);
+    if (s_pad) return SDL_GameControllerName(s_pad);
+    return "NO DEVICE";
+}
+static const char *pad_axis_label(int ax) {
+    static const char *n[CTRL_AX_N] =
+        { "R-STK X", "L-STK Y", "L-STK X", "R-STK Y" };
+    return (ax >= 0 && ax < CTRL_AX_N) ? n[ax] : "?";
+}
+static const char *pad_btn_label(int b) {
+    switch (b) {
+    case CTRL_BTN_FIRE: return "A / RT"; case CTRL_BTN_CYCLE_WEAPON: return "B";
+    case CTRL_BTN_CYCLE_TARGET: return "LB tap"; case CTRL_BTN_ASSIST: return "RB tap";
+    case CTRL_BTN_BOOST: return "RB x2"; case CTRL_BTN_CHAFF: return "LB+B";
+    case CTRL_BTN_CLOAK: return "RB+B"; case CTRL_BTN_DOCK: return "LB+RB";
+    case CTRL_BTN_MENU: return "START"; default: return "—";
+    }
+}
+void plat_ctrl_axis_label(CtrlAxis ax, char *out, int cap) {
+    if (!out || cap <= 0) return;
+    if (s_joy) snprintf(out, cap, "AXIS %d%s", s_hx[ax], s_hi[ax] ? " INV" : "");
+    else       snprintf(out, cap, "%s", pad_axis_label(ax));
+}
+void plat_ctrl_btn_label(CtrlButton b, char *out, int cap) {
+    if (!out || cap <= 0) return;
+    if (s_joy) { if (s_btn[b] < 0) snprintf(out, cap, "—");
+                 else snprintf(out, cap, "BTN %d", s_btn[b]); }
+    else       snprintf(out, cap, "%s", pad_btn_label(b));
+}
+void plat_ctrl_capture_begin(int kind, int which) {
+    if (!s_joy) { s_cap.active = 0; return; }   /* pad = read-only */
+    s_cap.active = 1; s_cap.kind = kind; s_cap.which = which;
+    s_cap.armed = 0; s_cap.t0 = SDL_GetTicks();
+}
+void plat_ctrl_capture_cancel(void) { s_cap.active = 0; }
+static void cap_snapshot(void) {
+    int n = SDL_JoystickNumAxes(s_joy); if (n > 24) n = 24;
+    for (int i = 0; i < n; i++)
+        s_cap.base[i] = SDL_JoystickGetAxis(s_joy, i) / 32767.0f;
+    uint32_t bm = 0; int nb = SDL_JoystickNumButtons(s_joy); if (nb > 32) nb = 32;
+    for (int i = 0; i < nb; i++)
+        if (SDL_JoystickGetButton(s_joy, i)) bm |= (1u << i);
+    s_cap.btn_base = bm;
+}
+int plat_ctrl_capture_poll(void) {
+    if (!s_cap.active || !s_joy) return 0;
+    if (!s_cap.armed) { cap_snapshot(); s_cap.armed = 1; return 0; }  /* settle 1 frame */
+    if (SDL_GetTicks() - s_cap.t0 > 6000) { s_cap.active = 0; return -1; }  /* timeout */
+    if (s_cap.kind == CTRL_KIND_BUTTON) {
+        int nb = SDL_JoystickNumButtons(s_joy); if (nb > 32) nb = 32;
+        for (int i = 0; i < nb; i++) {                 /* rising edge binds */
+            bool now = SDL_JoystickGetButton(s_joy, i);
+            bool was = (s_cap.btn_base >> i) & 1u;
+            if (now && !was) { s_btn[s_cap.which] = i; s_cap.active = 0; return 1; }
+        }
+    } else {
+        int n = SDL_JoystickNumAxes(s_joy); if (n > 24) n = 24;
+        int best = -1; float bd = 0.0f, sd = 0.0f;     /* largest delta from baseline */
+        for (int i = 0; i < n; i++) {
+            float d = fabsf(SDL_JoystickGetAxis(s_joy, i) / 32767.0f - s_cap.base[i]);
+            if (d > bd) { sd = bd; bd = d; best = i; } else if (d > sd) sd = d;
+        }
+        if (best >= 0 && bd > 0.5f && bd > sd + 0.25f) {
+            s_hx[s_cap.which] = best; s_hi[s_cap.which] = 0;
+            s_cap.active = 0; return 1;
+        }
+    }
+    return 0;
+}
+void plat_ctrl_axis_invert(CtrlAxis ax) { if (s_joy) s_hi[ax] = !s_hi[ax]; }
+void plat_ctrl_clear(int kind, int which) {
+    if (s_joy && kind == CTRL_KIND_BUTTON) s_btn[which] = -1;
+}
+void plat_ctrl_save(void) { if (s_joy) hotas_cfg_write(); }
 
 static void host_input_open(int index) {
     if (SDL_IsGameController(index)) {
@@ -247,22 +328,16 @@ static void host_input_open(int index) {
             printf("[hotas] %s — %d axes, %d buttons, %d hats\n",
                    SDL_JoystickName(s_joy), SDL_JoystickNumAxes(s_joy),
                    SDL_JoystickNumButtons(s_joy), SDL_JoystickNumHats(s_joy));
-            printf("[hotas] axes: yaw=%d pitch=%d roll(twist)=%d throttle=%d "
-                   "(override with ELITE_HOTAS_YAW/PITCH/ROLL/THROTTLE)\n",
-                   s_hx_yaw, s_hx_pitch, s_hx_roll, s_hx_thr);
+            printf("[hotas] roll(twist)=axis%d pitch=axis%d yaw=axis%d "
+                   "throttle=axis%d — configure in-game (SETTINGS > CONTROLLER)\n",
+                   s_hx[CTRL_AX_ROLL], s_hx[CTRL_AX_PITCH],
+                   s_hx[CTRL_AX_YAW], s_hx[CTRL_AX_THROTTLE]);
         }
     }
 }
 
 static void host_input_init(void) {
-    s_hx_yaw   = env_axis("ELITE_HOTAS_YAW",   0);
-    s_hx_pitch = env_axis("ELITE_HOTAS_PITCH", 1);
-    s_hx_roll  = env_axis("ELITE_HOTAS_ROLL",  3);   /* twist */
-    s_hx_thr   = env_axis("ELITE_HOTAS_THROTTLE", 2);
-    s_hi_yaw   = getenv("ELITE_HOTAS_YAW_INV")   ? 1 : 0;
-    s_hi_pitch = getenv("ELITE_HOTAS_PITCH_INV") ? 1 : (getenv("ELITE_HOTAS_PITCH") ? 0 : 1);
-    s_hi_roll  = getenv("ELITE_HOTAS_ROLL_INV")  ? 1 : 0;
-    s_hi_thr   = getenv("ELITE_HOTAS_THROTTLE_INV") ? 1 : 0;
+    hotas_cfg_load();          /* file bindings (writes a template if missing) */
     s_hotas_dbg = getenv("ELITE_HOTAS_DEBUG") != NULL;
     for (int i = 0; i < SDL_NumJoysticks(); i++) host_input_open(i);
 }
@@ -285,9 +360,9 @@ static bool joy_has_input(void) {
     if (!s_joy) return false;
     for (int i = 0; i < SDL_JoystickNumButtons(s_joy); i++)
         if (SDL_JoystickGetButton(s_joy, i)) return true;
-    if (fabsf(jaxis(s_joy, s_hx_yaw,   0)) > 0.5f) return true;
-    if (fabsf(jaxis(s_joy, s_hx_pitch, 0)) > 0.5f) return true;
-    if (fabsf(jaxis(s_joy, s_hx_roll,  0)) > 0.5f) return true;
+    if (fabsf(jaxis(s_joy, s_hx[CTRL_AX_YAW],   0)) > 0.5f) return true;
+    if (fabsf(jaxis(s_joy, s_hx[CTRL_AX_PITCH], 0)) > 0.5f) return true;
+    if (fabsf(jaxis(s_joy, s_hx[CTRL_AX_ROLL],  0)) > 0.5f) return true;
     if (SDL_JoystickNumHats(s_joy) > 0 &&
         SDL_JoystickGetHat(s_joy, 0) != SDL_HAT_CENTERED) return true;
     return false;
@@ -306,6 +381,10 @@ static bool pad_has_input(void) {
 /* Augment the keyboard-built btn with controller/HOTAS state, and drive the
  * analog/throttle hooks. gpad_sens scales the aim axes (settings slider). */
 static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
+    /* While binding in CONTROLLER SETUP, the stick drives the capture, not the
+     * ship — suppress all analog so sweeping the throttle doesn't fly you. The
+     * keyboard (built before this) still works to cancel. */
+    if (s_cap.active) { host_input_reset_axes(); return; }
     /* Pick the active device: last actuated wins; default to the HOTAS. */
     if (s_joy && joy_has_input())      s_active_dev = DEV_HOTAS;
     else if (s_pad && pad_has_input()) s_active_dev = DEV_PAD;
@@ -321,10 +400,10 @@ static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
     }
 
     if (s_active_dev == DEV_HOTAS) {        /* --- HOTAS --- */
-        float yaw   = dz(jaxis(s_joy, s_hx_yaw,   s_hi_yaw),   0.08f);
-        float pitch = dz(jaxis(s_joy, s_hx_pitch, s_hi_pitch), 0.08f);
-        float roll  = dz(jaxis(s_joy, s_hx_roll,  s_hi_roll),  0.10f);
-        float lever = jaxis(s_joy, s_hx_thr, s_hi_thr);        /* -1..1 */
+        float roll  = dz(jaxis(s_joy, s_hx[CTRL_AX_ROLL],  s_hi[CTRL_AX_ROLL]),  0.10f);
+        float pitch = dz(jaxis(s_joy, s_hx[CTRL_AX_PITCH], s_hi[CTRL_AX_PITCH]), 0.08f);
+        float yaw   = dz(jaxis(s_joy, s_hx[CTRL_AX_YAW],   s_hi[CTRL_AX_YAW]),   0.08f);
+        float lever = jaxis(s_joy, s_hx[CTRL_AX_THROTTLE], s_hi[CTRL_AX_THROTTLE]);
         elite_input_set_analog(yaw * gpad_sens, pitch * gpad_sens);
         elite_input_set_analog_roll(roll * gpad_sens);
         elite_input_set_throttle_abs((lever + 1.0f) * 0.5f);   /* -1..1 -> 0..1 */
@@ -333,12 +412,25 @@ static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
         if (yaw   >  0.55f) btn->right = true;
         if (pitch >  0.55f) btn->up = true;
         if (pitch < -0.55f) btn->down = true;
+        /* Bound-button helper: pressed state of a CtrlButton's joystick button. */
         int nb = SDL_JoystickNumButtons(s_joy);
-        if (nb > 0 && SDL_JoystickGetButton(s_joy, 0)) btn->a = true;   /* trigger */
-        if (nb > 1 && SDL_JoystickGetButton(s_joy, 1)) btn->b = true;
-        if (nb > 2 && SDL_JoystickGetButton(s_joy, 2)) btn->rb = true;
-        if (nb > 3 && SDL_JoystickGetButton(s_joy, 3)) btn->lb = true;
-        if (nb > 4 && SDL_JoystickGetButton(s_joy, 4)) btn->menu = true;
+#define HB(act) (s_btn[act] >= 0 && s_btn[act] < nb && \
+                 SDL_JoystickGetButton(s_joy, s_btn[act]))
+        if (HB(CTRL_BTN_FIRE))         btn->a = true;     /* held */
+        if (HB(CTRL_BTN_CYCLE_WEAPON)) btn->b = true;     /* B edge in input.c */
+        if (HB(CTRL_BTN_MENU))         btn->menu = true;
+        elite_input_set_fire2(HB(CTRL_BTN_FIRE2));        /* held extra weapons */
+        elite_input_set_fire3(HB(CTRL_BTN_FIRE3));
+        /* Dedicated chord actions: rising edge -> one-shot event. */
+        static bool s_eprev[CTRL_BTN_N];
+        static const int k_edge[] = { CTRL_BTN_CYCLE_TARGET, CTRL_BTN_ASSIST,
+            CTRL_BTN_BOOST, CTRL_BTN_CHAFF, CTRL_BTN_CLOAK, CTRL_BTN_DOCK };
+        for (unsigned i = 0; i < sizeof k_edge / sizeof k_edge[0]; i++) {
+            int a = k_edge[i]; bool now = HB(a);
+            if (now && !s_eprev[a]) elite_input_action(a);
+            s_eprev[a] = now;
+        }
+#undef HB
         if (SDL_JoystickNumHats(s_joy) > 0) {                  /* hat = menu nav */
             Uint8 h = SDL_JoystickGetHat(s_joy, 0);
             if (h & SDL_HAT_UP)    btn->up = true;
