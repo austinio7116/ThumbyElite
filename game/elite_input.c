@@ -133,7 +133,13 @@ void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) 
         lr = s_ana_x;
     }
 
+#ifdef ELITE_DPAD_ROLL
+    /* Experimental device scheme: plain L/R = roll, hold LB + L/R = yaw.
+     * (Device has no analog stick, so this only ever redirects the d-pad.) */
+    if (s_lb.down) { out->yaw = lr; } else { out->roll = lr; }
+#else
     if (s_lb.down) { out->roll = lr; } else { out->yaw = lr; }
+#endif
     if (s_rb.down) { out->throttle_delta = ud; }
     else { out->pitch = g_player.invert_y ? ud : -ud; }
     /* Dedicated roll axis (gamepad right stick) wins over the chord. */
