@@ -355,7 +355,10 @@ const char *plat_ctrl_last_input(void) { return s_last_in; }
  * button number (or "—" if unbound); gamepad/keyboard show device-style names
  * (the gamepad's LB bumper and Y both drive Info in menus). */
 const char *plat_menu_btn(int action) {
-    static char buf[6];
+    /* Rotating buffers: a hint calls this 2-3 times in one snprintf, so each
+     * call must return a distinct buffer (a single static would alias them). */
+    static char buf[4][6];
+    static unsigned bi;
     if (s_active_dev == DEV_HOTAS) {
         int b;
         switch (action) {
@@ -367,8 +370,9 @@ const char *plat_menu_btn(int action) {
         default:      b = s_btn[CTRL_BTN_MENU]; break;
         }
         if (b < 0) return "--";
-        snprintf(buf, sizeof buf, "B%d", b);
-        return buf;
+        char *out = buf[bi++ & 3];
+        snprintf(out, 6, "B%d", b);
+        return out;
     }
     switch (action) {     /* gamepad + keyboard: device-style names */
     case MB_A:    return "A";

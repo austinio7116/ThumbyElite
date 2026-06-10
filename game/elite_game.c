@@ -2415,8 +2415,10 @@ void elite_game_draw_overlay(uint16_t *fb) {
         } else {
             craft_font_draw(fb, "CAUSE UNKNOWN", 12, 40, tx);
         }
-        if (s_respawn_t <= 0)
-            craft_font_draw(fb, "A: INSURANCE CLAIM", 12, 116, gd);
+        if (s_respawn_t <= 0) {
+            char h[28]; snprintf(h, sizeof h, "%s: INSURANCE CLAIM", plat_menu_btn(MB_A));
+            craft_font_draw(fb, h, 12, 116, gd);
+        }
     }
 
     if (s_state == ST_DASH) {
