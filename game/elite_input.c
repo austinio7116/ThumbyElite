@@ -95,6 +95,17 @@ void elite_input_set_throttle_delta(float d) {
     s_throttle_ext = d;
 }
 
+/* Zero all persistent analog state. The shell feeds analog every frame, so
+ * menu/dashboard states (which tick flight with a neutral button struct to
+ * keep the world alive) must call this or the live stick/throttle would
+ * still steer the ship while a menu is open. */
+void elite_input_neutralize(void) {
+    s_ana_x = s_ana_y = 0.0f;
+    s_ana_roll = 0.0f;
+    s_throttle_abs = -1.0f;
+    s_throttle_ext = 0.0f;
+}
+
 void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) {
     memset(out, 0, sizeof *out);
 

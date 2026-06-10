@@ -1500,6 +1500,13 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         !(s_state == ST_DASH && s_dash_anim < 1.0f))
         audio_engine_set(0, 0);
 
+    /* Only ST_FLIGHT/ST_SUPERCRUISE read the analog stick to fly. Every
+     * other state (dashboard, maps, status, docked, title) ticks with a
+     * neutral button struct — so wipe the shell-fed analog here too, or a
+     * held stick / HOTAS throttle would keep steering the ship in menus. */
+    if (s_state != ST_FLIGHT && s_state != ST_SUPERCRUISE)
+        elite_input_neutralize();
+
     switch (s_state) {
     case ST_TITLE: {
         bool has_save = save_exists();

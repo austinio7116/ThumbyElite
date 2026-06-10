@@ -233,6 +233,11 @@ static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
         elite_input_set_analog(yaw * gpad_sens, pitch * gpad_sens);
         elite_input_set_analog_roll(roll * gpad_sens);
         elite_input_set_throttle_abs((lever + 1.0f) * 0.5f);   /* -1..1 -> 0..1 */
+        /* Stick also drives menu navigation (the hat does too, below). */
+        if (yaw   < -0.55f) btn->left = true;
+        if (yaw   >  0.55f) btn->right = true;
+        if (pitch >  0.55f) btn->up = true;
+        if (pitch < -0.55f) btn->down = true;
         int nb = SDL_JoystickNumButtons(s_joy);
         if (nb > 0 && SDL_JoystickGetButton(s_joy, 0)) btn->a = true;   /* trigger */
         if (nb > 1 && SDL_JoystickGetButton(s_joy, 1)) btn->b = true;

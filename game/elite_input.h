@@ -51,4 +51,8 @@ void elite_input_set_throttle_abs(float t);
  * Integrates like the RB-chord, so it holds when released to centre. */
 void elite_input_set_throttle_delta(float d);
 
+/* Zero all persistent analog state (call when no flight control should be
+ * read, e.g. menus/dashboard) so a held stick/throttle doesn't fly the ship. */
+void elite_input_neutralize(void);
+
 #endif
