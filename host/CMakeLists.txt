@@ -93,16 +93,26 @@ set(ELITE_SRC
     ${MESHES_GEN_C}
 )
 
-# Two targets from the same sources: the device-faithful 128x128 build,
-# and the Android-rendering preview (3D supersampled 2x + split overlay).
-foreach(tgt IN ITEMS thumbyelite_host thumbyelite_host_hires)
+# Three targets from one source set:
+#   thumbyelite_host        device-faithful 128x128 (SS=1)
+#   thumbyelite_host_hires  Android preview     256x256 (SS=2, split overlay)
+#   thumbyelite_host_quad   desktop quad-res    512x512 (SS=4, split overlay)
+# The hires/quad builds render the 3D world at the higher resolution and
+# composite the 128-logical HUD pixel-multiplied on top (text scales with SS).
+# This SDL2 host is the cross-platform "PC" build — the same source compiles
+# and runs on Linux and Windows.
+# Compiler flags: GCC/Clang (Linux, macOS, MinGW) vs MSVC (Windows/VS).
+if(MSVC)
+    set(ELITE_COPTS /O2 /fp:fast /W3 /wd4244 /wd4267 /wd4101)
+else()
+    set(ELITE_COPTS -O2 -g -Wall -Wextra
+        -Wno-unused-parameter -Wno-unused-function -ffast-math)
+endif()
+
+foreach(tgt IN ITEMS thumbyelite_host thumbyelite_host_hires thumbyelite_host_quad)
     add_executable(${tgt} ${ELITE_SRC})
     add_dependencies(${tgt} generate_meshes)
-    target_compile_options(${tgt} PRIVATE
-        -O2 -g -Wall -Wextra
-        -Wno-unused-parameter -Wno-unused-function
-        -ffast-math
-    )
+    target_compile_options(${tgt} PRIVATE ${ELITE_COPTS})
     target_include_directories(${tgt} PRIVATE
         ${GAME}
         ${ELITE_ROOT}/device   # craft_buttons.h type (host doesn't link buttons.c)
@@ -114,3 +124,5 @@ foreach(tgt IN ITEMS thumbyelite_host thumbyelite_host_hires)
 endforeach()
 target_compile_definitions(thumbyelite_host_hires PRIVATE
     R3D_SS=2 ELITE_OVERLAY_SPLIT=1)
+target_compile_definitions(thumbyelite_host_quad PRIVATE
+    R3D_SS=4 ELITE_OVERLAY_SPLIT=1)

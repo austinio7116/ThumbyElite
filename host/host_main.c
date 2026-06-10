@@ -42,10 +42,16 @@
 #include <time.h>
 
 #ifdef ELITE_OVERLAY_SPLIT
-/* Android-preview build: 3D renders physical (R3D_SS x), the 2D overlay
- * draws into its own logical key-colour buffer, and we composite — the
- * same path the Android shell uses. */
+/* Hi-res desktop / Android-preview build: 3D renders physical (R3D_SS x),
+ * the 2D overlay draws into its own logical key-colour buffer, and we
+ * composite — the same path the Android shell uses. Window scale shrinks
+ * as the frame grows so the window stays ~768px on a side regardless of
+ * supersample factor (SS=2 -> 3x/768, SS=4 -> 2x/1024). */
+#if R3D_SS >= 4
+#define SCALE 2
+#else
 #define SCALE 3
+#endif
 #define OUT_W R3D_FB_W
 #define OUT_H R3D_FB_H
 static uint16_t g_fb3d[R3D_FB_W * R3D_FB_H];
