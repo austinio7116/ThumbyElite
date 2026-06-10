@@ -42,4 +42,11 @@ void plat_ctrl_save(void);
 void plat_ctrl_monitor(void);
 const char *plat_ctrl_last_input(void);
 
+/* Physical-button label for a standard menu action on the ACTIVE input
+ * device, so on-screen hints read right everywhere: device "A"/"B"/"LB"/
+ * "MENU", gamepad bumper, or the configured HOTAS button ("B5") / "—" if
+ * unbound. Returns a short string. */
+enum { MB_A = 0, MB_B, MB_INFO, MB_MENU };
+const char *plat_menu_btn(int action);
+
 #endif

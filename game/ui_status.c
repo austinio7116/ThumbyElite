@@ -16,6 +16,7 @@
 #include "ui_detail.h"
 #include "econ.h"
 #include "craft_font.h"
+#include "elite_platform.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -296,7 +297,8 @@ void status_draw(uint16_t *fb) {
     if (s_hide_text) {
         /* sheet hidden: the rendered ship fills the screen, clean —
          * just a faint hint to bring the stats back. */
-        craft_font_draw(fb, "INFO: STATS", 2, 2, RGB565C(110, 130, 165));
+        { char h[16]; snprintf(h, sizeof h, "%s: STATS", plat_menu_btn(MB_INFO));
+          craft_font_draw(fb, h, 2, 2, RGB565C(110, 130, 165)); }
         return;
     }
 
@@ -363,5 +365,7 @@ void status_draw(uint16_t *fb) {
     }
 
     for (int x = 0; x < 128; x++) fb[118 * ELITE_FB_W + x] = COL_GRID;
-    craft_font_draw(fb, "A:DETAILS INFO:HIDE B:BACK", 2, 121, COL_DIM);
+    { char h[40]; snprintf(h, sizeof h, "%s:DETAILS %s:HIDE %s:BACK",
+        plat_menu_btn(MB_A), plat_menu_btn(MB_INFO), plat_menu_btn(MB_B));
+      craft_font_draw(fb, h, 2, 121, COL_DIM); }
 }

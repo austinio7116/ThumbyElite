@@ -31,6 +31,7 @@ static uint8_t g_fs_work[FF_MAX_SS] __attribute__((aligned(4)));
 #endif
 #include "elite_types.h"
 #include "elite_game.h"
+#include "elite_platform.h"
 
 static uint16_t g_fb[ELITE_FB_W * ELITE_FB_H];
 
@@ -51,6 +52,15 @@ static void core1_entry(void) {
  * (/.volume 0-20, /.brightness 0-255 on the shared FAT) so the lobby
  * and every other slot see the same values; standalone keeps volume
  * session-only and has no brightness control. */
+const char *plat_menu_btn(int action) {
+    switch (action) {
+    case MB_A:    return "A";
+    case MB_B:    return "B";
+    case MB_INFO: return "LB";
+    default:      return "MENU";
+    }
+}
+
 int plat_setting_get(int which) {
     if (which >= 2) return 10;   /* analog sens: no gamepad/touch on device */
 #ifdef THUMBYONE_SLOT_MODE

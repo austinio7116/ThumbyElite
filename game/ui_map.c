@@ -11,6 +11,7 @@
  */
 #include "ui_map.h"
 #include "elite_game.h"
+#include "elite_platform.h"
 #include "mission.h"
 
 /* --- chart data layers (RB cycles SPECTRAL / THREAT / FACTION) -------- */
@@ -353,8 +354,12 @@ static void draw_gmap_info(uint16_t *fb) {
     for (int x = 0; x < 128; x++) fb[118 * ELITE_FB_W + x] = GRID;
     bool can = s_hl_valid && !sysaddr_eq(s_hl, s_cur_sys) &&
                s_hl_dist <= s_range && s_hl_dist <= s_fuel;
-    craft_font_draw(fb, can ? "A:JUMP INFO:DATA B:BACK" : "INFO:DATA B:BACK",
-                    2, 121, RGB565C(110, 116, 135));
+    { char h[40];
+      if (can) snprintf(h, sizeof h, "%s:JUMP %s:DATA %s:BACK",
+          plat_menu_btn(MB_A), plat_menu_btn(MB_INFO), plat_menu_btn(MB_B));
+      else snprintf(h, sizeof h, "%s:DATA %s:BACK",
+          plat_menu_btn(MB_INFO), plat_menu_btn(MB_B));
+      craft_font_draw(fb, h, 2, 121, RGB565C(110, 116, 135)); }
 }
 
 void map_galaxy_draw(uint16_t *fb) {
@@ -556,7 +561,8 @@ void map_galaxy_draw(uint16_t *fb) {
                          ? "A:JUMP" : "RANGE!");
         craft_font_draw(fb, buf, 2, 121, COL_TXT);
     } else {
-        craft_font_draw(fb, "B:BACK", 2, 121, COL_DIM);
+        { char h[16]; snprintf(h, sizeof h, "%s:BACK", plat_menu_btn(MB_B));
+          craft_font_draw(fb, h, 2, 121, COL_DIM); }
     }
     /* Layer legends, bottom-right of the map area. */
     if (s_chart_layer == 1) {
@@ -738,5 +744,7 @@ void map_system_draw(uint16_t *fb) {
     }
 
     for (int x = 0; x < 128; x++) px(fb, x, 118, COL_GRID);
-    craft_font_draw(fb, "A:SUPERCRUISE B:BACK", 2, 121, COL_TXT);
+    { char h[36]; snprintf(h, sizeof h, "%s:SUPERCRUISE %s:BACK",
+        plat_menu_btn(MB_A), plat_menu_btn(MB_B));
+      craft_font_draw(fb, h, 2, 121, COL_TXT); }
 }

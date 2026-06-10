@@ -16,6 +16,7 @@
 #include "elite_audio.h"
 #include "ui_detail.h"
 #include "elite_entity.h"
+#include "elite_platform.h"
 #include "mission.h"
 #include "enames.h"
 #include "elite_weapons.h"
@@ -1360,7 +1361,9 @@ static void draw_home(uint16_t *fb) {
              player_cargo_cap());
     craft_font_draw(fb, fuel, 66, 108, COL_DIM);
     hl(fb, 118, COL_GRID);
-    craft_font_draw(fb, "A:SELECT MENU:LEAVE MENU", 2, 121, COL_DIM);
+    { char h[32]; snprintf(h, sizeof h, "%s:OPEN  %s:LEAVE",
+        plat_menu_btn(MB_A), plat_menu_btn(MB_B));
+      craft_font_draw(fb, h, 2, 121, COL_DIM); }
 }
 
 /* Centred action menu (market BUY/SELL, etc.). */
@@ -1438,8 +1441,10 @@ static void draw_market(uint16_t *fb) {
     snprintf(buf, sizeof buf, "HOLD %d/%d", player_cargo_total(),
              player_cargo_cap());
     craft_font_draw(fb, buf, 2, 116, COL_DIM);
-    craft_font_draw(fb, "A:TRADE", 78, 116, COL_DIM);
-    craft_font_draw(fb, "B:BACK", 2, 123, COL_DIM);
+    { char h[16]; snprintf(h, sizeof h, "%s:TRADE", plat_menu_btn(MB_A));
+      craft_font_draw(fb, h, 74, 116, COL_DIM);
+      snprintf(h, sizeof h, "%s:BACK", plat_menu_btn(MB_B));
+      craft_font_draw(fb, h, 2, 123, COL_DIM); }
     if (s_mkt_open) {
         static const char *const it[4] = { "BUY", "BUY MAX", "SELL", "SELL ALL" };
         draw_action_box(fb, k_goods[s_cursor].name, it, 4, s_mkt_cur);
@@ -1509,10 +1514,12 @@ static void draw_shipyard(uint16_t *fb) {
         }
     }
     hl(fb, 113, COL_GRID);
-    if (s_detail)
-        craft_font_draw(fb, "A:BUY INFO:KIT B:BACK", 2, 117, COL_DIM);
-    else
-        craft_font_draw(fb, "A:BUY INFO:DETAIL B:BACK", 2, 117, COL_DIM);
+    { char h[44];
+      if (s_detail) snprintf(h, sizeof h, "%s:BUY %s:KIT UP/DN:SHIP %s:BACK",
+          plat_menu_btn(MB_A), plat_menu_btn(MB_INFO), plat_menu_btn(MB_B));
+      else snprintf(h, sizeof h, "%s:BUY %s:DETAIL %s:BACK",
+          plat_menu_btn(MB_A), plat_menu_btn(MB_INFO), plat_menu_btn(MB_B));
+      craft_font_draw(fb, h, 2, 117, COL_DIM); }
     if (s_yard_confirm) {
         int idx = s_yard_confirm - 1;
         int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
@@ -1708,8 +1715,9 @@ static void draw_outfit(uint16_t *fb) {
         }
     }
     hl(fb, 113, COL_GRID);
-    craft_font_draw(fb, "A:ACTIONS  INFO:DETAIL  B:BACK", 2, 116,
-                    COL_DIM);
+    { char h[40]; snprintf(h, sizeof h, "%s:ACTIONS %s:DETAIL %s:BACK",
+        plat_menu_btn(MB_A), plat_menu_btn(MB_INFO), plat_menu_btn(MB_B));
+      craft_font_draw(fb, h, 2, 116, COL_DIM); }
     /* action popup */
     if (s_pop_open) {
         int ph = 14 + s_pop_n * 9;
@@ -1761,7 +1769,8 @@ static void draw_outfit(uint16_t *fb) {
             craft_font_draw(fb, nb, 27, py0 + 14 + i * 9, c);
         }
     }
-    craft_font_draw(fb, "B:BACK", 2, 123, COL_DIM);
+    { char h[16]; snprintf(h, sizeof h, "%s:BACK", plat_menu_btn(MB_B));
+      craft_font_draw(fb, h, 2, 123, COL_DIM); }
 }
 
 static void draw_missions(uint16_t *fb) {
@@ -1808,7 +1817,9 @@ static void draw_missions(uint16_t *fb) {
         y += 9;
     }
     hl(fb, 113, COL_GRID);
-    craft_font_draw(fb, "A:ACCEPT  B:BACK", 2, 116, COL_DIM);
+    { char h[28]; snprintf(h, sizeof h, "%s:ACCEPT  %s:BACK",
+        plat_menu_btn(MB_A), plat_menu_btn(MB_B));
+      craft_font_draw(fb, h, 2, 116, COL_DIM); }
     craft_font_draw(fb, "PAY ON RETURN TO ANY DOCK", 2, 123, COL_DIM);
 }
 
@@ -1861,7 +1872,8 @@ static void draw_bar(uint16_t *fb) {
         y += 8;
     }
     hl(fb, 118, COL_GRID);
-    craft_font_draw(fb, "A/MENU:BACK", 2, 121, COL_DIM);
+    { char h[16]; snprintf(h, sizeof h, "%s:BACK", plat_menu_btn(MB_B));
+      craft_font_draw(fb, h, 2, 121, COL_DIM); }
 }
 
 void station_draw(uint16_t *fb) {

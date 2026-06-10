@@ -2221,8 +2221,9 @@ static void dash_draw_panels(uint16_t *fb, int y0) {
                                         : RGB565C(110, 120, 140));
     }
     if (by + 20 < ELITE_FB_H)
-        craft_font_draw(fb, "A:OPEN B:RESUME", 22, by + 13,
-                        RGB565C(80, 95, 120));
+        { char h[28]; snprintf(h, sizeof h, "%s:OPEN %s:RESUME",
+            plat_menu_btn(MB_A), plat_menu_btn(MB_B));
+          craft_font_draw(fb, h, 22, by + 13, RGB565C(80, 95, 120)); }
 }
 
 static void dash_settings_overlay(uint16_t *fb) {
@@ -2258,8 +2259,8 @@ static void dash_settings_overlay(uint16_t *fb) {
             craft_font_draw(fb, ">", 18, row_y + i * 9, c);
         craft_font_draw(fb, si2[i], 25, row_y + i * 9, c);
     }
-    craft_font_draw(fb, "</>:ADJUST B:BACK", 18, bot - 12,
-                    RGB565C(95, 110, 140));
+    { char h[28]; snprintf(h, sizeof h, "</>:ADJUST %s:BACK", plat_menu_btn(MB_B));
+      craft_font_draw(fb, h, 18, bot - 12, RGB565C(95, 110, 140)); }
 }
 
 void elite_game_draw_overlay(uint16_t *fb) {

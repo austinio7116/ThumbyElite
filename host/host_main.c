@@ -163,6 +163,9 @@ extern float g_dbg_dustf[4];
 static SDL_GameController *s_pad;
 static SDL_Joystick       *s_joy;          /* a non-mapped stick = HOTAS */
 static SDL_JoystickID      s_joy_id = -1;
+/* Active flight device (last actuated wins; see host_input_apply). */
+enum { DEV_NONE, DEV_HOTAS, DEV_PAD };
+static int s_active_dev = DEV_NONE;
 
 /* HOTAS bindings, indexed by CtrlAxis / CtrlButton (-1 button = unbound).
  * Defaults suit a twist stick with a combined throttle and reproduce the old
@@ -348,6 +351,33 @@ void plat_ctrl_monitor(void) {
 }
 const char *plat_ctrl_last_input(void) { return s_last_in; }
 
+/* Menu-hint button label for the active device. HOTAS shows the configured
+ * button number (or "—" if unbound); gamepad/keyboard show device-style names
+ * (the gamepad's LB bumper and Y both drive Info in menus). */
+const char *plat_menu_btn(int action) {
+    static char buf[6];
+    if (s_active_dev == DEV_HOTAS) {
+        int b;
+        switch (action) {
+        case MB_A:    b = s_btn[CTRL_BTN_MENU_SELECT] >= 0
+                          ? s_btn[CTRL_BTN_MENU_SELECT] : s_btn[CTRL_BTN_FIRE]; break;
+        case MB_B:    b = s_btn[CTRL_BTN_MENU_BACK] >= 0
+                          ? s_btn[CTRL_BTN_MENU_BACK] : s_btn[CTRL_BTN_CYCLE_WEAPON]; break;
+        case MB_INFO: b = s_btn[CTRL_BTN_MENU_INFO]; break;
+        default:      b = s_btn[CTRL_BTN_MENU]; break;
+        }
+        if (b < 0) return "--";
+        snprintf(buf, sizeof buf, "B%d", b);
+        return buf;
+    }
+    switch (action) {     /* gamepad + keyboard: device-style names */
+    case MB_A:    return "A";
+    case MB_B:    return "B";
+    case MB_INFO: return "LB";
+    default:      return s_active_dev == DEV_PAD ? "STRT" : "MENU";
+    }
+}
+
 static void host_input_open(int index) {
     if (SDL_IsGameController(index)) {
         if (!s_pad) {
@@ -386,9 +416,6 @@ static float dz(float v, float d) { return (v > -d && v < d) ? 0.0f : v; }
 /* When both a HOTAS and a gamepad are connected, the one you last actuated
  * (stick deflected or a button pressed — the resting throttle lever doesn't
  * count) becomes the active flight device. Just grab the other and move it. */
-enum { DEV_NONE, DEV_HOTAS, DEV_PAD };
-static int s_active_dev = DEV_NONE;
-
 static bool joy_has_input(void) {
     if (!s_joy) return false;
     for (int i = 0; i < SDL_JoystickNumButtons(s_joy); i++)
@@ -425,7 +452,9 @@ static void gamepad_apply(CraftRawButtons *btn, bool inmenu) {
     if (inmenu) {
         if (GB(SDL_CONTROLLER_BUTTON_A)) btn->a = true;   /* select */
         if (GB(SDL_CONTROLLER_BUTTON_B)) btn->b = true;   /* back */
-        if (GB(SDL_CONTROLLER_BUTTON_Y)) btn->lb = true;  /* Info */
+        if (GB(SDL_CONTROLLER_BUTTON_LEFTSHOULDER) ||
+            GB(SDL_CONTROLLER_BUTTON_Y)) btn->lb = true;  /* Info (LB or Y) */
+        if (GB(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) btn->rb = true;
         return;
     }
     bool rt = SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000;

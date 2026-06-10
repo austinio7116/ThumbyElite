@@ -114,6 +114,12 @@ void plat_ctrl_clear(int kind, int which) { (void)kind; (void)which; }
 void plat_ctrl_save(void) {}
 void plat_ctrl_monitor(void) {}
 const char *plat_ctrl_last_input(void) { return ""; }
+const char *plat_menu_btn(int action) {   /* touch + gamepad both have these */
+    switch (action) {
+    case MB_A: return "A"; case MB_B: return "B";
+    case MB_INFO: return "LB"; default: return "MENU";
+    }
+}
 
 int plat_save(const uint8_t *data, int len) {
     SDL_RWops *f = SDL_RWFromFile(g_sav_path, "wb");
@@ -547,7 +553,9 @@ int main(int argc, char *argv[]) {
             if (inmenu) {
                 if (GBTN(SDL_CONTROLLER_BUTTON_A)) btn.a = true;
                 if (GBTN(SDL_CONTROLLER_BUTTON_B)) btn.b = true;
-                if (GBTN(SDL_CONTROLLER_BUTTON_Y)) btn.lb = true;  /* Info */
+                if (GBTN(SDL_CONTROLLER_BUTTON_LEFTSHOULDER) ||
+                    GBTN(SDL_CONTROLLER_BUTTON_Y)) btn.lb = true;  /* Info */
+                if (GBTN(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) btn.rb = true;
             } else {
                 bool plb = GBTN(SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
                 bool prb = GBTN(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
