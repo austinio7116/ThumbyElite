@@ -133,7 +133,15 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows" AND NOT MSVC)
     set(ELITE_WIN_RC ${ELITE_ROOT}/host/win/thumbyelite.rc)   # icon + version
 endif()
 
-foreach(tgt IN ITEMS thumbyelite_host thumbyelite_host_hires thumbyelite_host_quad)
+# Linux/macOS build all three resolutions for dev/preview; the Windows
+# distributable is the quad-res game only (MinGW cross or MSVC native).
+if(WIN32)
+    set(ELITE_TARGETS thumbyelite_host_quad)
+else()
+    set(ELITE_TARGETS thumbyelite_host thumbyelite_host_hires thumbyelite_host_quad)
+endif()
+
+foreach(tgt IN LISTS ELITE_TARGETS)
     if(WIN_CROSS)
         add_executable(${tgt} ${ELITE_SRC} ${ELITE_WIN_RC})
     else()
@@ -155,8 +163,10 @@ foreach(tgt IN ITEMS thumbyelite_host thumbyelite_host_hires thumbyelite_host_qu
         target_link_options(${tgt} PRIVATE -mwindows -static-libgcc)
     endif()
 endforeach()
-target_compile_definitions(thumbyelite_host_hires PRIVATE
-    R3D_SS=2 ELITE_OVERLAY_SPLIT=1)
+if(TARGET thumbyelite_host_hires)
+    target_compile_definitions(thumbyelite_host_hires PRIVATE
+        R3D_SS=2 ELITE_OVERLAY_SPLIT=1)
+endif()
 target_compile_definitions(thumbyelite_host_quad PRIVATE
     R3D_SS=4 ELITE_OVERLAY_SPLIT=1)
 

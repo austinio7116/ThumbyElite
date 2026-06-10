@@ -88,11 +88,12 @@ and SDL2. Two routes:
 pacman -S mingw-w64-x86_64-{gcc,cmake,SDL2}      # in an MSYS2 MinGW64 shell
 cmake -B build_host -S host -G "MinGW Makefiles"
 cmake --build build_host -j8
-./build_host/thumbyelite_host_quad.exe
+./build_host/ThumbyElite.exe            # quad-res; copy SDL2.dll alongside it
 ```
 
-The save (`thumbyelite.sav`) and settings (`thumbyelite_settings.dat`) are
-written to the working directory.
+On Windows only the quad-res target is built (it's the shippable game); the
+128/256 preview builds are Linux-only. The save (`thumbyelite.sav`) and
+settings (`thumbyelite_settings.dat`) are written to the working directory.
 
 ## Controls
 
