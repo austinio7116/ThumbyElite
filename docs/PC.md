@@ -17,9 +17,53 @@ cmake -B build_host -S host && cmake --build build_host -j8
 ./build_host/thumbyelite_host_quad
 ```
 
+**Running under WSL2:** the window shows via WSLg. If you get a running process
+but no window, it's usually a stale/custom SDL2 in `/usr/local` taking
+precedence over the stock package — check with `ldd build_host/thumbyelite_host_quad | grep -i sdl`
+and prefer Ubuntu's `libsdl2-dev`. The build now also falls back to a software
+renderer when WSLg can't give an accelerated context. If WSLg windows misbehave
+generally, `wsl --shutdown` (from Windows) and reopen. The native Windows build
+below sidesteps WSLg entirely.
+
 ## Build & run — Windows
 
-You need CMake, a compiler, and SDL2. Two easy routes:
+### Distributable build (recommended) — cross-compile from Linux/WSL2
+
+This is how the shipped Windows package is built. It cross-compiles with
+MinGW-w64 and produces a self-contained, **Steam-ready** folder — no Windows
+machine or Visual Studio needed.
+
+```bash
+sudo apt install mingw-w64 cmake build-essential   # once
+tools/build_win.sh                                  # fetches SDL2, builds, packages
+```
+
+Output: **`build_win/dist/`** containing `ThumbyElite.exe` (GUI subsystem — no
+console window, embedded icon + version info) + `SDL2.dll` + `README.txt`. The
+`.exe`'s only runtime dependencies are `SDL2.dll` and standard Windows system
+DLLs (`-static-libgcc`, so no MinGW runtime stragglers). Hand that folder to
+any 64-bit Windows user, or use it directly as a Steam depot.
+
+Under the hood: `host/toolchain-mingw-w64.cmake` drives the cross-build; the
+mesh baker (`obj2mesh`) is forced to the native compiler so it still runs
+during the build; `host/win/thumbyelite.rc` supplies the icon + version
+resource; `tools/fetch_sdl2_mingw.sh` vendors the official SDL2 MinGW devel
+libs (pinned, gitignored).
+
+#### Steam notes
+
+- A MinGW + dynamic-SDL2 build is fine for Steam (many SDL games ship exactly
+  this). The depot is just the `dist/` folder; set the launch executable to
+  `ThumbyElite.exe`.
+- The save (`thumbyelite.sav`) and settings (`thumbyelite_settings.dat`) are
+  written next to the `.exe`. For Steam Cloud, point it at those two files (or
+  switch the save path to `%USERPROFILE%/Saved Games` before release).
+- Version info is in `host/win/thumbyelite.rc` (currently `1.0.0.0`).
+
+### Build *on* Windows instead
+
+If you'd rather build natively on a Windows box, you need CMake, a compiler,
+and SDL2. Two routes:
 
 ### MSVC (Visual Studio)
 

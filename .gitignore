@@ -1,9 +1,17 @@
 build_host/
 build_device/
+build_win/
 *.o
 *.elf
 *.sav
 *.ppm
 *.png
+# Vendored SDL2 MinGW devel libs for the Windows cross-build — large,
+# reproducible via tools/fetch_sdl2_mingw.sh:
+host/win/SDL2/
 # the Pilot's Handbook images must ship:
 !docs/img/*.png
+# the Windows launcher icon must ship:
+!host/win/*.ico
+!host/win/*.png
+thumbyelite_settings.dat
