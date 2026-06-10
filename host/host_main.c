@@ -166,12 +166,65 @@ static SDL_JoystickID      s_joy_id = -1;
 /* HOTAS axis map + per-axis invert (env-overridable). Defaults suit a
  * twist stick with a combined throttle (e.g. Logitech Extreme 3D / T16000). */
 static int s_hx_yaw = 0, s_hx_pitch = 1, s_hx_roll = 3, s_hx_thr = 2;
-static int s_hi_yaw = 0, s_hi_pitch = 1, s_hi_roll = 0, s_hi_thr = 0;
-static bool s_hotas_dbg;
+static int s_hi_yaw = 0, s_hi_pitch = 1, s_hi_roll = 0, s_hi_thr = 1;
+/* HOTAS button -> game action (button index per action). */
+static int s_btn_fire = 0, s_btn_cyc = 1, s_btn_lb = 3, s_btn_rb = 2, s_btn_menu = 4;
+static bool s_hotas_dbg;       /* stdout axis dump (Linux) */
+static bool s_hotas_title;     /* F1: live axis/button readout in title bar */
 
 static int env_axis(const char *name, int def) {
     const char *e = getenv(name);
     return e ? atoi(e) : def;
+}
+
+/* HOTAS config file (next to the exe) — axis numbers and button bindings
+ * vary by device, and the Windows build has no console, so this is how you
+ * configure a stick there. A template is written on first run. */
+#define HOTAS_CFG "thumbyelite_hotas.cfg"
+static void hotas_cfg_write_default(void) {
+    FILE *f = fopen(HOTAS_CFG, "w");
+    if (!f) return;
+    fprintf(f,
+        "# ThumbyElite HOTAS configuration.\n"
+        "# Axis/button numbers vary by device. Press F1 in-game to show live\n"
+        "# axis values + pressed buttons in the window title, then edit below.\n"
+        "# Flight axes (which joystick axis drives each control):\n"
+        "yaw=%d\npitch=%d\nroll=%d\nthrottle=%d\n"
+        "# Invert an axis (0 or 1):\n"
+        "yaw_invert=%d\npitch_invert=%d\nroll_invert=%d\nthrottle_invert=%d\n"
+        "# Button bindings (which HOTAS button does each action):\n"
+        "#   fire   = fire the active weapon\n"
+        "#   cycle  = switch active weapon / 'back' in menus  (the B button)\n"
+        "#   target = cycle target (LB) ; assist = flight-assist/boost (RB)\n"
+        "#   menu   = pause / dashboard\n"
+        "btn_fire=%d\nbtn_cycle=%d\nbtn_target=%d\nbtn_assist=%d\nbtn_menu=%d\n",
+        s_hx_yaw, s_hx_pitch, s_hx_roll, s_hx_thr,
+        s_hi_yaw, s_hi_pitch, s_hi_roll, s_hi_thr,
+        s_btn_fire, s_btn_cyc, s_btn_lb, s_btn_rb, s_btn_menu);
+    fclose(f);
+}
+static void hotas_cfg_load(void) {
+    FILE *f = fopen(HOTAS_CFG, "r");
+    if (!f) { hotas_cfg_write_default(); return; }
+    char line[160], key[64]; int val;
+    while (fgets(line, sizeof line, f)) {
+        if (line[0] == '#') continue;
+        if (sscanf(line, " %63[a-z_] = %d", key, &val) != 2) continue;
+        if      (!strcmp(key, "yaw"))            s_hx_yaw = val;
+        else if (!strcmp(key, "pitch"))          s_hx_pitch = val;
+        else if (!strcmp(key, "roll"))           s_hx_roll = val;
+        else if (!strcmp(key, "throttle"))       s_hx_thr = val;
+        else if (!strcmp(key, "yaw_invert"))     s_hi_yaw = val;
+        else if (!strcmp(key, "pitch_invert"))   s_hi_pitch = val;
+        else if (!strcmp(key, "roll_invert"))    s_hi_roll = val;
+        else if (!strcmp(key, "throttle_invert"))s_hi_thr = val;
+        else if (!strcmp(key, "btn_fire"))       s_btn_fire = val;
+        else if (!strcmp(key, "btn_cycle"))      s_btn_cyc = val;
+        else if (!strcmp(key, "btn_target"))     s_btn_lb = val;
+        else if (!strcmp(key, "btn_assist"))     s_btn_rb = val;
+        else if (!strcmp(key, "btn_menu"))       s_btn_menu = val;
+    }
+    fclose(f);
 }
 
 static void host_input_reset_axes(void) {
