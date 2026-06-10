@@ -1489,6 +1489,7 @@ static void tick_hyperjump(float dt) {
 void elite_game_tick(const CraftRawButtons *btn, float dt) {
     if (dt > 1e-4f)
         s_fps += (1.0f / dt - s_fps) * 0.08f;     /* smoothed FPS */
+    s_time += dt;                                 /* real-time animation clock */
     bool menu_edge = btn->menu && !s_prev_menu;
     s_prev_menu = btn->menu;
     bool a_edge = btn->a && !s_prev_a;
@@ -2228,9 +2229,8 @@ void elite_game_draw_overlay(uint16_t *fb) {
                         RGB565C(110, 255, 110));   /* above the chaff */
     }
 
-    /* s_time advances here (called once per frame, post-render). */
-    /* (dt not available; approximate from frame ms readout) */
-    s_time += 0.033f;
+    /* (s_time advances in elite_game_tick by real dt — frame-rate
+     * independent, so station/ship preview spin at a fixed real speed.) */
 
     switch (s_state) {
     case ST_TITLE: {

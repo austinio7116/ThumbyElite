@@ -222,10 +222,52 @@ static float jaxis(SDL_Joystick *j, int idx, int inv) {
 }
 static float dz(float v, float d) { return (v > -d && v < d) ? 0.0f : v; }
 
+/* When both a HOTAS and a gamepad are connected, the one you last actuated
+ * (stick deflected or a button pressed — the resting throttle lever doesn't
+ * count) becomes the active flight device. Just grab the other and move it. */
+enum { DEV_NONE, DEV_HOTAS, DEV_PAD };
+static int s_active_dev = DEV_NONE;
+
+static bool joy_has_input(void) {
+    if (!s_joy) return false;
+    for (int i = 0; i < SDL_JoystickNumButtons(s_joy); i++)
+        if (SDL_JoystickGetButton(s_joy, i)) return true;
+    if (fabsf(jaxis(s_joy, s_hx_yaw,   0)) > 0.5f) return true;
+    if (fabsf(jaxis(s_joy, s_hx_pitch, 0)) > 0.5f) return true;
+    if (fabsf(jaxis(s_joy, s_hx_roll,  0)) > 0.5f) return true;
+    if (SDL_JoystickNumHats(s_joy) > 0 &&
+        SDL_JoystickGetHat(s_joy, 0) != SDL_HAT_CENTERED) return true;
+    return false;
+}
+static bool pad_has_input(void) {
+    if (!s_pad) return false;
+    for (int b = 0; b < SDL_CONTROLLER_BUTTON_MAX; b++)
+        if (SDL_GameControllerGetButton(s_pad, (SDL_GameControllerButton)b)) return true;
+    if (fabsf(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_LEFTX)  / 32767.0f) > 0.5f) return true;
+    if (fabsf(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_LEFTY)  / 32767.0f) > 0.5f) return true;
+    if (fabsf(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_RIGHTX) / 32767.0f) > 0.5f) return true;
+    if (SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000) return true;
+    return false;
+}
+
 /* Augment the keyboard-built btn with controller/HOTAS state, and drive the
  * analog/throttle hooks. gpad_sens scales the aim axes (settings slider). */
 static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
-    if (s_joy) {                            /* --- HOTAS --- */
+    /* Pick the active device: last actuated wins; default to the HOTAS. */
+    if (s_joy && joy_has_input())      s_active_dev = DEV_HOTAS;
+    else if (s_pad && pad_has_input()) s_active_dev = DEV_PAD;
+    if (s_active_dev == DEV_HOTAS && !s_joy) s_active_dev = DEV_NONE;
+    if (s_active_dev == DEV_PAD   && !s_pad) s_active_dev = DEV_NONE;
+    if (s_active_dev == DEV_NONE)
+        s_active_dev = s_joy ? DEV_HOTAS : (s_pad ? DEV_PAD : DEV_NONE);
+    static int s_prev_dev = DEV_NONE;
+    if (s_active_dev != s_prev_dev && s_active_dev != DEV_NONE) {
+        printf("[input] active device: %s\n",
+               s_active_dev == DEV_HOTAS ? "HOTAS" : "gamepad");
+        s_prev_dev = s_active_dev;
+    }
+
+    if (s_active_dev == DEV_HOTAS) {        /* --- HOTAS --- */
         float yaw   = dz(jaxis(s_joy, s_hx_yaw,   s_hi_yaw),   0.08f);
         float pitch = dz(jaxis(s_joy, s_hx_pitch, s_hi_pitch), 0.08f);
         float roll  = dz(jaxis(s_joy, s_hx_roll,  s_hi_roll),  0.10f);
@@ -262,7 +304,7 @@ static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
                 printf("  btns=0x%x\n", bm);
             }
         }
-    } else if (s_pad) {                     /* --- gamepad --- */
+    } else if (s_active_dev == DEV_PAD) {   /* --- gamepad --- */
         float lx = dz(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_LEFTX)  / 32767.0f, 0.15f);
         float ly = dz(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_LEFTY)  / 32767.0f, 0.15f);
         float rx = dz(SDL_GameControllerGetAxis(s_pad, SDL_CONTROLLER_AXIS_RIGHTX) / 32767.0f, 0.15f);
