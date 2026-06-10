@@ -115,9 +115,16 @@ static bool  s_settings_eat_b;   /* swallow a held B returning from a subscreen 
  * Android shells define ELITE_ANALOG_SETTINGS to add gamepad + touch-stick
  * sensitivity sliders, plus a CONTROLLER row when a controller is present. */
 #ifdef ELITE_ANALOG_SETTINGS
-#define SETTINGS_MAX 7    /* invert,fps,vol,bright,gpad,stick,controller */
+#ifdef ELITE_INPUT_SELECT     /* PC: + an INPUT (HOTAS/gamepad/keyboard) row */
+#define SETTINGS_MAX 8        /* invert,fps,vol,bright,gpad,stick,input,controller */
+#define ROW_INPUT 6
+#define ROW_CTRL  7
+#else                         /* Android: no HOTAS/keyboard, no INPUT row */
+#define SETTINGS_MAX 7        /* invert,fps,vol,bright,gpad,stick,controller */
+#define ROW_CTRL  6
+#endif
 static int settings_rows(void) {
-    return plat_ctrl_present() ? 7 : 6;
+    return plat_ctrl_present() ? SETTINGS_MAX : 6;
 }
 #else
 #define SETTINGS_MAX 4
@@ -1720,7 +1727,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
                 else if (s_settings_cursor == 1)
                     g_player.show_fps = !g_player.show_fps;
 #ifdef ELITE_ANALOG_SETTINGS
-                else if (s_settings_cursor == 6) {     /* CONTROLLER row */
+                else if (s_settings_cursor == ROW_CTRL) {   /* CONTROLLER row */
                     ctrlsetup_open();
                     s_state = ST_CTRLSETUP;
                     sfx_ui_select();
@@ -1728,7 +1735,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
                 }
 #endif
                 else
-                    dir = 1;                 /* A nudges sliders up */
+                    dir = 1;                 /* A nudges sliders / cycles input */
             }
             if (dir && s_settings_cursor == 2) {
                 int v = plat_setting_get(0) + dir * 2;     /* 0..20 */
@@ -1751,6 +1758,15 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
                 plat_setting_set(which, s);
                 sfx_ui_move();
             }
+#ifdef ELITE_INPUT_SELECT
+            else if (dir && s_settings_cursor == ROW_INPUT) {
+                int n = plat_setting_get(4) + dir;   /* INPUT: AUTO/HOTAS/PAD/KBD */
+                if (n < 0) n = 3;
+                if (n > 3) n = 0;
+                plat_setting_set(4, n);
+                sfx_ui_move();
+            }
+#endif
             bool b_back = btn->b && !pb2;
             if (s_settings_eat_b) {       /* swallow B held from a subscreen */
                 if (!btn->b) s_settings_eat_b = false;
@@ -2227,7 +2243,7 @@ static void dash_draw_panels(uint16_t *fb, int y0) {
 }
 
 static void dash_settings_overlay(uint16_t *fb) {
-    char vrow[20], brow[20], grow[20], srow[20];
+    char vrow[20], brow[20], grow[20], srow[20], irow[20];
     snprintf(vrow, sizeof vrow, "VOLUME    %3d%%", plat_setting_get(0) * 5);
     snprintf(brow, sizeof brow, "BRIGHT    %3d%%",
              (plat_setting_get(1) * 100) / 255);
@@ -2242,7 +2258,14 @@ static void dash_settings_overlay(uint16_t *fb) {
     snprintf(srow, sizeof srow, "STICK     %3d%%", plat_setting_get(3) * 10);
     si2[4] = grow;
     si2[5] = srow;
-    si2[6] = "CONTROLLER...";
+#ifdef ELITE_INPUT_SELECT
+    static const char *k_indev[4] = { "AUTO", "HOTAS", "GAMEPAD", "KEYBOARD" };
+    snprintf(irow, sizeof irow, "INPUT   %s", k_indev[plat_setting_get(4) & 3]);
+    si2[ROW_INPUT] = irow;
+#else
+    (void)irow;
+#endif
+    si2[ROW_CTRL] = "CONTROLLER...";
 #else
     (void)grow; (void)srow;
 #endif

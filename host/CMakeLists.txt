@@ -157,7 +157,7 @@ foreach(tgt IN LISTS ELITE_TARGETS)
         ${SDL2_INCLUDE_DIRS}
     )
     target_link_libraries(${tgt} PRIVATE ${SDL2_LIBRARIES} m)
-    target_compile_definitions(${tgt} PRIVATE ELITE_INPUT_DEBUG=1 ELITE_ANALOG_SETTINGS=1)
+    target_compile_definitions(${tgt} PRIVATE ELITE_INPUT_DEBUG=1 ELITE_ANALOG_SETTINGS=1 ELITE_INPUT_SELECT=1)
     if(WIN_CROSS)
         # GUI subsystem (no console window) + static libgcc so the .exe needs
         # only SDL2.dll alongside it.

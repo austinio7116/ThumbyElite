@@ -69,12 +69,16 @@ static uint16_t g_fb[ELITE_FB_W * ELITE_FB_H];
 
 /* --- platform hooks ----------------------------------------------------*/
 /* 0 volume, 1 brightness, 2 gamepad sens (x0.1), 3 touch-stick sens. */
-static int s_host_settings[4] = { 10, 255, 10, 10 };
+/* [4] = input-device override: 0 AUTO, 1 HOTAS, 2 GAMEPAD, 3 KEYBOARD. */
+#define HOST_NSETTINGS 5
+static int s_host_settings[HOST_NSETTINGS] = { 10, 255, 10, 10, 0 };
 int plat_setting_get(int which) {
-    return s_host_settings[which & 3];
+    if (which < 0 || which >= HOST_NSETTINGS) return 0;
+    return s_host_settings[which];
 }
 void plat_setting_set(int which, int value) {
-    s_host_settings[which & 3] = value;
+    if (which < 0 || which >= HOST_NSETTINGS) return;
+    s_host_settings[which] = value;
     if (which == 0) audio_set_master((float)value / 20.0f);
     /* brightness (1): no-op on host. sensitivity (2,3): read each frame
      * when applying analog input — no side effect here. Persisted on quit. */
@@ -494,13 +498,20 @@ static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
      * ship — suppress all analog so sweeping the throttle doesn't fly you. The
      * keyboard (built before this) still works to cancel. */
     if (s_cap.active) { host_input_reset_axes(); return; }
-    /* Pick the active device: last actuated wins; default to the HOTAS. */
-    if (s_joy && joy_has_input())      s_active_dev = DEV_HOTAS;
-    else if (s_pad && pad_has_input()) s_active_dev = DEV_PAD;
-    if (s_active_dev == DEV_HOTAS && !s_joy) s_active_dev = DEV_NONE;
-    if (s_active_dev == DEV_PAD   && !s_pad) s_active_dev = DEV_NONE;
-    if (s_active_dev == DEV_NONE)
-        s_active_dev = s_joy ? DEV_HOTAS : (s_pad ? DEV_PAD : DEV_NONE);
+    /* Device selection. SETTINGS > INPUT can force one (1 HOTAS / 2 GAMEPAD /
+     * 3 KEYBOARD); 0 = AUTO (last actuated wins, default to whatever's there). */
+    int sel = s_host_settings[4];
+    if (sel == 1)      s_active_dev = s_joy ? DEV_HOTAS : DEV_NONE;
+    else if (sel == 2) s_active_dev = s_pad ? DEV_PAD   : DEV_NONE;
+    else if (sel == 3) s_active_dev = DEV_NONE;          /* keyboard only */
+    else {                                               /* AUTO */
+        if (s_joy && joy_has_input())      s_active_dev = DEV_HOTAS;
+        else if (s_pad && pad_has_input()) s_active_dev = DEV_PAD;
+        if (s_active_dev == DEV_HOTAS && !s_joy) s_active_dev = DEV_NONE;
+        if (s_active_dev == DEV_PAD   && !s_pad) s_active_dev = DEV_NONE;
+        if (s_active_dev == DEV_NONE)
+            s_active_dev = s_joy ? DEV_HOTAS : (s_pad ? DEV_PAD : DEV_NONE);
+    }
     static int s_prev_dev = DEV_NONE;
     if (s_active_dev != s_prev_dev && s_active_dev != DEV_NONE) {
         printf("[input] active device: %s\n",
@@ -605,16 +616,17 @@ static const char *HOST_SETTINGS_FILE = "thumbyelite_settings.dat";
 static void host_settings_load(void) {
     FILE *f = fopen(HOST_SETTINGS_FILE, "rb");
     if (!f) return;
-    int tmp[4];
-    if (fread(tmp, sizeof(int), 4, f) == 4) {
-        for (int i = 0; i < 4; i++) plat_setting_set(i, tmp[i]);
-    }
+    int tmp[HOST_NSETTINGS];
+    /* Read as many ints as the file holds (older files have 4); leave the
+     * rest at their defaults. */
+    int n = (int)fread(tmp, sizeof(int), HOST_NSETTINGS, f);
+    for (int i = 0; i < n; i++) plat_setting_set(i, tmp[i]);
     fclose(f);
 }
 static void host_settings_save(void) {
     FILE *f = fopen(HOST_SETTINGS_FILE, "wb");
     if (!f) return;
-    fwrite(s_host_settings, sizeof(int), 4, f);
+    fwrite(s_host_settings, sizeof(int), HOST_NSETTINGS, f);
     fclose(f);
 }
 
@@ -1505,6 +1517,15 @@ int main(int argc, char **argv) {
         CraftRawButtons none = {0};
         for (int k = 0; k < 6; k++) elite_game_tick(&none, 1.0f / 30.0f);
         ctrlsetup_open();
+        extern bool ctrlsetup_tick(const CraftRawButtons *, float);
+        if (getenv("ELITE_CTRLSHOT_BOT")) {     /* scroll to the bottom rows */
+            CraftRawButtons dn = {0}; dn.down = true;
+            ctrlsetup_tick(&none, 1.0f / 30.0f);            /* arm */
+            for (int k = 0; k < 17; k++) {
+                ctrlsetup_tick(&dn, 1.0f / 30.0f);
+                ctrlsetup_tick(&none, 1.0f / 30.0f);
+            }
+        }
 #ifdef ELITE_OVERLAY_SPLIT
         elite_game_render_begin(); elite_game_render(g_fb3d, 0, ELITE_FB_H);
         for (int i = 0; i < ELITE_FB_W * ELITE_FB_H; i++) g_fbui[i] = ELITE_KEY_T;
