@@ -1063,7 +1063,8 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
     bool a_edge = btn->a && !s_prev.a;
     bool b_edge = btn->b && !s_prev.b;
     bool lb_edge = btn->lb && !s_prev.lb;
-    bool rb_edge = btn->rb && !s_prev.rb;
+    bool left  = btn->left  && !s_prev.left;    /* compare prev */
+    bool right = btn->right && !s_prev.right;   /* compare next */
     /* Hold-to-scroll (user req): edge fires immediately, then repeats
      * after 0.35s at ~8/s. */
     static float s_rep_up, s_rep_dn;
@@ -1151,8 +1152,8 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
             break;
         }
         if (s_detail) {
-            if (up)   s_cursor = (s_cursor + YARD_OFFERS) % (YARD_OFFERS + 1);
-            if (down) s_cursor = (s_cursor + 1) % (YARD_OFFERS + 1);
+            if (left)  s_cursor = (s_cursor + YARD_OFFERS) % (YARD_OFFERS + 1);
+            if (right) s_cursor = (s_cursor + 1) % (YARD_OFFERS + 1);
             if (lb_edge) s_kit_view = !s_kit_view;       /* Info = kit view */
             if (a_edge && s_cursor < YARD_OFFERS) s_yard_confirm = s_cursor + 1;
             if (back) { if (s_kit_view) s_kit_view = 0; else s_detail = 0; }
@@ -1191,10 +1192,10 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
             break;
         }
         if (s_detail) {
-            /* Up/Down loop through every row WITH a sheet, wrapping at the
+            /* Left/Right loop through every row WITH a sheet, wrapping at the
              * ends — headers, empty mounts and bare slots are skipped. */
-            if (up || down) {
-                int dir = down ? 1 : -1;
+            if (left || right) {
+                int dir = right ? 1 : -1;
                 int n = s_cursor;
                 for (int tries = 0; tries < s_n_rows; tries++) {
                     n = (n + dir + s_n_rows) % s_n_rows;
@@ -1515,7 +1516,7 @@ static void draw_shipyard(uint16_t *fb) {
     }
     hl(fb, 113, COL_GRID);
     { char h[44];
-      if (s_detail) snprintf(h, sizeof h, "%s:BUY %s:KIT UP/DN:SHIP %s:BACK",
+      if (s_detail) snprintf(h, sizeof h, "%s:BUY %s:KIT </>:CMP %s:BACK",
           plat_menu_btn(MB_A), plat_menu_btn(MB_INFO), plat_menu_btn(MB_B));
       else snprintf(h, sizeof h, "%s:BUY %s:DETAIL %s:BACK",
           plat_menu_btn(MB_A), plat_menu_btn(MB_INFO), plat_menu_btn(MB_B));
