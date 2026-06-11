@@ -190,14 +190,11 @@ else()
     set(ELITE_HEAP_SIZE 0x4000)
 endif()
 
-# Experimental flight scheme: plain d-pad L/R = roll, hold LB + L/R = yaw.
-option(ELITE_DPAD_ROLL "Device: plain L/R = roll, LB+L/R = yaw" ON)
 target_compile_definitions(thumbyelite PRIVATE
     PICO_HEAP_SIZE=${ELITE_HEAP_SIZE}
     PICO_STACK_SIZE=0x1000
     PICO_CORE1_STACK_SIZE=0x1000
     $<$<BOOL:${THUMBYONE_SLOT_MODE}>:THUMBYONE_SLOT_MODE=1>
-    $<$<BOOL:${ELITE_DPAD_ROLL}>:ELITE_DPAD_ROLL=1>
 )
 
 pico_enable_stdio_usb(thumbyelite 0)

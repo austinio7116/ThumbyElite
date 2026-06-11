@@ -209,17 +209,17 @@ static void nebula_fill(uint16_t *fb, int y0p, int y1p) {
         for (int x = 0; x < R3D_FB_W; x += STEP) {
             float vx = ((float)x + 0.5f * STEP - cx) / focal;
             Vec3 d = v3_norm(m3_mul_v3(cam, v3(vx, vy, 1.0f)));
-            const float F = 1.5f;          /* low freq = large clouds */
+            const float F = 1.2f;          /* low freq = large clouds */
             float n = nb_noise(d.x * F + 40.0f + ox, d.y * F + 40.0f) * 0.5f +
                       nb_noise(d.z * F + 17.0f, d.x * F) * 0.3f +
                       nb_noise(d.y * F + 7.0f,  d.z * F + 23.0f) * 0.2f;
             uint16_t c = 0;
-            if (n > 0.56f) {               /* high threshold = patchy, not everywhere */
-                float k = (n - 0.56f) * 2.4f * s_neb_str; if (k > 1.0f) k = 1.0f;
+            if (n > 0.52f) {               /* patchy, but visible where it is */
+                float k = (n - 0.52f) * 2.4f * s_neb_str; if (k > 1.0f) k = 1.0f;
                 float w = nb_noise(d.x * F + 77.0f, d.z * F - 19.0f);
-                int r = (int)(k * (w > 0.55f ? 9 : 4));   /* faint */
-                int g = (int)(k * 3);
-                int b = (int)(k * (w > 0.55f ? 8 : 13));
+                int r = (int)(k * (w > 0.55f ? 21 : 9));   /* red patches in a blue wash */
+                int g = (int)(k * 6);
+                int b = (int)(k * (w > 0.55f ? 16 : 25));
                 c = (uint16_t)(((r & 31) << 11) | ((g & 63) << 5) | (b & 31));
             }
             for (int yy = y; yy < y + STEP && yy < y1p; yy++)

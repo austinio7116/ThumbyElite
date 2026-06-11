@@ -144,6 +144,8 @@ static bool  s_cheat_on;         /* fat starting wallet armed */
 static char  s_scoop_toast[28];
 static float s_scoop_toast_t;
 static float s_frame_ms;
+static Vec3  s_title_ctr;        /* title brawl centre (local m) */
+static Vec3  s_title_perp;       /* side axis separating the two factions */
 static int   s_pause_cursor;
 static bool  s_prev_menu, s_prev_a;
 
@@ -219,6 +221,7 @@ void elite_game_debug_goto_poi(int n) {
 }
 
 void elite_game_crit_toast(const char *msg, bool mine) {
+    if (s_state == ST_TITLE) return;        /* title brawl is silent in the HUD */
     snprintf(s_scoop_toast, sizeof s_scoop_toast, "%s", msg);
     s_scoop_toast_t = mine ? 2.6f : 1.8f;
     if (mine) sfx_lock_warn();
@@ -802,19 +805,37 @@ void elite_game_init(uint32_t seed) {
         if (!done) system_enter((SysAddr){ 0, 0, 0 });   /* fallback: any system */
     }
 
-    /* Title battle: a spectator camera parked off to one side of an open-space
-     * brawl. drop_anchor sets the render reference so a world frames behind it;
-     * combatants are spawned by title_battle_tick. */
+    /* Title battle: the spectator camera anchors a few radii off a planet's lit
+     * side and looks at it, with the brawl spawned right in front so the world
+     * (and the star beyond) backdrop the dogfight. */
     {
-        Poi pois[MAX_POIS];
-        int np = system_pois(pois, MAX_POIS);
-        if (np > 0) drop_anchor(pois[0].pos_mm, &pois[0]);
+        const SystemInfo *si = system_info();
         Ship *p = &g_ships[PLAYER];
-        p->pos = v3(40.0f, 35.0f, -230.0f);
-        p->basis = m3_identity();
+        p->pos = v3(0, 0, 0);
         p->team = TEAM_NEUTRAL;
+        Vec3 up0 = v3(0, 1, 0), fwd;
+        if (si->n_planets > 0) {
+            Vec3 P = system_planet_pos_mm(0);
+            float pr = si->planets[0].radius_mm;
+            Vec3 toStar = v3_norm(v3_scale(P, -1.0f));     /* lit side */
+            Vec3 anchor = v3_add(P, v3_scale(toStar, pr * 3.3f));
+            fwd = v3_norm(v3_sub(P, anchor));              /* = toward the world */
+            Poi pp; pp.kind = POI_PLANET; pp.index = 0; pp.pos_mm = P;
+            snprintf(pp.name, sizeof pp.name, "%s", si->name);
+            drop_anchor(anchor, &pp);
+        } else {
+            fwd = v3_norm(v3(0.3f, 0.05f, 1.0f));
+            Poi pois[MAX_POIS];
+            if (system_pois(pois, MAX_POIS) > 0) drop_anchor(pois[0].pos_mm, &pois[0]);
+        }
+        p->basis.r[2] = fwd;
+        p->basis.r[0] = v3_norm(v3_cross(up0, fwd));
+        p->basis.r[1] = v3_cross(fwd, p->basis.r[0]);
+        /* Brawl sits ~130 m ahead (in front of the world), a touch low. */
+        s_title_ctr = v3_add(v3_scale(fwd, 130.0f), v3_scale(p->basis.r[1], -18.0f));
+        s_title_perp = p->basis.r[0];
     }
-    r3d_scene_set_nebula(seed | 1u, 0.7f);   /* blue/red galaxy wash on the title */
+    r3d_scene_set_nebula(seed | 1u, 1.0f);   /* blue/red galaxy wash on the title */
 
     s_state = ST_TITLE;
     s_title_cursor = save_exists() ? 0 : 1;
@@ -1555,10 +1576,13 @@ static void tick_hyperjump(float dt) {
  * side of the brawl so the two sides close on each other. */
 static void title_spawn_fighter(uint32_t s, bool police) {
     float a = (float)(s & 0xFFFF) / 65535.0f * 6.2831853f;
-    float r = 50.0f + (float)((s >> 16) & 0xFF) / 255.0f * 90.0f;
-    Vec3 pos = v3(cosf(a) * r + (police ? 95.0f : -95.0f),
-                  (float)((int)((s >> 8) & 0xFF) - 128) * 0.5f,
-                  sinf(a) * r);
+    float r = 35.0f + (float)((s >> 16) & 0xFF) / 255.0f * 55.0f;
+    /* Around the brawl centre, the two factions offset to opposite sides. */
+    Vec3 pos = v3_add(s_title_ctr,
+                v3_add(v3_scale(s_title_perp, police ? 80.0f : -80.0f),
+                       v3(cosf(a) * r,
+                          (float)((int)((s >> 8) & 0xFF) - 128) * 0.5f,
+                          sinf(a) * r)));
     int cls = police ? 4 : 2 + (int)((s >> 24) % 3u);
     int idx = ship_spawn(hull_mesh(s ^ (police ? 0x10Eu : 0xB0Au), cls),
                          pos, police ? TEAM_NEUTRAL : TEAM_HOSTILE);
