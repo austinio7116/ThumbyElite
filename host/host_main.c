@@ -4260,6 +4260,29 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    /* Title -> NEW GAME -> intro crawl -> launch, dumped frame by frame to
+     * /tmp/vid/NNNN.ppm for encoding into a clip. */
+    if (getenv("ELITE_TITLEVIDEO")) {
+        CraftRawButtons none = {0};
+        int fr = 0; char path[80];
+        for (int k = 0; k < 150; k++) {            /* ~5s on the title */
+            elite_game_tick(&none, 1.0f/30.0f); render_frame();
+            snprintf(path, sizeof path, "/tmp/vid/%04d.ppm", fr++); dump_ppm(path);
+        }
+        { CraftRawButtons a = {0}; a.a = true;     /* select NEW GAME */
+          elite_game_tick(&a, 1.0f/30.0f); render_frame();
+          snprintf(path, sizeof path, "/tmp/vid/%04d.ppm", fr++); dump_ppm(path); }
+        elite_game_tick(&none, 1.0f/30.0f);        /* release A */
+        int extra = 0;
+        while (fr < 1600) {                        /* intro until launch + a bit */
+            elite_game_tick(&none, 1.0f/30.0f); render_frame();
+            snprintf(path, sizeof path, "/tmp/vid/%04d.ppm", fr++); dump_ppm(path);
+            if (elite_game_state() != 9 && ++extra >= 30) break;
+        }
+        printf("[vid] wrote %d frames\n", fr);
+        return 0;
+    }
+
     /* Title wordmark style explorer: render INDEMNITY RUN in a spread of
      * colour/treatment options -> /tmp/tf_N.ppm. Run the SS=1 host. */
     if (getenv("ELITE_TITLEFONTS")) {
