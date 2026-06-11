@@ -530,7 +530,10 @@ static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
     /* In menus, controller buttons act as nav/select/back, not flight actions
      * (so a HOTAS trigger doesn't 'fire-select' and a gamepad's A/B select). */
     int gst = elite_game_state();
-    bool inmenu = (gst != 0 && gst != 1);   /* not ST_FLIGHT / ST_SUPERCRUISE */
+    /* Menu context: HOTAS trigger / gamepad RT must NOT 'fire-select'. The
+     * death/insurance screen lives inside flight but is a menu prompt, so the
+     * claim takes the menu-select button (matching its on-screen label). */
+    bool inmenu = (gst != 0 && gst != 1) || elite_game_is_dead();
 
     if (s_active_dev == DEV_HOTAS) {        /* --- HOTAS --- */
         float roll  = dz(jaxis(s_joy, s_hx[CTRL_AX_ROLL],  s_hi[CTRL_AX_ROLL]),  0.10f);

@@ -177,6 +177,7 @@ float elite_game_time(void) { return s_time; }
 
 int elite_game_state(void) { return (int)s_state; }
 int elite_game_in_ctrlsetup(void) { return s_state == ST_CTRLSETUP; }
+int elite_game_is_dead(void) { return s_dead_latch; }   /* death/insurance screen */
 
 static void drop_anchor(Vec3 pos_mm, const Poi *poi);
 static void spawn_poi_content(void);

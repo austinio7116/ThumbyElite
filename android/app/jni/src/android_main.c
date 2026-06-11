@@ -549,7 +549,7 @@ int main(int argc, char *argv[]) {
             /* Scheme A: dedicated buttons. In menus A=select B=back; in flight
              * the full mapping (matches the host gamepad). */
             int gst = elite_game_state();
-            bool inmenu = (gst != 0 && gst != 1);
+            bool inmenu = (gst != 0 && gst != 1) || elite_game_is_dead();
 #define GBTN(b) SDL_GameControllerGetButton(s_pad, b)
             if (inmenu) {
                 if (GBTN(SDL_CONTROLLER_BUTTON_A)) btn.a = true;
