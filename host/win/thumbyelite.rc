@@ -1,7 +1,7 @@
 /* Windows resource: app icon + version info (compiled by windres). */
 #include <windows.h>
 
-1 ICON "thumbyelite.ico"
+1 ICON "indemnityrun.ico"
 
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION     1,0,0,0
@@ -13,11 +13,11 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "FileDescription", "ThumbyElite — Elite-style space sim"
+            VALUE "FileDescription", "Indemnity Run — space trade & combat sim"
             VALUE "FileVersion",     "1.0.0.0"
-            VALUE "InternalName",    "ThumbyElite"
-            VALUE "OriginalFilename","ThumbyElite.exe"
-            VALUE "ProductName",     "ThumbyElite"
+            VALUE "InternalName",    "Indemnity Run"
+            VALUE "OriginalFilename","Indemnity Run.exe"
+            VALUE "ProductName",     "Indemnity Run"
             VALUE "ProductVersion",  "1.0.0.0"
         END
     END
