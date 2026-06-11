@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Take the rendered master layers (/tmp/icon) and install every platform icon:
 lobby PNG, Android adaptive (fg/bg + legacy + round), and the PC .ico/.png."""
-import os
+import os, subprocess
 from PIL import Image
 
 SRC = "/tmp/icon"
@@ -41,8 +41,13 @@ for name in ("ic_launcher.xml", "ic_launcher_round.xml"):
 print("android -> adaptive + legacy + round")
 
 # --- PC: multi-size .ico + window png -----------------------------------
+# ImageMagick, not PIL: it stores the <=128 entries as classic BMP/DIB, which
+# Windows Explorer renders everywhere (PIL stored every size as PNG, which the
+# shell renders unreliably — the exe showed no icon).
 WIN = f"{ROOT}/host/win"
-full.resize((256, 256), Image.LANCZOS).save(f"{WIN}/indemnityrun.png")
-full.save(f"{WIN}/indemnityrun.ico",
-          sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+png256 = f"{WIN}/indemnityrun.png"
+full.resize((256, 256), Image.LANCZOS).save(png256)
+subprocess.run(["convert", png256, "-background", "none",
+                "-define", "icon:auto-resize=256,128,64,48,32,16",
+                f"{WIN}/indemnityrun.ico"], check=True)
 print("pc ->", f"{WIN}/indemnityrun.ico")
