@@ -845,8 +845,7 @@ void elite_game_init(uint32_t seed) {
 
     s_state = ST_TITLE;
     s_title_cursor = save_exists() ? 0 : 1;
-    s_intro_active = true;            /* lore crawl plays first, skippable */
-    s_intro_t = 0.0f;
+    s_intro_active = false;           /* crawl plays ONLY on NEW GAME */
     s_prev_menu = s_prev_a = false;
 }
 
@@ -1689,10 +1688,12 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
 
     switch (s_state) {
     case ST_TITLE: {
-        if (s_intro_active) {                       /* lore crawl, then menu */
+        if (s_intro_active) {                       /* NEW GAME lore crawl */
             s_intro_t += dt;
-            if (a_edge || menu_edge || s_intro_t >= intro_duration())
+            if (a_edge || menu_edge || s_intro_t >= intro_duration()) {
                 s_intro_active = false;
+                start_new_game(s_boot_seed);        /* crawl done -> begin */
+            }
             title_battle_tick(dt);
             break;
         }
@@ -1716,11 +1717,12 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
                 SaveMeta meta;
                 if (save_load(&meta)) {
                     combat_set_kills(meta.kills);
-                    arrive_docked(&meta);
+                    arrive_docked(&meta);       /* CONTINUE: straight in, no crawl */
                     break;
                 }
             }
-            start_new_game(s_boot_seed);
+            s_intro_active = true;          /* NEW GAME: play the lore crawl first */
+            s_intro_t = 0.0f;
             break;
         }
         title_battle_tick(dt);          /* live brawl behind the wordmark */
