@@ -20,6 +20,10 @@ int craft_font_draw_title(uint16_t *fb, const char *text, int x, int y, int s,
                           uint16_t top, uint16_t bot, uint16_t outline);
 int craft_font_width(const char *text);
 int craft_font_width_2x(const char *text);
+/* Fractional scale (num/den), e.g. 3/2 = 1.5x — a size between 1x and 2x. */
+int craft_font_draw_frac(uint16_t *fb, const char *text, int x, int y,
+                         int num, int den, uint16_t color);
+int craft_font_width_frac(const char *text, int num, int den);
 
 /* Set the destination dimensions glyph writes are clamped/strided to. Used by
  * the HUD when rendering into a smaller upscale overlay. No-op (and the writer

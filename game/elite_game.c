@@ -2499,8 +2499,8 @@ static const char *const k_intro[] = {
     "INDEMNITY RUN.",
 };
 #define INTRO_LINES ((int)(sizeof(k_intro) / sizeof(k_intro[0])))
-#define INTRO_SPEED 15.0f
-#define INTRO_LH    8
+#define INTRO_SPEED 17.0f
+#define INTRO_LH    10
 
 static float intro_duration(void) {
     return (128.0f + INTRO_LINES * INTRO_LH) / INTRO_SPEED;
@@ -2511,15 +2511,15 @@ static void draw_intro_crawl(uint16_t *fb) {
     for (int i = 0; i < INTRO_LINES; i++) {
         if (!k_intro[i][0]) continue;              /* page gap */
         int y = (int)(topy + i * INTRO_LH);
-        if (y < -8 || y > 120) continue;
-        int x = (128 - craft_font_width(k_intro[i])) / 2;
+        if (y < -10 || y > 120) continue;
+        int x = (128 - craft_font_width_frac(k_intro[i], 3, 2)) / 2;
         if (x < 0) x = 0;
         int b = 255;                               /* fade in/out at the edges */
-        if (y < 22)        b = 255 * y / 22;
-        else if (y > 98)   b = 255 * (116 - y) / 18;
+        if (y < 24)        b = 255 * y / 24;
+        else if (y > 96)   b = 255 * (116 - y) / 20;
         if (b < 24) b = 24; if (b > 255) b = 255;
         uint16_t col = RGB565C(b * 205 / 255, b * 220 / 255, b);
-        craft_font_draw(fb, k_intro[i], x, y, col);
+        craft_font_draw_frac(fb, k_intro[i], x, y, 3, 2, col);
     }
     craft_font_draw(fb, "A / MENU: SKIP", 35, 121, RGB565C(70, 80, 100));
 }

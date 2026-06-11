@@ -165,3 +165,32 @@ int craft_font_width(const char *text) {
 int craft_font_width_2x(const char *text) {
     return craft_font_width(text) * 2;
 }
+
+/* Fractional nearest-neighbour scale (e.g. num=3,den=2 -> 1.5x: a 3x5 glyph
+ * becomes ~5x8 — a readable size between 1x and 2x). */
+int craft_font_draw_frac(uint16_t *fb, const char *text, int x, int y,
+                         int num, int den, uint16_t color) {
+    if (!text || !fb || num < 1 || den < 1) return x;
+    int cur_x = x, cur_y = y;
+    int ow = (3 * num + den - 1) / den, oh = (5 * num + den - 1) / den;
+    for (; *text; text++) {
+        unsigned char ch = (unsigned char)*text;
+        if (ch == '\n') { cur_x = x; cur_y += (CRAFT_FONT_CELL_H * num) / den; continue; }
+        uint16_t g = (ch < 128) ? font[ch] : glyph_unknown;
+        for (int oy = 0; oy < oh; oy++) {
+            int sy = (oy * den) / num; if (sy > 4) sy = 4;
+            int bits = (g >> (sy * 3)) & 0x7;
+            for (int ox = 0; ox < ow; ox++) {
+                int sx = (ox * den) / num; if (sx > 2) sx = 2;
+                if (bits & (1 << sx)) put(fb, cur_x + ox, cur_y + oy, color);
+            }
+        }
+        cur_x += (CRAFT_FONT_CELL_W * num) / den;
+    }
+    return cur_x;
+}
+int craft_font_width_frac(const char *text, int num, int den) {
+    if (!text) return 0;
+    int n = 0; for (; *text; text++) if (*text != '\n') n++;
+    return n * (CRAFT_FONT_CELL_W * num) / den;
+}
