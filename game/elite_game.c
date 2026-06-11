@@ -2431,9 +2431,13 @@ static void dash_settings_overlay(uint16_t *fb) {
 #else
     (void)grow; (void)srow;
 #endif
-    int top = 44, row_y = top, n = settings_rows();
+    int top = 44, n = settings_rows();
     int bot = top + n * 9 + 14;
-    for (int y = top - 18; y < bot; y++)
+    if (bot > 124) { top -= (bot - 124); bot = 124; }   /* fit all 9 PC rows */
+    int row_y = top;
+    int y0 = top - 18; if (y0 < 0) y0 = 0;
+    if (bot > ELITE_FB_H) bot = ELITE_FB_H;
+    for (int y = y0; y < bot; y++)
         for (int x = 12; x < 116; x++)
             fb[y * ELITE_FB_W + x] = RGB565C(8, 11, 20);
     craft_font_draw(fb, "SETTINGS", 31, top - 14, RGB565C(200, 210, 225));
