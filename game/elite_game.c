@@ -1693,6 +1693,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             if (a_edge || menu_edge || s_intro_t >= intro_duration()) {
                 s_intro_active = false;
                 start_new_game(s_boot_seed);        /* crawl done -> begin */
+                break;            /* do NOT tick the title brawl into the new game */
             }
             title_battle_tick(dt);
             break;
@@ -2450,37 +2451,52 @@ static void dash_settings_overlay(uint16_t *fb) {
 /* Lore intro: a slow upward crawl over the live title brawl, in place of the
  * wordmark. Blank entries are page gaps. Skippable with A or MENU. */
 static const char *const k_intro[] = {
-    "NOBODY BUILT THE INDEMNITY.",
-    "IT WAS ALREADY RUNNING.",
+    "NOBODY BUILT",
+    "THE INDEMNITY.",
+    "IT WAS ALREADY",
+    "RUNNING.",
     "",
-    "DIE INSURED, AND IT MAKES",
-    "YOU WHOLE - YOU WAKE AT PORT,",
-    "YOUR DEATH UNDONE.",
+    "DIE INSURED,",
+    "AND IT MAKES",
+    "YOU WHOLE -",
+    "YOU WAKE AT",
+    "PORT, YOUR",
+    "DEATH UNDONE.",
     "",
-    "WHETHER THE PILOT WHO WAKES",
-    "IS YOU, NO ONE DARES ASK.",
+    "WHETHER THE",
+    "PILOT WHO WAKES",
+    "IS YOU, NO ONE",
+    "DARES ASK.",
     "",
-    "THE POWER BEHIND IT:",
-    "THE UNDERWRITER.",
-    "IT COVERS THOSE WHO CAN PAY.",
-    "WHAT IT TAKES IN RETURN,",
+    "THE POWER",
+    "BEHIND IT - THE",
+    "UNDERWRITER.",
+    "IT COVERS THOSE",
+    "WHO CAN PAY.",
+    "WHAT IT TAKES",
+    "IN RETURN,",
     "NO ONE KNOWS.",
     "",
-    "THOSE WHO CAN'T PAY ARE",
-    "THE UNINSURED. THEY TURN",
-    "PIRATE - CLAWING BACK",
-    "THE COVER THEY LOST.",
+    "THOSE WHO CAN'T",
+    "PAY ARE THE",
+    "UNINSURED.",
+    "THEY TURN",
+    "PIRATE, CLAWING",
+    "BACK THE COVER",
+    "THEY LOST.",
     "",
-    "AN INFINITE GALAXY.",
-    "TRADE.  FIGHT.  EXPLORE.",
+    "AN INFINITE",
+    "GALAXY.",
+    "TRADE. FIGHT.",
+    "EXPLORE.",
     "STAY COVERED.",
     "",
     "THIS IS YOUR",
     "INDEMNITY RUN.",
 };
 #define INTRO_LINES ((int)(sizeof(k_intro) / sizeof(k_intro[0])))
-#define INTRO_SPEED 22.0f
-#define INTRO_LH    9
+#define INTRO_SPEED 32.0f
+#define INTRO_LH    14
 
 static float intro_duration(void) {
     return (128.0f + INTRO_LINES * INTRO_LH) / INTRO_SPEED;
@@ -2491,15 +2507,15 @@ static void draw_intro_crawl(uint16_t *fb) {
     for (int i = 0; i < INTRO_LINES; i++) {
         if (!k_intro[i][0]) continue;              /* page gap */
         int y = (int)(topy + i * INTRO_LH);
-        if (y < -8 || y > 124) continue;
-        int x = (128 - craft_font_width(k_intro[i])) / 2;
+        if (y < -14 || y > 120) continue;
+        int x = (128 - craft_font_width_2x(k_intro[i])) / 2;
         if (x < 0) x = 0;
         int b = 255;                               /* fade in/out at the edges */
-        if (y < 24)        b = 255 * y / 24;
-        else if (y > 98)   b = 255 * (124 - y) / 26;
+        if (y < 28)        b = 255 * y / 28;
+        else if (y > 90)   b = 255 * (116 - y) / 26;
         if (b < 24) b = 24; if (b > 255) b = 255;
         uint16_t col = RGB565C(b * 205 / 255, b * 220 / 255, b);
-        craft_font_draw(fb, k_intro[i], x, y, col);
+        craft_font_draw_2x(fb, k_intro[i], x, y, col);
     }
     craft_font_draw(fb, "A / MENU: SKIP", 35, 121, RGB565C(70, 80, 100));
 }

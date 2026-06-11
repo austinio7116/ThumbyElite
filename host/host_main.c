@@ -4249,6 +4249,11 @@ int main(int argc, char **argv) {
     if (getenv("ELITE_TITLESHOT")) {
         CraftRawButtons none = {0};
         int nf = getenv("ELITE_TFRAMES") ? atoi(getenv("ELITE_TFRAMES")) : 45;
+        if (getenv("ELITE_INTRO")) {           /* tap A -> NEW GAME -> lore crawl */
+            CraftRawButtons a = {0}; a.a = true;
+            elite_game_tick(&a, 1.0f / 30.0f);
+            elite_game_tick(&none, 1.0f / 30.0f);
+        }
         for (int k = 0; k < nf; k++) elite_game_tick(&none, 1.0f / 30.0f);  /* ELITE_TFRAMES: crawl frame */
         render_frame();
         dump_ppm("/tmp/title.ppm");
