@@ -50,5 +50,7 @@ int r3d_scene_project(Vec3 cam_rel, float *sx, float *sy, uint16_t *d);
 
 /* Starfield: regenerate the fixed direction table (e.g. on system entry). */
 void r3d_starfield_init(uint32_t seed);
+/* Blue/red galaxy wash behind the stars; strength 0 = off (plain black). */
+void r3d_scene_set_nebula(uint32_t seed, float strength);
 
 #endif

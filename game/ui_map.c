@@ -249,6 +249,14 @@ static float nnoise(float x, float y) {
     return a + (b - a) * sy;
 }
 
+/* Nebula density at a galaxy position (ly) — same field the chart washes with,
+ * so in-flight nebula matches what you see on the map. 0 = clear. */
+float gmap_nebula_density(float gx, float gy) {
+    float n = nnoise(gx * 0.055f, gy * 0.055f) * 0.7f +
+              nnoise(gx * 0.13f + 31.7f, gy * 0.13f) * 0.3f;
+    return (n > 0.52f) ? (n - 0.52f) * 2.1f : 0.0f;
+}
+
 /* Survey sheet: everything about the highlighted system. */
 static void draw_gmap_info(uint16_t *fb) {
     SystemInfo si;

@@ -587,8 +587,16 @@ void ai_tick(float dt) {
             continue;        /* ship_physics integrates them */
         }
         if (g_ships[i].team == TEAM_NEUTRAL && g_ships[i].is_police) {
-            /* Patrol drift: a slow circuit of the station approaches. */
             Ship *s2 = &g_ships[i];
+            /* Lawful Viper: hunt the nearest pirate in range (the law
+             * defends), else patrol the station approaches. */
+            int pt = -1; float pd = 2000.0f * 2000.0f;
+            for (int j = 1; j < MAX_SHIPS; j++) {
+                if (!g_ships[j].alive || g_ships[j].team != TEAM_HOSTILE) continue;
+                float d = v3_len2(v3_sub(g_ships[j].pos, s2->pos));
+                if (d < pd) { pd = d; pt = j; }
+            }
+            if (pt > 0) { s2->ai_target = (uint8_t)pt; ai_ship(i, dt); continue; }
             Vec3 tangent = v3_cross(v3(0, 1, 0), v3_norm(s2->pos));
             s2->vel = v3_lerp(s2->vel, v3_scale(tangent, 18.0f),
                               0.5f * dt);

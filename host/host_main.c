@@ -94,14 +94,14 @@ void plat_rumble(float intensity, float seconds) {
     (void)intensity; (void)seconds;     /* no motor on the desk */
 }
 int plat_save(const uint8_t *data, int len) {
-    FILE *f = fopen("thumbyelite.sav", "wb");
+    FILE *f = fopen("indemnityrun.sav", "wb");
     if (!f) return 0;
     fwrite(data, 1, (size_t)len, f);
     fclose(f);
     return 1;
 }
 int plat_load(uint8_t *data, int max_len) {
-    FILE *f = fopen("thumbyelite.sav", "rb");
+    FILE *f = fopen("indemnityrun.sav", "rb");
     if (!f) return 0;
     int n = (int)fread(data, 1, (size_t)max_len, f);
     fclose(f);
@@ -204,7 +204,7 @@ static const char *k_btn_key[CTRL_BTN_N] = {
 
 /* HOTAS config file (next to the exe). The in-game CONTROLLER SETUP screen
  * reads/writes this; you can also hand-edit it. */
-#define HOTAS_CFG "thumbyelite_hotas.cfg"
+#define HOTAS_CFG "indemnityrun_hotas.cfg"
 static void hotas_cfg_write(void) {
     FILE *f = fopen(HOTAS_CFG, "w");
     if (!f) return;
@@ -625,7 +625,7 @@ static void host_input_apply(CraftRawButtons *btn, float gpad_sens) {
 
 /* --- host settings persistence (4 ints) --------------------------------*/
 /* s_host_settings is the file-scope array from the platform-hooks block. */
-static const char *HOST_SETTINGS_FILE = "thumbyelite_settings.dat";
+static const char *HOST_SETTINGS_FILE = "indemnityrun_settings.dat";
 static void host_settings_load(void) {
     FILE *f = fopen(HOST_SETTINGS_FILE, "rb");
     if (!f) return;
@@ -810,7 +810,7 @@ int main(int argc, char **argv) {
         getenv("ELITE_POPSHOT") ||
         getenv("ELITE_SHOT")) {
         /* Harnesses start in-game: skip the title via NEW GAME. */
-        remove("thumbyelite.sav");
+        remove("indemnityrun.sav");
         CraftRawButtons tb = {0};
         elite_game_tick(&tb, 1.0f / 30.0f);
         tb.down = true; elite_game_tick(&tb, 1.0f / 30.0f);

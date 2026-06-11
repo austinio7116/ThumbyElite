@@ -174,6 +174,61 @@ static void starfield_raster(uint16_t *fb, int y0p, int y1p) {
     }
 }
 
+/* Optional nebula background (title) — the galaxy chart's blue/red value-noise
+ * wash rendered behind the stars. 0 = plain black (flight). */
+static uint32_t s_nebula;
+static float    s_neb_str;          /* 0 = off, up to ~1 = thick */
+void r3d_scene_set_nebula(uint32_t seed, float strength) {
+    s_nebula = seed; s_neb_str = strength;
+}
+static uint32_t nb_hash(int x, int y) {
+    uint32_t h = (uint32_t)x * 374761393u + (uint32_t)y * 668265263u;
+    h = (h ^ (h >> 13)) * 1274126177u; return h ^ (h >> 16);
+}
+static float nb_noise(float x, float y) {
+    int xi = (int)x, yi = (int)y; if (x < 0) xi--; if (y < 0) yi--;
+    float fx = x - xi, fy = y - yi;
+    float sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+    float v00 = (nb_hash(xi, yi)     & 0xFFFF) * (1.0f / 65535.0f);
+    float v10 = (nb_hash(xi + 1, yi) & 0xFFFF) * (1.0f / 65535.0f);
+    float v01 = (nb_hash(xi, yi + 1) & 0xFFFF) * (1.0f / 65535.0f);
+    float v11 = (nb_hash(xi + 1, yi + 1) & 0xFFFF) * (1.0f / 65535.0f);
+    float a = v00 + (v10 - v00) * sx, b = v01 + (v11 - v01) * sx;
+    return a + (b - a) * sy;
+}
+/* Direction-based so the wash is fixed in space and rotates with the view
+ * (sampled along each pixel's world ray), in coarse blocks to stay cheap. */
+static void nebula_fill(uint16_t *fb, int y0p, int y1p) {
+    const Mat3 *cam = r3d_pipe_camera();
+    float focal = r3d_pipe_focal() * (float)R3D_SS;
+    float cx = 64.0f * R3D_SS, cy = 64.0f * R3D_SS;
+    float ox = (float)(s_nebula & 0xFF) * 0.6f;
+    int STEP = 2 * R3D_SS;
+    for (int y = y0p; y < y1p; y += STEP) {
+        float vy = -((float)y + 0.5f * STEP - cy) / focal;
+        for (int x = 0; x < R3D_FB_W; x += STEP) {
+            float vx = ((float)x + 0.5f * STEP - cx) / focal;
+            Vec3 d = v3_norm(m3_mul_v3(cam, v3(vx, vy, 1.0f)));
+            const float F = 1.5f;          /* low freq = large clouds */
+            float n = nb_noise(d.x * F + 40.0f + ox, d.y * F + 40.0f) * 0.5f +
+                      nb_noise(d.z * F + 17.0f, d.x * F) * 0.3f +
+                      nb_noise(d.y * F + 7.0f,  d.z * F + 23.0f) * 0.2f;
+            uint16_t c = 0;
+            if (n > 0.56f) {               /* high threshold = patchy, not everywhere */
+                float k = (n - 0.56f) * 2.4f * s_neb_str; if (k > 1.0f) k = 1.0f;
+                float w = nb_noise(d.x * F + 77.0f, d.z * F - 19.0f);
+                int r = (int)(k * (w > 0.55f ? 9 : 4));   /* faint */
+                int g = (int)(k * 3);
+                int b = (int)(k * (w > 0.55f ? 8 : 13));
+                c = (uint16_t)(((r & 31) << 11) | ((g & 63) << 5) | (b & 31));
+            }
+            for (int yy = y; yy < y + STEP && yy < y1p; yy++)
+                for (int xx = x; xx < x + STEP && xx < R3D_FB_W; xx++)
+                    fb[yy * R3D_FB_W + xx] = c;
+        }
+    }
+}
+
 void r3d_scene_raster(uint16_t *fb, int y0, int y1) {
     if (y0 < 0) y0 = 0;
     if (y1 > ELITE_FB_H) y1 = ELITE_FB_H;
@@ -181,8 +236,9 @@ void r3d_scene_raster(uint16_t *fb, int y0, int y1) {
     /* Callers pass logical rows; everything below runs physical. */
     int y0p = y0 * R3D_SS, y1p = y1 * R3D_SS;
 
-    memset(fb + y0p * R3D_FB_W, 0,
-           (size_t)(y1p - y0p) * R3D_FB_W * sizeof(uint16_t));
+    if (s_nebula && s_neb_str > 0.01f) nebula_fill(fb, y0p, y1p);
+    else memset(fb + y0p * R3D_FB_W, 0,
+                (size_t)(y1p - y0p) * R3D_FB_W * sizeof(uint16_t));
     r3d_raster_set_fb(fb);
     r3d_depth_clear(y0p, y1p);
     starfield_raster(fb, y0p, y1p);

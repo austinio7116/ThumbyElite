@@ -615,10 +615,22 @@ static void drop_anchor(Vec3 pos_mm, const Poi *poi) {
     s_tgt_class = 0;                 /* fresh site, AUTO priorities */
 }
 
+/* Tie the in-flight nebula wash to where this system sits on the galaxy chart:
+ * fly into a charted nebula and the sky washes blue/red; elsewhere it's black. */
+static void set_nebula_for_addr(SysAddr a) {
+    float lx, ly;
+    galaxy_star_pos(a, &lx, &ly);
+    float dens = gmap_nebula_density(lx, ly);
+    if (dens > 1.0f) dens = 1.0f;
+    r3d_scene_set_nebula((uint32_t)((uint32_t)a.sx * 2654435761u ^ (uint32_t)a.sy) | 1u,
+                         dens);
+}
+
 static void arrive_in_system(SysAddr addr) {
     s_addr = addr;
     s_entry_salt++;
     s_distress_done = 0;       /* fresh system, fresh emergencies */
+    set_nebula_for_addr(addr);
     system_enter(addr);
     Poi beacon;
     Poi pois[MAX_POIS];
@@ -734,6 +746,7 @@ static void cycle_target(void) {
 /* Resume docked at a saved station. */
 static void arrive_docked(const SaveMeta *meta) {
     s_addr = meta->addr;
+    set_nebula_for_addr(meta->addr);
     system_enter(meta->addr);
     Poi pois[MAX_POIS];
     int n = system_pois(pois, MAX_POIS);
@@ -788,6 +801,20 @@ void elite_game_init(uint32_t seed) {
             }
         if (!done) system_enter((SysAddr){ 0, 0, 0 });   /* fallback: any system */
     }
+
+    /* Title battle: a spectator camera parked off to one side of an open-space
+     * brawl. drop_anchor sets the render reference so a world frames behind it;
+     * combatants are spawned by title_battle_tick. */
+    {
+        Poi pois[MAX_POIS];
+        int np = system_pois(pois, MAX_POIS);
+        if (np > 0) drop_anchor(pois[0].pos_mm, &pois[0]);
+        Ship *p = &g_ships[PLAYER];
+        p->pos = v3(40.0f, 35.0f, -230.0f);
+        p->basis = m3_identity();
+        p->team = TEAM_NEUTRAL;
+    }
+    r3d_scene_set_nebula(seed | 1u, 0.7f);   /* blue/red galaxy wash on the title */
 
     s_state = ST_TITLE;
     s_title_cursor = save_exists() ? 0 : 1;
@@ -1524,6 +1551,81 @@ static void tick_hyperjump(float dt) {
     }
 }
 
+/* Spawn one title combatant: a lawful Viper (police) or a pirate, off to one
+ * side of the brawl so the two sides close on each other. */
+static void title_spawn_fighter(uint32_t s, bool police) {
+    float a = (float)(s & 0xFFFF) / 65535.0f * 6.2831853f;
+    float r = 50.0f + (float)((s >> 16) & 0xFF) / 255.0f * 90.0f;
+    Vec3 pos = v3(cosf(a) * r + (police ? 95.0f : -95.0f),
+                  (float)((int)((s >> 8) & 0xFF) - 128) * 0.5f,
+                  sinf(a) * r);
+    int cls = police ? 4 : 2 + (int)((s >> 24) % 3u);
+    int idx = ship_spawn(hull_mesh(s ^ (police ? 0x10Eu : 0xB0Au), cls),
+                         pos, police ? TEAM_NEUTRAL : TEAM_HOSTILE);
+    if (idx > 0) {
+        ship_set_tier(idx, 2 + (int)((s >> 5) % 3u), cls);
+        if (police) g_ships[idx].is_police = 1;
+    }
+}
+
+/* Title screen runs a real police-vs-pirate brawl behind the wordmark, flown
+ * entirely by the standard combat AI. The camera ship is a neutral spectator
+ * (kept alive so the title never drops to the death screen) that slowly tracks
+ * the centre of the action; the combatants are mortal and explode for real. */
+static void title_battle_tick(float dt) {
+    Ship *p = &g_ships[PLAYER];
+    p->team = TEAM_NEUTRAL; p->alive = true;
+    p->shield = p->shield_max; p->hull = p->hull_max;   /* the camera, not a fighter */
+    p->throttle = 0.0f; p->vel = v3(0, 0, 0);
+
+    static uint32_t sp = 0x1234abcdu;
+    int npir = 0, npol = 0, pir[MAX_SHIPS], pol[MAX_SHIPS];
+    for (int pass = 0; pass < 2; pass++) {
+        npir = npol = 0;
+        for (int i = 1; i < MAX_SHIPS; i++) {
+            if (!g_ships[i].alive) continue;
+            if (g_ships[i].team == TEAM_HOSTILE)        pir[npir++] = i;
+            else if (g_ships[i].is_police)              pol[npol++] = i;
+        }
+        if (pass == 0) {   /* keep both sides stocked so the brawl never ends */
+            while (npir < 4) { sp = sp*1664525u+1013904223u; title_spawn_fighter(sp, false); npir++; }
+            while (npol < 4) { sp = sp*1664525u+1013904223u; title_spawn_fighter(sp, true);  npol++; }
+        }
+    }
+    /* Pirates fight the law (the camera is neutral); police acquire pirates on
+     * their own. Re-point a pirate only when its quarry is gone. */
+    for (int a = 0; a < npir && npol > 0; a++) {
+        Ship *s = &g_ships[pir[a]];
+        int c = s->ai_target;
+        if (!(c > 0 && c < MAX_SHIPS && g_ships[c].alive && g_ships[c].is_police)) {
+            int bj = -1; float bd = 1e30f;
+            for (int b = 0; b < npol; b++) {
+                float d = v3_len2(v3_sub(g_ships[pol[b]].pos, s->pos));
+                if (d < bd) { bd = d; bj = pol[b]; }
+            }
+            if (bj > 0) s->ai_target = (uint8_t)bj;
+        }
+    }
+    /* Camera slowly swings to keep the action centred. */
+    Vec3 ctr = v3(0, 0, 0); int cn = 0;
+    for (int a = 0; a < npir; a++) { ctr = v3_add(ctr, g_ships[pir[a]].pos); cn++; }
+    for (int a = 0; a < npol; a++) { ctr = v3_add(ctr, g_ships[pol[a]].pos); cn++; }
+    if (cn) {
+        ctr = v3_scale(ctr, 1.0f / cn);
+        Vec3 want = v3_norm(v3_sub(ctr, p->pos));
+        p->basis.r[2] = v3_norm(v3_lerp(p->basis.r[2], want, 0.8f * dt));
+        Vec3 up0 = v3(0, 1, 0);
+        p->basis.r[0] = v3_norm(v3_cross(up0, p->basis.r[2]));
+        p->basis.r[1] = v3_cross(p->basis.r[2], p->basis.r[0]);
+    }
+    ai_tick(dt);
+    combat_tick(dt);
+    combat_crit_cooldown_tick(dt);
+    fx_tick(dt);
+    collide_tick(false, 0.0f, false);
+    flight_tick(dt);
+}
+
 void elite_game_tick(const CraftRawButtons *btn, float dt) {
     if (dt > 1e-4f)
         s_fps += (1.0f / dt - s_fps) * 0.08f;     /* smoothed FPS */
@@ -1573,7 +1675,9 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
                 }
             }
             start_new_game(s_boot_seed);
+            break;
         }
+        title_battle_tick(dt);          /* live brawl behind the wordmark */
         break;
     }
 
@@ -1905,90 +2009,6 @@ void elite_game_render_begin(void) {
     Ship *p = &g_ships[PLAYER];
 
     switch (s_state) {
-    case ST_TITLE: {
-        /* Drifting vista: starfield + a world of the home system + a loose
-         * flight of ships, all seeded from the boot seed. */
-        const SystemInfo *si = system_info();
-        Mat3 cam = m3_identity();
-        bool have_planet = si->n_planets > 0;
-        /* Frame a world if the system has one, otherwise the star — both are
-         * emitted by r3d_planet_emit; aim the camera and sit it low so it
-         * backdrops the wordmark. */
-        Vec3 target = have_planet ? system_planet_pos_mm(0) : system_star_pos_mm();
-        float tr    = have_planet ? si->planets[0].radius_mm : si->star_radius_mm;
-        float dist  = have_planet ? 5.5f : 11.0f;
-        Vec3 up0 = v3(0.0f, 1.0f, 0.0f);
-        /* For a planet, back off toward the star so we see the lit face; for the
-         * star itself, any flattering angle. */
-        Vec3 off = have_planet ? v3_norm(v3_scale(target, -1.0f))
-                               : v3_norm(v3(0.30f, 0.45f, -0.84f));
-        Vec3 side = v3_norm(v3_cross(up0, off));
-        Vec3 vista = v3_add(target, v3_add(v3_scale(off, tr * dist),
-                            v3_add(v3_scale(side, tr * dist * 0.30f),
-                                   v3_scale(up0, tr * dist * 0.45f))));
-        Vec3 fwd = v3_norm(v3_sub(target, vista));
-        cam.r[2] = fwd;
-        cam.r[0] = v3_norm(v3_cross(up0, fwd));
-        cam.r[1] = v3_cross(fwd, cam.r[0]);
-        m3_rotate_local(&cam, 0, -0.40f);                       /* body sits low */
-        m3_rotate_local(&cam, 1, sinf(s_time * 0.07f) * 0.10f); /* gentle pan */
-        r3d_scene_begin(&cam, 60.0f);
-        r3d_pipe_set_sun(v3(0.35f, 0.45f, -0.82f));
-        r3d_planet_emit(vista);
-
-        /* Two tail-chases + a lone runner: ships fly weaving paths (nosed
-         * along their velocity, banking into the turns); each hunter spits
-         * tracers at the prey it's chasing. */
-        for (int gp = 0; gp < 3; gp++) {
-            uint32_t r = s_boot_seed ^ (uint32_t)((gp + 1) * 0x9E3779B9u);
-            r ^= r >> 13; r *= 1274126177u; r ^= r >> 16;
-            float spd = 0.45f + ((r >> 16) & 0xFF) / 255.0f * 0.35f;
-            float ax  = 13.0f + ((r >> 8)  & 0x3F) / 63.0f  * 9.0f;
-            float yo  = -6.0f + ((r >> 2)  & 0xFF) / 255.0f * 12.0f;
-            float zb  = 24.0f + ((r >> 22) & 0x3F) / 63.0f  * 12.0f;
-            float wf  = 0.55f + ((r >> 12) & 0x7) * 0.05f;     /* weave freq */
-            float t   = s_time * spd + (float)gp * 2.1f;
-            int   nship = (gp < 2) ? 2 : 1;                    /* 0,1 chase; 2 lone */
-            Vec3  prey_rel = v3(0,0,0), hnose_rel = v3(0,0,0);
-#define TP(TT) v3(ax * sinf((TT) * wf), \
-                  yo + 6.0f * sinf((TT) * 1.10f + 1.0f), \
-                  zb + 9.0f * sinf((TT) * 0.50f + 2.0f))
-            for (int k = 0; k < nship; k++) {
-                float tk = t - (k == 1 ? 1.5f : 0.0f), e = 0.06f;
-                Vec3 p0 = TP(tk), p1 = TP(tk + e), p2 = TP(tk + 2*e);
-                if (p0.z < 4.0f) continue;
-                Vec3 vcs = v3_norm(v3_sub(p1, p0));
-                Vec3 fwd = v3_norm(m3_mul_v3(&cam, vcs));
-                Vec3 wup = m3_mul_v3(&cam, v3(0, 1, 0));
-                Vec3 rgt = v3_norm(v3_cross(wup, fwd));
-                R3DObject obj;
-                obj.mesh = hull_mesh(r ^ (k ? 0x99u : 0x44E5Au), (int)((r >> (k*4)) % 6));
-                obj.basis.r[0] = rgt;
-                obj.basis.r[1] = v3_cross(fwd, rgt);
-                obj.basis.r[2] = fwd;
-                obj.pos = m3_mul_v3(&cam, p0);
-                float bank = ((p2.x - p1.x) - (p1.x - p0.x)) * 90.0f;  /* lateral accel */
-                if (bank >  0.6f) bank =  0.6f;
-                if (bank < -0.6f) bank = -0.6f;
-                m3_rotate_local(&obj.basis, 2, bank);
-                r3d_scene_add_object(&obj);
-                if (k == 0) prey_rel = obj.pos;
-                if (k == 1) hnose_rel = m3_mul_v3(&cam, v3_add(p0, v3_scale(vcs, 1.6f)));
-            }
-            if (nship == 2 && sinf(t * 9.0f) > 0.2f) {        /* tracer burst */
-                /* Bolt streaks from the hunter's nose past the prey. */
-                Vec3 bolt = v3_add(prey_rel,
-                                   v3_scale(v3_sub(prey_rel, hnose_rel), 0.35f));
-                float sx0, sy0, sx1, sy1; uint16_t d0, d1;
-                if (r3d_scene_project(hnose_rel, &sx0, &sy0, &d0) &&
-                    r3d_scene_project(bolt,      &sx1, &sy1, &d1))
-                    r3d_scene_add_line(sx0, sy0, d0, sx1, sy1, d1,
-                        (gp & 1) ? RGB565C(150, 235, 255) : RGB565C(255, 150, 70));
-            }
-#undef TP
-        }
-        break;
-    }
 
     case ST_HYPERJUMP: {
         /* The departure system stays on screen and RECEDES (user req):

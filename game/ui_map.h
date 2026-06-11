@@ -28,4 +28,7 @@ void map_system_open(Vec3 player_pos_mm);
 MapAction map_system_tick(const CraftRawButtons *btn, float dt, Poi *out_poi);
 void map_system_draw(uint16_t *fb);
 
+/* Nebula density at a galaxy position (ly); 0 = clear. */
+float gmap_nebula_density(float gx, float gy);
+
 #endif
