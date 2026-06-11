@@ -298,7 +298,8 @@ static void gen_controls(void) {
 /* ---- screen-space layout (recomputed each frame from output size) ---- */
 typedef struct { float cx, cy, r; } Ctrl;   /* normalised centre + radius */
 static Ctrl s_ctrl[BTN_COUNT];
-static float s_stick_cx, s_stick_cy, s_stick_r;   /* fixed base, normalised */
+static float s_stick_cx, s_stick_cy, s_stick_r;     /* left stick base, norm */
+static float s_rstick_cx, s_rstick_cy, s_rstick_r;  /* right stick base, norm */
 static int   s_view_x, s_view_y, s_view_s;        /* game square, px */
 static int   g_ow = 1, g_oh = 1;
 
@@ -318,19 +319,20 @@ static void layout(int ow, int oh) {
     s_ctrl[BTN_LB]   = (Ctrl){ 0.085f, top * 0.5f / oh, mind * 0.052f / mind };
     s_ctrl[BTN_RB]   = (Ctrl){ 0.915f, top * 0.5f / oh, mind * 0.052f / mind };
 
-    /* Left gutter: fixed thumbstick, lower third. */
-    float lg = (float)s_view_x / ow;          /* gutter width fraction */
-    s_stick_cx = lg * 0.5f;
-    s_stick_cy = 0.70f;
-    s_stick_r  = mind * 0.115f / mind;         /* fraction of mind */
+    float lg  = (float)s_view_x / ow;                 /* left gutter width */
+    float rg0 = (float)(s_view_x + s_view_s) / ow;    /* right gutter start */
+    float lgc = lg * 0.5f;                            /* left gutter centre */
+    float rgc = rg0 + (1.0f - rg0) * 0.5f;            /* right gutter centre */
 
-    /* Right gutter, bottom-to-top: A (big), B (above-left), MENU (above A,
-     * mid-height — easy thumb reach without leaving the action cluster). */
-    float rg0 = (float)(s_view_x + s_view_s) / ow;
-    float rgc = rg0 + (1.0f - rg0) * 0.5f;
-    s_ctrl[BTN_A]    = (Ctrl){ rgc + 0.04f, 0.74f, mind * 0.085f / mind };
-    s_ctrl[BTN_B]    = (Ctrl){ rgc - 0.06f, 0.58f, mind * 0.066f / mind };
-    s_ctrl[BTN_MENU] = (Ctrl){ rgc + 0.04f, 0.42f, mind * 0.044f / mind };
+    /* Dual thumbsticks at the gutter bottoms (gamepad-style): left = pitch/yaw,
+     * right = roll/throttle. */
+    s_stick_cx  = lgc; s_stick_cy  = 0.80f; s_stick_r  = mind * 0.115f / mind;
+    s_rstick_cx = rgc; s_rstick_cy = 0.80f; s_rstick_r = mind * 0.115f / mind;
+
+    /* MENU mid-left; A/B mid-right, above their stick. */
+    s_ctrl[BTN_MENU] = (Ctrl){ lgc,          0.45f, mind * 0.050f / mind };
+    s_ctrl[BTN_A]    = (Ctrl){ rgc + 0.055f, 0.46f, mind * 0.082f / mind };
+    s_ctrl[BTN_B]    = (Ctrl){ rgc - 0.075f, 0.46f, mind * 0.066f / mind };
 }
 
 static void blit_ctrl(SDL_Texture *t, float cx, float cy, float r,
@@ -347,14 +349,15 @@ static void blit_ctrl(SDL_Texture *t, float cx, float cy, float r,
 
 /* ---- touch tracking ------------------------------------------------- */
 #define MAX_TOUCH 8
-enum { ROLE_NONE, ROLE_STICK, ROLE_BTN };
+enum { ROLE_NONE, ROLE_STICK, ROLE_RSTICK, ROLE_BTN };
 typedef struct {
     SDL_FingerID id; bool active; int role; int btn;
     float cx, cy;                  /* current, normalised */
 } Touch;
 static Touch s_touch[MAX_TOUCH];
 static bool  s_btn_down[BTN_COUNT];
-static float s_stick_dx, s_stick_dy;   /* knob offset, -1..1 of base radius */
+static float s_stick_dx, s_stick_dy;     /* left knob offset, -1..1 of radius */
+static float s_rstick_dx, s_rstick_dy;   /* right knob offset */
 
 static Touch *touch_find(SDL_FingerID id) {
     for (int i = 0; i < MAX_TOUCH; i++)
@@ -380,9 +383,13 @@ static int hit_button(float nx, float ny) {
     }
     return -1;
 }
-static bool in_stick_zone(float nx, float ny) {
-    /* the whole left gutter below the top strip grabs the stick */
-    return nx < (float)s_view_x / g_ow && ny > 0.30f;
+static bool in_lstick_zone(float nx, float ny) {
+    /* lower-left gutter grabs the left (pitch/yaw) stick */
+    return nx < (float)s_view_x / g_ow && ny > 0.55f;
+}
+static bool in_rstick_zone(float nx, float ny) {
+    /* lower-right gutter grabs the right (roll/throttle) stick */
+    return nx > (float)(s_view_x + s_view_s) / g_ow && ny > 0.55f;
 }
 
 /* ---- gamepad -------------------------------------------------------- */
@@ -489,8 +496,10 @@ int main(int argc, char *argv[]) {
                 t->cx = ev.tfinger.x; t->cy = ev.tfinger.y;
                 int b = hit_button(ev.tfinger.x, ev.tfinger.y);
                 if (b >= 0)               { t->role = ROLE_BTN; t->btn = b; }
-                else if (in_stick_zone(ev.tfinger.x, ev.tfinger.y))
+                else if (in_lstick_zone(ev.tfinger.x, ev.tfinger.y))
                                           { t->role = ROLE_STICK; }
+                else if (in_rstick_zone(ev.tfinger.x, ev.tfinger.y))
+                                          { t->role = ROLE_RSTICK; }
                 else                      { t->role = ROLE_NONE; }
                 break;
             }
@@ -523,6 +532,7 @@ int main(int argc, char *argv[]) {
         float sens = 1.0f;             /* aim multiplier (settings slider) */
         memset(s_btn_down, 0, sizeof s_btn_down);
         s_stick_dx = s_stick_dy = 0.0f;
+        s_rstick_dx = s_rstick_dy = 0.0f;
 
         if (s_using_pad && s_pad) {
             /* Left stick = fly (analog) + d-pad threshold for menus. */
@@ -582,10 +592,11 @@ int main(int argc, char *argv[]) {
             }
 #undef GBTN
         } else {
-            /* Touch: walk active fingers. */
+            /* Touch: walk active fingers. Left stick = pitch/yaw, right stick =
+             * roll + throttle — the same dual-stick scheme as a gamepad. */
             sens = (float)s_settings[3] * 0.1f;       /* STICK slider */
-            elite_input_set_throttle_delta(0.0f);     /* clear gamepad residue */
             elite_input_set_throttle_abs(-1.0f);
+            float r_thr = 0.0f;
             for (int i = 0; i < MAX_TOUCH; i++) {
                 Touch *t = &s_touch[i];
                 if (!t->active) continue;
@@ -605,8 +616,19 @@ int main(int argc, char *argv[]) {
                     if (ny >  MENU_TH) btn.down = true;
                     if (nx < -MENU_TH) btn.left = true;
                     if (nx >  MENU_TH) btn.right = true;
+                } else if (t->role == ROLE_RSTICK) {
+                    float dx = (t->cx - s_rstick_cx) * g_ow;
+                    float dy = (t->cy - s_rstick_cy) * g_oh;
+                    float R  = s_rstick_r * (g_ow < g_oh ? g_ow : g_oh);
+                    float nx = dx / R, ny = dy / R;
+                    float l = sqrtf(nx * nx + ny * ny);
+                    if (l > 1.0f) { nx /= l; ny /= l; }
+                    s_rstick_dx = nx; s_rstick_dy = ny;
+                    ana_roll = (fabsf(nx) < STICK_DZ) ? 0 : -nx;  /* right = roll right */
+                    r_thr    = (fabsf(ny) < STICK_DZ) ? 0 : -ny;  /* up = throttle up */
                 }
             }
+            elite_input_set_throttle_delta(r_thr);
             btn.a    = s_btn_down[BTN_A];
             btn.b    = s_btn_down[BTN_B];
             btn.lb   = s_btn_down[BTN_LB];
@@ -652,12 +674,17 @@ int main(int argc, char *argv[]) {
         }
         if (ov > 0) {
             int mind = ow < oh ? ow : oh;
-            /* stick base + knob */
+            /* left + right stick bases + knobs */
             blit_ctrl(g_stick_base, s_stick_cx, s_stick_cy, s_stick_r, 1.0f,
                       255, (Uint8)(ov * 0.62f));
             float kx = s_stick_cx + s_stick_dx * s_stick_r * (float)mind / ow;
             float ky = s_stick_cy + s_stick_dy * s_stick_r * (float)mind / oh;
             blit_ctrl(g_stick_knob, kx, ky, s_stick_r * 0.5f, 1.0f, 255, ov);
+            blit_ctrl(g_stick_base, s_rstick_cx, s_rstick_cy, s_rstick_r, 1.0f,
+                      255, (Uint8)(ov * 0.62f));
+            float rkx = s_rstick_cx + s_rstick_dx * s_rstick_r * (float)mind / ow;
+            float rky = s_rstick_cy + s_rstick_dy * s_rstick_r * (float)mind / oh;
+            blit_ctrl(g_stick_knob, rkx, rky, s_rstick_r * 0.5f, 1.0f, 255, ov);
             /* buttons */
             for (int i = 0; i < BTN_COUNT; i++) {
                 float aw = (i == BTN_LB || i == BTN_RB) ? 1.7f : 1.0f;
