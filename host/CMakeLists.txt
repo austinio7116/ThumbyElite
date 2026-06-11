@@ -183,6 +183,7 @@ if(WIN_CROSS)
         COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:thumbyelite_host_quad> "${DIST}/Indemnity Run.exe"
         COMMAND ${CMAKE_COMMAND} -E copy ${SDL2_DLL} ${DIST}/SDL2.dll
         COMMAND ${CMAKE_COMMAND} -E copy ${ELITE_ROOT}/host/win/DIST_README.txt ${DIST}/README.txt
-        COMMENT "Packaging Windows dist/ (Indemnity Run.exe + SDL2.dll)"
+        COMMAND ${CMAKE_COMMAND} -E copy ${ELITE_ROOT}/host/win/indemnityrun.ico "${DIST}/Indemnity Run.ico"
+        COMMENT "Packaging Windows dist/ (Indemnity Run.exe + SDL2.dll + icon)"
         VERBATIM)
 endif()
