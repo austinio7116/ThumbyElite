@@ -2456,38 +2456,39 @@ static void dash_settings_overlay(uint16_t *fb) {
  * wordmark. Blank entries are page gaps. Skippable with A or MENU. */
 static const char *const k_intro[] = {
     "NOBODY BUILT THE",
-    "INDEMNITY. IT WAS",
-    "ALREADY RUNNING.",
+    "INDEMNITY. IT HAS",
+    "ALWAYS BEEN HERE.",
     "",
     "DIE INSURED, AND IT",
-    "MAKES YOU WHOLE -",
-    "YOU WAKE AT PORT,",
-    "YOUR DEATH UNDONE.",
+    "MAKES YOU WHOLE",
+    "AGAIN - YOU WAKE",
+    "AT PORT, YOUR",
+    "DEATH UNDONE.",
     "",
     "WHETHER THE PILOT",
-    "WHO WAKES IS YOU,",
-    "NO ONE DARES ASK.",
+    "WHO WAKES IS STILL",
+    "YOU, NO ONE DARES",
+    "ASK.",
     "",
     "THE POWER BEHIND IT:",
     "THE UNDERWRITER.",
     "IT COVERS THOSE WHO",
     "CAN PAY. WHAT IT",
     "TAKES IN RETURN,",
-    "NO ONE KNOWS.",
+    "NOBODY KNOWS.",
     "",
     "THOSE WHO CAN'T PAY",
-    "ARE THE UNINSURED.",
-    "THEY TURN PIRATE -",
+    "ARE THE UNINSURED -",
+    "THEY TURN PIRATE,",
     "CLAWING BACK THE",
     "COVER THEY LOST.",
     "",
     "AN INFINITE GALAXY.",
     "TRADE. FIGHT.",
-    "EXPLORE.",
-    "STAY COVERED.",
+    "EXPLORE. RUN.",
     "",
-    "THIS IS YOUR",
-    "INDEMNITY RUN.",
+    "THE INDEMNITY",
+    "WILL COVER YOU..",
 };
 #define INTRO_LINES ((int)(sizeof(k_intro) / sizeof(k_intro[0])))
 #define INTRO_SPEED 13.0f
@@ -2591,8 +2592,8 @@ void elite_game_draw_overlay(uint16_t *fb) {
         /* Title wordmark: custom angular font, teal double border. RUN matches
          * INDEMNITY's size (both scale 2). */
         {
-            uint16_t T_top = RGB565C(215,255,248), T_bot = RGB565C(20,172,162);
-            uint16_t T_in  = RGB565C(4,26,24),     T_out = RGB565C(95,240,222);
+            uint16_t T_top = RGB565C(220,255,250), T_bot = RGB565C(24,176,166);
+            uint16_t T_in  = RGB565C(10,10,14),    T_out = RGB565C(255,205,70);
             int s = 2;
             tw_draw(fb, "INDEMNITY", (128 - tw_width("INDEMNITY", s)) / 2, 14, s,
                     T_top, T_bot, T_in, T_out);
