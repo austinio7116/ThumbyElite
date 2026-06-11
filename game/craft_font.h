@@ -15,6 +15,9 @@
 
 int craft_font_draw(uint16_t *fb, const char *text, int x, int y, uint16_t color);
 int craft_font_draw_2x(uint16_t *fb, const char *text, int x, int y, uint16_t color);
+/* Scaled title text (s = pixel size) with a vertical gradient + 1px outline. */
+int craft_font_draw_title(uint16_t *fb, const char *text, int x, int y, int s,
+                          uint16_t top, uint16_t bot, uint16_t outline);
 int craft_font_width(const char *text);
 int craft_font_width_2x(const char *text);
 

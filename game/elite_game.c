@@ -770,6 +770,25 @@ void elite_game_init(uint32_t seed) {
     player_init();
     missions_init();
     r3d_starfield_init(seed ^ 0x7117u);
+
+    /* Title vista: park the sim on a nearby planet-bearing system so the title
+     * has a world to frame. Replaced the instant the player enters the galaxy
+     * (CONTINUE / NEW GAME both re-enter a system). */
+    {
+        SystemInfo probe;
+        int so = (int)(seed % 7) - 3, done = 0;
+        for (int sy = -5 + so; sy <= 5 + so && !done; sy++)
+            for (int sx = -5 + so; sx <= 5 + so && !done; sx++) {
+                int n = galaxy_sector_stars(sx, sy);
+                for (int i = 0; i < n && !done; i++) {
+                    SysAddr a = { (int16_t)sx, (int16_t)sy, (uint8_t)i };
+                    galaxy_generate(a, &probe);
+                    if (probe.n_planets >= 2) { system_enter(a); done = 1; }
+                }
+            }
+        if (!done) system_enter((SysAddr){ 0, 0, 0 });   /* fallback: any system */
+    }
+
     s_state = ST_TITLE;
     s_title_cursor = save_exists() ? 0 : 1;
     s_prev_menu = s_prev_a = false;
@@ -1887,18 +1906,54 @@ void elite_game_render_begin(void) {
 
     switch (s_state) {
     case ST_TITLE: {
-        /* Slow drift through the stars + a hero ship. */
+        /* Drifting vista: starfield + a world of the home system + a loose
+         * flight of ships, all seeded from the boot seed. */
+        const SystemInfo *si = system_info();
         Mat3 cam = m3_identity();
-        m3_rotate_local(&cam, 1, s_time * 0.02f);
+        bool have_planet = si->n_planets > 0;
+        /* Frame a world if the system has one, otherwise the star — both are
+         * emitted by r3d_planet_emit; aim the camera and sit it low so it
+         * backdrops the wordmark. */
+        Vec3 target = have_planet ? system_planet_pos_mm(0) : system_star_pos_mm();
+        float tr    = have_planet ? si->planets[0].radius_mm : si->star_radius_mm;
+        float dist  = have_planet ? 5.5f : 11.0f;
+        Vec3 up0 = v3(0.0f, 1.0f, 0.0f);
+        /* For a planet, back off toward the star so we see the lit face; for the
+         * star itself, any flattering angle. */
+        Vec3 off = have_planet ? v3_norm(v3_scale(target, -1.0f))
+                               : v3_norm(v3(0.30f, 0.45f, -0.84f));
+        Vec3 side = v3_norm(v3_cross(up0, off));
+        Vec3 vista = v3_add(target, v3_add(v3_scale(off, tr * dist),
+                            v3_add(v3_scale(side, tr * dist * 0.30f),
+                                   v3_scale(up0, tr * dist * 0.45f))));
+        Vec3 fwd = v3_norm(v3_sub(target, vista));
+        cam.r[2] = fwd;
+        cam.r[0] = v3_norm(v3_cross(up0, fwd));
+        cam.r[1] = v3_cross(fwd, cam.r[0]);
+        m3_rotate_local(&cam, 0, -0.40f);                       /* body sits low */
+        m3_rotate_local(&cam, 1, sinf(s_time * 0.07f) * 0.10f); /* gentle pan */
         r3d_scene_begin(&cam, 60.0f);
         r3d_pipe_set_sun(v3(0.35f, 0.45f, -0.82f));
-        R3DObject obj;
-        obj.mesh = hull_mesh(s_boot_seed ^ 0x44E5Au, 2);   /* hero of the day */
-        obj.basis = m3_identity();
-        m3_rotate_local(&obj.basis, 1, s_time * 0.3f);
-        m3_rotate_local(&obj.basis, 0, 0.25f);
-        obj.pos = m3_mul_v3(&cam, v3(8.0f, -4.0f, 26.0f));
-        r3d_scene_add_object(&obj);
+        r3d_planet_emit(vista);
+
+        for (int i = 0; i < 5; i++) {
+            uint32_t r = s_boot_seed ^ (uint32_t)(i * 0x9E3779B9u);
+            r ^= r >> 13; r *= 1274126177u; r ^= r >> 16;
+            float ph  = (r & 0xFFFF) / 65535.0f * 6.2831853f;
+            float rad = 12.0f + ((r >> 16) & 0xFF) / 255.0f * 14.0f;
+            float spd = 0.10f + ((r >> 8) & 0x7F) / 127.0f * 0.20f;
+            float yo  = -9.0f + ((r >> 4) & 0xFF) / 255.0f * 16.0f;
+            float a   = s_time * spd + ph;
+            R3DObject obj;
+            obj.mesh = hull_mesh(r ^ 0x44E5Au, (int)(r % 6));
+            obj.basis = m3_identity();
+            m3_rotate_local(&obj.basis, 1, a + 1.6f);
+            m3_rotate_local(&obj.basis, 0, 0.25f);
+            Vec3 wp = v3(cosf(a) * rad, yo + sinf(a * 0.6f) * 4.0f,
+                         30.0f + sinf(a) * rad * 0.4f);
+            obj.pos = m3_mul_v3(&cam, wp);
+            r3d_scene_add_object(&obj);
+        }
         break;
     }
 
@@ -2304,8 +2359,14 @@ void elite_game_draw_overlay(uint16_t *fb) {
 
     switch (s_state) {
     case ST_TITLE: {
-        craft_font_draw_2x(fb, "THUMBY", 40, 22, RGB565C(120, 230, 255));
-        craft_font_draw_2x(fb, "ELITE", 44, 36, RGB565C(255, 200, 60));
+        /* Title wordmark: cool gradient INDEMNITY over a warm gradient RUN,
+         * both with a dark outline so they read over the busy starfield. */
+        craft_font_draw_title(fb, "INDEMNITY", 11, 14, 3,
+                              RGB565C(238, 244, 255), RGB565C(48, 104, 236),
+                              RGB565C(6, 9, 26));
+        craft_font_draw_title(fb, "RUN", 42, 34, 4,
+                              RGB565C(255, 233, 150), RGB565C(232, 120, 32),
+                              RGB565C(26, 10, 4));
         bool has_save = save_exists();
         const char *items[2] = { "CONTINUE", "NEW GAME" };
         for (int i = 0; i < 2; i++) {
@@ -2320,8 +2381,8 @@ void elite_game_draw_overlay(uint16_t *fb) {
             craft_font_draw(fb, "CHEAT: 300,000 CR START", 14, 104,
                             RGB565C(245, 200, 80));
         else
-            craft_font_draw(fb, "AN INFINITE GALAXY AWAITS", 14, 116,
-                            RGB565C(70, 90, 115));
+            craft_font_draw(fb, "EVERY LIFE IS A RUN", 28, 116,
+                            RGB565C(80, 100, 125));
         return;
     }
 

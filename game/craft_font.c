@@ -109,6 +109,53 @@ int craft_font_draw_2x(uint16_t *fb, const char *text, int x, int y, uint16_t co
     return cur_x;
 }
 
+static inline uint16_t rgb_lerp(uint16_t a, uint16_t b, float t) {
+    int ar = (a >> 11) & 31, ag = (a >> 5) & 63, ab = a & 31;
+    int br = (b >> 11) & 31, bg = (b >> 5) & 63, bb = b & 31;
+    int r = ar + (int)((br - ar) * t);
+    int g = ag + (int)((bg - ag) * t);
+    int bl = ab + (int)((bb - ab) * t);
+    return (uint16_t)((r << 11) | (g << 5) | bl);
+}
+
+/* Big title text: each glyph pixel becomes an S×S block, drawn with a vertical
+ * gradient (top→bot over the glyph height) and wrapped in a 1px outline. Two
+ * passes (all outlines, then all fills) so neighbouring glyph pixels don't let
+ * the outline bleed over the fill. Returns the advanced x. */
+int craft_font_draw_title(uint16_t *fb, const char *text, int x, int y, int s,
+                          uint16_t top, uint16_t bot, uint16_t outline) {
+    if (!text || !fb || s < 1) return x;
+    int h = 5 * s;
+    for (int pass = 0; pass < 2; pass++) {
+        int cx = x;
+        for (const char *t = text; *t; t++) {
+            unsigned char ch = (unsigned char)*t;
+            uint16_t g = (ch < 128) ? font[ch] : glyph_unknown;
+            for (int row = 0; row < 5; row++) {
+                int bits = (g >> (row * 3)) & 0x7;
+                for (int col = 0; col < 3; col++) {
+                    if (!(bits & (1 << col))) continue;
+                    int gx = cx + col * s, gy = y + row * s;
+                    if (pass == 0) {                 /* outline */
+                        for (int yy = -1; yy <= s; yy++)
+                            for (int xx = -1; xx <= s; xx++)
+                                put(fb, gx + xx, gy + yy, outline);
+                    } else {                          /* gradient fill */
+                        for (int yy = 0; yy < s; yy++) {
+                            float tt = (float)(row * s + yy) / (float)(h - 1);
+                            uint16_t c = rgb_lerp(top, bot, tt);
+                            for (int xx = 0; xx < s; xx++)
+                                put(fb, gx + xx, gy + yy, c);
+                        }
+                    }
+                }
+            }
+            cx += CRAFT_FONT_CELL_W * s;
+        }
+    }
+    return x + craft_font_width(text) * s;
+}
+
 int craft_font_width(const char *text) {
     if (!text) return 0;
     int n = 0;
