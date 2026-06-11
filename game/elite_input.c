@@ -133,7 +133,9 @@ void elite_input_update(const CraftRawButtons *btn, float dt, FlightInput *out) 
         lr = s_ana_x;
     }
 
-    if (s_lb.down) { out->roll = lr; } else { out->yaw = lr; }
+    /* LB + L/R = roll (negated so LB+right rolls right, matching the gamepad);
+     * plain L/R = yaw. */
+    if (s_lb.down) { out->roll = -lr; } else { out->yaw = lr; }
     if (s_rb.down) { out->throttle_delta = ud; }
     else { out->pitch = g_player.invert_y ? ud : -ud; }
     /* Dedicated roll axis (gamepad right stick) wins over the chord. */
