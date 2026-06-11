@@ -219,9 +219,9 @@ static void nebula_fill(uint16_t *fb, int y0p, int y1p) {
             if (n > 0.52f) {               /* patchy, but visible where it is */
                 float k = (n - 0.52f) * 2.4f * s_neb_str; if (k > 1.0f) k = 1.0f;
                 float w = nb_noise(d.x * F + 77.0f, d.z * F - 19.0f);
-                int r = (int)(k * (w > 0.55f ? 21 : 9));   /* red patches in a blue wash */
-                int g = (int)(k * 6);
-                int b = (int)(k * (w > 0.55f ? 16 : 25));
+                int r = (int)(k * (w > 0.55f ? 12 : 5));   /* red patches in a blue wash */
+                int g = (int)(k * 4);
+                int b = (int)(k * (w > 0.55f ? 9 : 15));
                 c = (uint16_t)(((r & 31) << 11) | ((g & 63) << 5) | (b & 31));
             }
             for (int yy = y; yy < y + STEP && yy < y1p; yy++)
