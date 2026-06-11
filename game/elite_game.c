@@ -1936,23 +1936,56 @@ void elite_game_render_begin(void) {
         r3d_pipe_set_sun(v3(0.35f, 0.45f, -0.82f));
         r3d_planet_emit(vista);
 
-        for (int i = 0; i < 5; i++) {
-            uint32_t r = s_boot_seed ^ (uint32_t)(i * 0x9E3779B9u);
+        /* Two tail-chases + a lone runner: ships fly weaving paths (nosed
+         * along their velocity, banking into the turns); each hunter spits
+         * tracers at the prey it's chasing. */
+        for (int gp = 0; gp < 3; gp++) {
+            uint32_t r = s_boot_seed ^ (uint32_t)((gp + 1) * 0x9E3779B9u);
             r ^= r >> 13; r *= 1274126177u; r ^= r >> 16;
-            float ph  = (r & 0xFFFF) / 65535.0f * 6.2831853f;
-            float rad = 12.0f + ((r >> 16) & 0xFF) / 255.0f * 14.0f;
-            float spd = 0.10f + ((r >> 8) & 0x7F) / 127.0f * 0.20f;
-            float yo  = -9.0f + ((r >> 4) & 0xFF) / 255.0f * 16.0f;
-            float a   = s_time * spd + ph;
-            R3DObject obj;
-            obj.mesh = hull_mesh(r ^ 0x44E5Au, (int)(r % 6));
-            obj.basis = m3_identity();
-            m3_rotate_local(&obj.basis, 1, a + 1.6f);
-            m3_rotate_local(&obj.basis, 0, 0.25f);
-            Vec3 wp = v3(cosf(a) * rad, yo + sinf(a * 0.6f) * 4.0f,
-                         30.0f + sinf(a) * rad * 0.4f);
-            obj.pos = m3_mul_v3(&cam, wp);
-            r3d_scene_add_object(&obj);
+            float spd = 0.45f + ((r >> 16) & 0xFF) / 255.0f * 0.35f;
+            float ax  = 13.0f + ((r >> 8)  & 0x3F) / 63.0f  * 9.0f;
+            float yo  = -6.0f + ((r >> 2)  & 0xFF) / 255.0f * 12.0f;
+            float zb  = 24.0f + ((r >> 22) & 0x3F) / 63.0f  * 12.0f;
+            float wf  = 0.55f + ((r >> 12) & 0x7) * 0.05f;     /* weave freq */
+            float t   = s_time * spd + (float)gp * 2.1f;
+            int   nship = (gp < 2) ? 2 : 1;                    /* 0,1 chase; 2 lone */
+            Vec3  prey_rel = v3(0,0,0), hnose_rel = v3(0,0,0);
+#define TP(TT) v3(ax * sinf((TT) * wf), \
+                  yo + 6.0f * sinf((TT) * 1.10f + 1.0f), \
+                  zb + 9.0f * sinf((TT) * 0.50f + 2.0f))
+            for (int k = 0; k < nship; k++) {
+                float tk = t - (k == 1 ? 1.5f : 0.0f), e = 0.06f;
+                Vec3 p0 = TP(tk), p1 = TP(tk + e), p2 = TP(tk + 2*e);
+                if (p0.z < 4.0f) continue;
+                Vec3 vcs = v3_norm(v3_sub(p1, p0));
+                Vec3 fwd = v3_norm(m3_mul_v3(&cam, vcs));
+                Vec3 wup = m3_mul_v3(&cam, v3(0, 1, 0));
+                Vec3 rgt = v3_norm(v3_cross(wup, fwd));
+                R3DObject obj;
+                obj.mesh = hull_mesh(r ^ (k ? 0x99u : 0x44E5Au), (int)((r >> (k*4)) % 6));
+                obj.basis.r[0] = rgt;
+                obj.basis.r[1] = v3_cross(fwd, rgt);
+                obj.basis.r[2] = fwd;
+                obj.pos = m3_mul_v3(&cam, p0);
+                float bank = ((p2.x - p1.x) - (p1.x - p0.x)) * 90.0f;  /* lateral accel */
+                if (bank >  0.6f) bank =  0.6f;
+                if (bank < -0.6f) bank = -0.6f;
+                m3_rotate_local(&obj.basis, 2, bank);
+                r3d_scene_add_object(&obj);
+                if (k == 0) prey_rel = obj.pos;
+                if (k == 1) hnose_rel = m3_mul_v3(&cam, v3_add(p0, v3_scale(vcs, 1.6f)));
+            }
+            if (nship == 2 && sinf(t * 9.0f) > 0.2f) {        /* tracer burst */
+                /* Bolt streaks from the hunter's nose past the prey. */
+                Vec3 bolt = v3_add(prey_rel,
+                                   v3_scale(v3_sub(prey_rel, hnose_rel), 0.35f));
+                float sx0, sy0, sx1, sy1; uint16_t d0, d1;
+                if (r3d_scene_project(hnose_rel, &sx0, &sy0, &d0) &&
+                    r3d_scene_project(bolt,      &sx1, &sy1, &d1))
+                    r3d_scene_add_line(sx0, sy0, d0, sx1, sy1, d1,
+                        (gp & 1) ? RGB565C(150, 235, 255) : RGB565C(255, 150, 70));
+            }
+#undef TP
         }
         break;
     }
@@ -2381,7 +2414,7 @@ void elite_game_draw_overlay(uint16_t *fb) {
             craft_font_draw(fb, "CHEAT: 300,000 CR START", 14, 104,
                             RGB565C(245, 200, 80));
         else
-            craft_font_draw(fb, "EVERY LIFE IS A RUN", 28, 116,
+            craft_font_draw(fb, "AN INFINITE GALAXY TO EXPLORE", 6, 116,
                             RGB565C(80, 100, 125));
         return;
     }

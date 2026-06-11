@@ -176,13 +176,13 @@ target_compile_definitions(thumbyelite_host_quad PRIVATE
 # it next to SDL2.dll + a readme in build_win/dist/ for sideloading or a Steam
 # depot.
 if(WIN_CROSS)
-    set_target_properties(thumbyelite_host_quad PROPERTIES OUTPUT_NAME ThumbyElite)
+    set_target_properties(thumbyelite_host_quad PROPERTIES OUTPUT_NAME "Indemnity Run")
     set(DIST ${CMAKE_BINARY_DIR}/dist)
     add_custom_command(TARGET thumbyelite_host_quad POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DIST}
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:thumbyelite_host_quad> ${DIST}/ThumbyElite.exe
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:thumbyelite_host_quad> "${DIST}/Indemnity Run.exe"
         COMMAND ${CMAKE_COMMAND} -E copy ${SDL2_DLL} ${DIST}/SDL2.dll
         COMMAND ${CMAKE_COMMAND} -E copy ${ELITE_ROOT}/host/win/DIST_README.txt ${DIST}/README.txt
-        COMMENT "Packaging Windows dist/ (ThumbyElite.exe + SDL2.dll)"
+        COMMENT "Packaging Windows dist/ (Indemnity Run.exe + SDL2.dll)"
         VERBATIM)
 endif()
