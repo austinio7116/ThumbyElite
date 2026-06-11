@@ -2499,8 +2499,8 @@ static const char *const k_intro[] = {
     "INDEMNITY RUN.",
 };
 #define INTRO_LINES ((int)(sizeof(k_intro) / sizeof(k_intro[0])))
-#define INTRO_SPEED 32.0f
-#define INTRO_LH    14
+#define INTRO_SPEED 15.0f
+#define INTRO_LH    8
 
 static float intro_duration(void) {
     return (128.0f + INTRO_LINES * INTRO_LH) / INTRO_SPEED;
@@ -2511,17 +2511,76 @@ static void draw_intro_crawl(uint16_t *fb) {
     for (int i = 0; i < INTRO_LINES; i++) {
         if (!k_intro[i][0]) continue;              /* page gap */
         int y = (int)(topy + i * INTRO_LH);
-        if (y < -14 || y > 120) continue;
-        int x = (128 - craft_font_width_2x(k_intro[i])) / 2;
+        if (y < -8 || y > 120) continue;
+        int x = (128 - craft_font_width(k_intro[i])) / 2;
         if (x < 0) x = 0;
         int b = 255;                               /* fade in/out at the edges */
-        if (y < 28)        b = 255 * y / 28;
-        else if (y > 90)   b = 255 * (116 - y) / 26;
+        if (y < 22)        b = 255 * y / 22;
+        else if (y > 98)   b = 255 * (116 - y) / 18;
         if (b < 24) b = 24; if (b > 255) b = 255;
         uint16_t col = RGB565C(b * 205 / 255, b * 220 / 255, b);
-        craft_font_draw_2x(fb, k_intro[i], x, y, col);
+        craft_font_draw(fb, k_intro[i], x, y, col);
     }
     craft_font_draw(fb, "A / MENU: SKIP", 35, 121, RGB565C(70, 80, 100));
+}
+
+/* --- Title wordmark: custom N2 angular 5x7 font, teal double border ------
+ * Three passes per glyph (teal outer ring +2, dark inner ring +1, gradient
+ * fill) give the layered border the design called for. rows: 5 bits, bit4 = left
+ * column. Only the letters in "INDEMNITY RUN" are defined. */
+typedef struct { char ch; uint8_t rows[7]; } TitleGlyph;
+static const TitleGlyph k_tw[] = {
+    {'I',{0x1F,0x04,0x04,0x04,0x04,0x04,0x1F}},
+    {'N',{0x11,0x19,0x15,0x15,0x13,0x11,0x11}},
+    {'D',{0x1C,0x12,0x11,0x11,0x11,0x12,0x1C}},
+    {'E',{0x1F,0x10,0x10,0x1C,0x10,0x10,0x1F}},
+    {'M',{0x11,0x1B,0x15,0x11,0x11,0x11,0x11}},
+    {'T',{0x1F,0x04,0x04,0x04,0x04,0x04,0x04}},
+    {'Y',{0x11,0x0A,0x04,0x04,0x04,0x04,0x04}},
+    {'R',{0x1C,0x12,0x12,0x1C,0x14,0x12,0x11}},
+    {'U',{0x11,0x11,0x11,0x11,0x11,0x0A,0x04}},
+};
+static uint16_t tw_lerp(uint16_t a, uint16_t b, float t) {
+    int ar=(a>>11)&31, ag=(a>>5)&63, ab=a&31;
+    int br=(b>>11)&31, bg=(b>>5)&63, bb=b&31;
+    int r=ar+(int)((br-ar)*t+0.5f), g=ag+(int)((bg-ag)*t+0.5f), bl=ab+(int)((bb-ab)*t+0.5f);
+    return (uint16_t)((r<<11)|(g<<5)|bl);
+}
+static inline void tw_px(uint16_t *fb, int x, int y, uint16_t c) {
+    if ((unsigned)x < ELITE_FB_W && (unsigned)y < ELITE_FB_H) fb[y*ELITE_FB_W + x] = c;
+}
+static int tw_width(const char *s, int scale) {
+    int n=0; for (const char *p=s; *p; p++) n++;
+    return n*(6*scale) - scale;           /* glyph 5px + 1px gap, *scale */
+}
+static void tw_draw(uint16_t *fb, const char *s, int x, int y, int scale,
+                    uint16_t top, uint16_t bot, uint16_t inner, uint16_t outer) {
+    for (int pass=0; pass<3; pass++) {
+        int cx=x;
+        for (const char *p=s; *p; p++) {
+            const uint8_t *rows=NULL;
+            for (int i=0;i<(int)(sizeof k_tw/sizeof k_tw[0]);i++)
+                if (k_tw[i].ch==*p){ rows=k_tw[i].rows; break; }
+            if (rows) for (int r=0;r<7;r++) {
+                uint8_t bits=rows[r];
+                for (int c=0;c<5;c++) {
+                    if (!(bits & (1<<(4-c)))) continue;
+                    int gx=cx+c*scale, gy=y+r*scale;
+                    if (pass==0)
+                        for(int yy=-2;yy<scale+2;yy++)for(int xx=-2;xx<scale+2;xx++) tw_px(fb,gx+xx,gy+yy,outer);
+                    else if (pass==1)
+                        for(int yy=-1;yy<scale+1;yy++)for(int xx=-1;xx<scale+1;xx++) tw_px(fb,gx+xx,gy+yy,inner);
+                    else
+                        for(int yy=0;yy<scale;yy++){
+                            float tt=(float)(r*scale+yy)/(float)(7*scale-1);
+                            uint16_t col=tw_lerp(top,bot,tt);
+                            for(int xx=0;xx<scale;xx++) tw_px(fb,gx+xx,gy+yy,col);
+                        }
+                }
+            }
+            cx += 6*scale;
+        }
+    }
 }
 
 void elite_game_draw_overlay(uint16_t *fb) {
@@ -2538,14 +2597,17 @@ void elite_game_draw_overlay(uint16_t *fb) {
     switch (s_state) {
     case ST_TITLE: {
         if (s_intro_active) { draw_intro_crawl(fb); return; }
-        /* Title wordmark: cool gradient INDEMNITY over a warm gradient RUN,
-         * both with a dark outline so they read over the busy starfield. */
-        craft_font_draw_title(fb, "INDEMNITY", 11, 14, 3,
-                              RGB565C(238, 244, 255), RGB565C(48, 104, 236),
-                              RGB565C(6, 9, 26));
-        craft_font_draw_title(fb, "RUN", 42, 34, 4,
-                              RGB565C(255, 233, 150), RGB565C(232, 120, 32),
-                              RGB565C(26, 10, 4));
+        /* Title wordmark: custom angular font, teal double border. RUN matches
+         * INDEMNITY's size (both scale 2). */
+        {
+            uint16_t T_top = RGB565C(215,255,248), T_bot = RGB565C(20,172,162);
+            uint16_t T_in  = RGB565C(4,26,24),     T_out = RGB565C(95,240,222);
+            int s = 2;
+            tw_draw(fb, "INDEMNITY", (128 - tw_width("INDEMNITY", s)) / 2, 14, s,
+                    T_top, T_bot, T_in, T_out);
+            tw_draw(fb, "RUN", (128 - tw_width("RUN", s)) / 2, 32, s,
+                    T_top, T_bot, T_in, T_out);
+        }
         bool has_save = save_exists();
         const char *items[2] = { "CONTINUE", "NEW GAME" };
         for (int i = 0; i < 2; i++) {

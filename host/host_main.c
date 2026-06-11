@@ -4260,6 +4260,58 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    /* Title wordmark style explorer: render INDEMNITY RUN in a spread of
+     * colour/treatment options -> /tmp/tf_N.ppm. Run the SS=1 host. */
+    if (getenv("ELITE_TITLEFONTS")) {
+        extern int craft_font_draw_title(uint16_t *, const char *, int, int, int,
+                                         uint16_t, uint16_t, uint16_t);
+        extern int craft_font_width(const char *);
+        #define CC(r,g,b) RGB565C(r,g,b)
+        enum { GRAD, SHADOW, GLOW };
+        struct { uint16_t top, bot, outl, acc; int treat, s1, s2, single; } st[] = {
+            { CC(238,244,255), CC(48,104,236),  CC(6,9,26),   CC(232,120,32),  GRAD,   3,4,0 },
+            { CC(240,242,250), CC(150,90,215),  CC(10,8,22),  CC(205,175,255), GRAD,   3,4,0 },
+            { CC(255,238,170), CC(210,140,30),  CC(28,14,4),  CC(255,205,70),  GLOW,   3,4,0 },
+            { CC(238,250,255), CC(120,185,238), CC(8,16,30),  CC(80,200,255),  GLOW,   3,4,0 },
+            { CC(255,212,120), CC(225,120,30),  CC(18,10,4),  CC(0,0,0),       SHADOW, 3,4,0 },
+            { CC(255,180,170), CC(200,30,42),   CC(22,4,6),   CC(255,120,120), GRAD,   3,4,0 },
+            { CC(225,232,242), CC(95,115,145),  CC(8,12,20),  CC(0,0,0),       SHADOW, 3,4,0 },
+            { CC(180,255,180), CC(40,185,60),   CC(4,20,6),   CC(120,255,120), GRAD,   3,4,0 },
+            { CC(238,244,255), CC(48,104,236),  CC(6,9,26),   CC(232,120,32),  GRAD,   2,2,1 },
+        };
+        int n = (int)(sizeof(st) / sizeof(st[0]));
+        for (int i = 0; i < n; i++) {
+            for (int p = 0; p < ELITE_FB_W * ELITE_FB_H; p++) g_fb[p] = CC(10,12,22);
+            uint16_t tp = st[i].top, bt = st[i].bot, ol = st[i].outl, ac = st[i].acc;
+            if (st[i].single) {
+                const char *L = "INDEMNITY RUN"; int s = st[i].s1;
+                int x = (128 - craft_font_width(L) * s) / 2, y = 54;
+                if (st[i].treat == SHADOW)
+                    craft_font_draw_title(g_fb, L, x+2, y+2, s, ol, ol, ol);
+                if (st[i].treat == GLOW)
+                    for (int o=0;o<4;o++){int dx=(o&1)?2:-2,dy=(o&2)?2:-2;
+                        craft_font_draw_title(g_fb,L,x+dx,y+dy,s,ac,ac,ac);}
+                craft_font_draw_title(g_fb, L, x, y, s, tp, bt, ol);
+            } else {
+                const char *A="INDEMNITY",*B="RUN"; int s1=st[i].s1,s2=st[i].s2;
+                int ax=(128-craft_font_width(A)*s1)/2, bx=(128-craft_font_width(B)*s2)/2;
+                int ay=36, by=62;
+                if (st[i].treat == SHADOW){
+                    craft_font_draw_title(g_fb,A,ax+3,ay+3,s1,ol,ol,ol);
+                    craft_font_draw_title(g_fb,B,bx+3,by+3,s2,ol,ol,ol); }
+                if (st[i].treat == GLOW)
+                    for (int o=0;o<4;o++){int dx=(o&1)?2:-2,dy=(o&2)?2:-2;
+                        craft_font_draw_title(g_fb,A,ax+dx,ay+dy,s1,ac,ac,ac);
+                        craft_font_draw_title(g_fb,B,bx+dx,by+dy,s2,ac,ac,ac);}
+                craft_font_draw_title(g_fb,A,ax,ay,s1,tp,bt,ol);
+                craft_font_draw_title(g_fb,B,bx,by,s2,tp,bt,ol);
+            }
+            char path[48]; snprintf(path,sizeof path,"/tmp/tf_%d.ppm",i+1);
+            dump_ppm(path);
+        }
+        return 0;
+    }
+
     /* Headless autopilot: chase the scanner's nearest hostile and hold the
      * trigger for N seconds, logging the combat loop each second. */
     if (getenv("ELITE_DEMO")) {
