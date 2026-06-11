@@ -61,11 +61,47 @@ static Mission s_offers[MISSION_OFFERS];
 /* Shipyard stock: each dockyard rolls its own 5 ships. */
 #define YARD_OFFERS 5
 typedef struct {
-    uint8_t cls;
+    uint8_t  cls;
+    uint8_t  bargain;       /* a special-offer discount is on this hull */
     uint32_t seed;
-    char name[16];
+    int32_t  price;         /* economy + quality adjusted (incl. bargain) */
+    char     name[16];
 } YardOffer;
 static YardOffer s_yard[YARD_OFFERS];
+
+/* Ships price like the armoury: the station's economy times the hull's OWN
+ * rolled quality (stats / slot config / utility bays / hold), with the odd
+ * bargain to be found. */
+static float econ_ship_mult(int econ) {
+    static const float k_m[8] = {
+        /* AGRI */ 1.12f, /* INDUST */ 0.92f, /* HITECH */ 0.90f,
+        /* EXTRACT */ 1.06f, /* REFINE */ 0.98f, /* TOURISM */ 1.14f,
+        /* MILITARY */ 0.88f, /* SERVICE */ 1.02f,
+    };
+    return k_m[econ & 7];
+}
+static float hull_quality_mult(int cls, const HullRoll *hr) {
+    const HullDef *h = &k_hulls[cls];
+    float perf = (hr->spd + hr->acc + hr->trn + hr->hull + hr->shd + hr->jmp)
+                 * (1.0f / 6.0f);                 /* avg stat roll, ~1.0 */
+    int basesl = 0, rollsl = 0;
+    for (int i = 0; i < h->n_slots; i++)  basesl += h->slot_size[i];
+    for (int i = 0; i < hr->n_slots; i++) rollsl += hr->slot_size[i];
+    float slotf  = basesl ? (float)rollsl / (float)basesl : 1.0f;
+    float cargof = (float)hr->cargo / (float)(h->cargo < 1 ? 1 : h->cargo);
+    float utilf  = 1.0f + 0.05f * (float)(hr->utils - 2);
+    float q = 0.40f * perf + 0.34f * slotf + 0.14f * cargof + 0.12f * utilf;
+    return 1.0f + (q - 1.0f) * 1.7f;   /* amplify so features visibly matter */
+}
+static int hull_market_value(int cls, uint32_t seed, int econ) {
+    HullRoll hr; hull_roll(cls, seed, &hr);
+    float v = (float)k_hulls[cls].price * hull_quality_mult(cls, &hr) *
+              econ_ship_mult(econ);
+    return (int)(v + 0.5f);
+}
+static int player_tradein(int econ) {
+    return (hull_market_value(g_player.hull_id, g_player.hull_seed, econ) * 7) / 10;
+}
 
 static void yard_build(void) {
     const SystemInfo *si = system_info();
@@ -87,6 +123,15 @@ static void yard_build(void) {
         snprintf(s_yard[i].name, sizeof s_yard[i].name, "%s-%c%d",
                  k_hulls[cls].name, (char)('A' + (h >> 8) % 26u),
                  (int)(1 + (h >> 16) % 9u));
+        /* Economy + quality price, with the occasional special offer. */
+        int econ = si->stations[s_station].econ;
+        int v = hull_market_value(cls, s_yard[i].seed, econ);
+        uint32_t bh = s_yard[i].seed ^ 0x5A1E0FFEu;
+        bh ^= bh >> 13; bh *= 1274126177u; bh ^= bh >> 16;
+        s_yard[i].bargain = ((bh % 7u) == 0) ? 1 : 0;
+        if (s_yard[i].bargain)
+            v = (int)(v * (0.70f + 0.06f * (float)((bh >> 8) & 0xFF) / 255.0f));
+        s_yard[i].price = v;
     }
 }
 
@@ -274,9 +319,7 @@ static void detail_draw_kit(uint16_t *fb, int hull_id, uint32_t seed,
     hull_kit_preview(hull_id, seed, kit);
     HullRoll rv; hull_roll(hull_id, seed, &rv);
     char buf[28];
-    craft_font_draw(fb, "COMES WITH", 2, 2, COL_HDR);
-    for (int x = 0; x < 64; x++) fb[9 * ELITE_FB_W + x] = COL_GRID;
-    int y = 13;
+    int y = 4;
     craft_font_draw(fb, "WEAPONS:", 2, y, COL_HDR); y += 9;
     for (int i = 0; i < rv.n_slots && i < HULL_SLOTS; i++) {
         if (kit[i].in_use)
@@ -294,9 +337,6 @@ static void detail_draw_kit(uint16_t *fb, int hull_id, uint32_t seed,
         snprintf(buf, sizeof buf, "Z1 %s", cal[turret_cal_for_seed(seed)]);
         craft_font_draw(fb, buf, 4, y, COL_TXT); y += 8;
     }
-    y += 3;
-    craft_font_draw(fb, "+ FULL FUEL, FRESH", 2, y, COL_DIM); y += 7;
-    craft_font_draw(fb, "  HULL & SHIELD", 2, y, COL_DIM);
     for (int x = 0; x < 64; x++) fb[118 * ELITE_FB_W + x] = COL_GRID;
     craft_font_draw(fb, foot, 2, 121, COL_DIM);
 }
@@ -309,8 +349,9 @@ static void shipyard_buy(int offer) {
         return;
     }
     const HullDef *h = &k_hulls[hull_id];
-    int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
-    int cost = h->price - tradein;
+    int econ = system_info()->stations[s_station].econ;
+    int tradein = player_tradein(econ);
+    int cost = s_yard[offer].price - tradein;
     if (cost < 0) cost = 0;
     if (g_player.credits < cost) { toast("NO CREDITS"); return; }
     /* Cargo must fit the new hold. */
@@ -1461,7 +1502,9 @@ static void draw_shipyard(uint16_t *fb) {
     for (int i = 0; i < YARD_OFFERS; i++, y += 11) {
         uint16_t c = (i == s_cursor) ? COL_CUR : COL_DIM;
         if (i == s_cursor) craft_font_draw(fb, ">", 2, y, COL_CUR);
-        craft_font_draw(fb, s_yard[i].name, 8, y, c);
+        int nx = craft_font_draw(fb, s_yard[i].name, 8, y, c);
+        if (s_yard[i].bargain)                       /* special offer */
+            craft_font_draw(fb, " *", nx, y, RGB565C(255, 210, 70));
     }
     {   /* YOUR ship: compare row, no purchase — blue IS the label. */
         uint16_t c = (s_cursor == YARD_OFFERS) ? RGB565C(120, 210, 235)
@@ -1486,11 +1529,12 @@ static void draw_shipyard(uint16_t *fb) {
         snprintf(buf, sizeof buf, "%s  YOUR SHIP",
                  k_hulls[g_player.hull_id].name);
     } else {
-        int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
-        int cost = sel->price - tradein;
+        int econ = system_info()->stations[s_station].econ;
+        int tradein = player_tradein(econ);
+        int cost = s_yard[s_cursor].price - tradein;
         if (cost < 0) cost = 0;
-        snprintf(buf, sizeof buf, "%s COST %d CR", s_yard[s_cursor].name,
-                 cost);
+        snprintf(buf, sizeof buf, "%s %s %d CR", s_yard[s_cursor].name,
+                 s_yard[s_cursor].bargain ? "OFFER" : "COST", cost);
     }
     craft_font_draw(fb, buf, 2, 98, COL_CRED);
     /* Label/value colour pairs: "SPD85 CRG6 H70 S50 SL1" */
@@ -1523,11 +1567,13 @@ static void draw_shipyard(uint16_t *fb) {
       craft_font_draw(fb, h, 2, 117, COL_DIM); }
     if (s_yard_confirm) {
         int idx = s_yard_confirm - 1;
-        int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
-        int cost = k_hulls[s_yard[idx].cls].price - tradein;
+        int econ = system_info()->stations[s_station].econ;
+        int tradein = player_tradein(econ);
+        int cost = s_yard[idx].price - tradein;
         if (cost < 0) cost = 0;
         char t[40], c[28];
-        snprintf(t, sizeof t, "BUY %s", s_yard[idx].name);
+        snprintf(t, sizeof t, "BUY %s%s", s_yard[idx].name,
+                 s_yard[idx].bargain ? " *" : "");
         snprintf(c, sizeof c, "%d CR    A:YES  B:NO", cost);
         const char *const it[1] = { c };
         draw_action_box(fb, t, it, 1, -1);
