@@ -351,9 +351,8 @@ static void shipyard_buy(int offer) {
     const HullDef *h = &k_hulls[hull_id];
     int econ = system_info()->stations[s_station].econ;
     int tradein = player_tradein(econ);
-    int cost = s_yard[offer].price - tradein;
-    if (cost < 0) cost = 0;
-    if (g_player.credits < cost) { toast("NO CREDITS"); return; }
+    int cost = s_yard[offer].price - tradein;   /* <0 = trade-down, refund diff */
+    if (cost > 0 && g_player.credits < cost) { toast("NO CREDITS"); return; }
     /* Cargo must fit the new hold. */
     if (player_cargo_total() > h->cargo) { toast("CARGO WONT FIT"); return; }
     g_player.credits -= cost;
@@ -1532,9 +1531,10 @@ static void draw_shipyard(uint16_t *fb) {
         int econ = system_info()->stations[s_station].econ;
         int tradein = player_tradein(econ);
         int cost = s_yard[s_cursor].price - tradein;
-        if (cost < 0) cost = 0;
+        const char *lab = (cost < 0) ? "GET"
+                        : s_yard[s_cursor].bargain ? "OFFER" : "COST";
         snprintf(buf, sizeof buf, "%s %s %d CR", s_yard[s_cursor].name,
-                 s_yard[s_cursor].bargain ? "OFFER" : "COST", cost);
+                 lab, cost < 0 ? -cost : cost);
     }
     craft_font_draw(fb, buf, 2, 98, COL_CRED);
     /* Label/value colour pairs: "SPD85 CRG6 H70 S50 SL1" */
@@ -1570,11 +1570,13 @@ static void draw_shipyard(uint16_t *fb) {
         int econ = system_info()->stations[s_station].econ;
         int tradein = player_tradein(econ);
         int cost = s_yard[idx].price - tradein;
-        if (cost < 0) cost = 0;
         char t[40], c[28];
         snprintf(t, sizeof t, "BUY %s%s", s_yard[idx].name,
                  s_yard[idx].bargain ? " *" : "");
-        snprintf(c, sizeof c, "%d CR    A:YES  B:NO", cost);
+        if (cost < 0)
+            snprintf(c, sizeof c, "GET %d CR  A:YES B:NO", -cost);
+        else
+            snprintf(c, sizeof c, "%d CR    A:YES  B:NO", cost);
         const char *const it[1] = { c };
         draw_action_box(fb, t, it, 1, -1);
     }
@@ -1949,12 +1951,12 @@ void station_draw(uint16_t *fb) {
         if (yours) {
             snprintf(f, sizeof f, "</>:CMP %s:KIT %s:BACK",
                      plat_menu_btn(MB_INFO), plat_menu_btn(MB_B));
-            detail_draw_hull(fb, cls, sd, -1, f);
+            detail_draw_hull(fb, cls, sd, DETAIL_OWNED, f);
             return;
         }
-        int tradein = (k_hulls[g_player.hull_id].price * 7) / 10;
-        int cost = k_hulls[cls].price - tradein;
-        if (cost < 0) cost = 0;
+        int econ = system_info()->stations[s_station].econ;
+        int tradein = player_tradein(econ);
+        int cost = s_yard[s_cursor].price - tradein;   /* <0 = trade-down refund */
         snprintf(f, sizeof f, "%s:BUY %s:KIT </>:CMP %s:BACK",
                  plat_menu_btn(MB_A), plat_menu_btn(MB_INFO), plat_menu_btn(MB_B));
         detail_draw_hull(fb, cls, sd, cost, f);

@@ -332,9 +332,12 @@ void detail_draw_hull(uint16_t *fb, int hull_id, uint32_t seed, int cost,
     #undef CMPC
 
     hl(fb, 95, COL_GRID);
-    if (cost < 0)
+    if (cost == DETAIL_OWNED)
         craft_font_draw(fb, "OWNED", 2, 99, COL_CRED);
-    else {
+    else if (cost < 0) {           /* trade-down: difference refunded */
+        snprintf(buf, sizeof buf, "GET %d CR (TRADE-IN)", -cost);
+        craft_font_draw(fb, buf, 2, 99, COL_CRED);
+    } else {
         snprintf(buf, sizeof buf, "COST %d CR (TRADE-IN)", cost);
         craft_font_draw(fb, buf, 2, 99, COL_CRED);
     }

@@ -21,8 +21,10 @@ void detail_draw_weapon(uint16_t *fb, const WeaponInst *wi,
                         int price, const char *price_label,
                         const char *footer);
 
-/* Hull sheet: full specs; cost < 0 renders OWNED. The caller's 3D pane
- * (right column, y 10..95) stays open — text fits the left column. */
+/* Hull sheet: full specs. cost == DETAIL_OWNED renders OWNED; a negative cost
+ * is a trade-down refund (renders GET). The caller's 3D pane (right column,
+ * y 10..95) stays open — text fits the left column. */
+#define DETAIL_OWNED (-2000000000)
 void detail_draw_hull(uint16_t *fb, int hull_id, uint32_t seed, int cost,
                       const char *footer);
 
