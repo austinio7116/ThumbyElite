@@ -23,6 +23,9 @@ int craft_font_width_2x(const char *text);
 /* Fractional scale (num/den), e.g. 3/2 = 1.5x — a size between 1x and 2x. */
 int craft_font_draw_frac(uint16_t *fb, const char *text, int x, int y,
                          int num, int den, uint16_t color);
+/* Anti-aliased fractional scale: blends coverage onto the existing fb pixels. */
+int craft_font_draw_frac_aa(uint16_t *fb, const char *text, int x, int y,
+                            int num, int den, uint16_t color);
 int craft_font_width_frac(const char *text, int num, int den);
 
 /* Set the destination dimensions glyph writes are clamped/strided to. Used by

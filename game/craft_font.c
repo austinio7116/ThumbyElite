@@ -194,3 +194,49 @@ int craft_font_width_frac(const char *text, int num, int den) {
     int n = 0; for (; *text; text++) if (*text != '\n') n++;
     return n * (CRAFT_FONT_CELL_W * num) / den;
 }
+
+static uint16_t cf_lerp(uint16_t a, uint16_t b, int t /*0..256*/) {
+    int ar=(a>>11)&31, ag=(a>>5)&63, ab=a&31;
+    int br=(b>>11)&31, bg=(b>>5)&63, bb=b&31;
+    int r=ar+(((br-ar)*t)>>8), g=ag+(((bg-ag)*t)>>8), bl=ab+(((bb-ab)*t)>>8);
+    return (uint16_t)((r<<11)|(g<<5)|bl);
+}
+/* Anti-aliased fractional scale: supersample each output pixel's coverage of
+ * the 3x5 glyph and alpha-blend `color` onto whatever is already in fb. Far
+ * smoother/more legible than the nearest-neighbour craft_font_draw_frac at
+ * non-integer scales (e.g. 1.5x). */
+int craft_font_draw_frac_aa(uint16_t *fb, const char *text, int x, int y,
+                            int num, int den, uint16_t color) {
+    if (!text || !fb || num < 1 || den < 1) return x;
+    const int SS = 3;
+    int ow = (3 * num + den - 1) / den, oh = (5 * num + den - 1) / den;
+    int cur_x = x;
+    for (; *text; text++) {
+        unsigned char ch = (unsigned char)*text;
+        if (ch == '\n') { cur_x = x; y += (CRAFT_FONT_CELL_H * num) / den; continue; }
+        uint16_t g = (ch < 128) ? font[ch] : glyph_unknown;
+        for (int oy = 0; oy < oh; oy++) {
+            for (int ox = 0; ox < ow; ox++) {
+                int hit = 0;
+                for (int sj = 0; sj < SS; sj++) {
+                    int sr = ((oy * SS + sj) * den) / (num * SS);
+                    if (sr < 0 || sr > 4) continue;
+                    int bits = (g >> (sr * 3)) & 0x7;
+                    for (int si = 0; si < SS; si++) {
+                        int sc = ((ox * SS + si) * den) / (num * SS);
+                        if (sc >= 0 && sc < 3 && (bits & (1 << sc))) hit++;
+                    }
+                }
+                if (!hit) continue;
+                int px = cur_x + ox, py = y + oy;
+                if ((unsigned)px < (unsigned)FONT_TW && (unsigned)py < (unsigned)FONT_TH) {
+                    int t = (hit * 256) / (SS * SS);
+                    uint16_t *d = &fb[py * FONT_TW + px];
+                    *d = cf_lerp(*d, color, t > 256 ? 256 : t);
+                }
+            }
+        }
+        cur_x += (CRAFT_FONT_CELL_W * num) / den;
+    }
+    return cur_x;
+}

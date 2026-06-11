@@ -2490,7 +2490,7 @@ static const char *const k_intro[] = {
     "INDEMNITY RUN.",
 };
 #define INTRO_LINES ((int)(sizeof(k_intro) / sizeof(k_intro[0])))
-#define INTRO_SPEED 17.0f
+#define INTRO_SPEED 13.0f
 #define INTRO_LH    10
 
 static float intro_duration(void) {
@@ -2510,7 +2510,7 @@ static void draw_intro_crawl(uint16_t *fb) {
         else if (y > 96)   b = 255 * (116 - y) / 20;
         if (b < 24) b = 24; if (b > 255) b = 255;
         uint16_t col = RGB565C(b * 205 / 255, b * 220 / 255, b);
-        craft_font_draw_frac(fb, k_intro[i], x, y, 3, 2, col);
+        craft_font_draw_frac_aa(fb, k_intro[i], x, y, 3, 2, col);
     }
     craft_font_draw(fb, "A / MENU: SKIP", 35, 121, RGB565C(70, 80, 100));
 }
