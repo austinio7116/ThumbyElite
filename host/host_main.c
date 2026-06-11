@@ -3067,16 +3067,18 @@ int main(int argc, char **argv) {
     /* Launcher-icon render: a hero ship, 3/4 view, lit on a starfield.
      * Run under the hires build for a crisp 256x256 source. */
     if (getenv("ELITE_APPICON")) {
-        r3d_starfield_init(0x1CE0FFu);
+        int cls = getenv("ELITE_ICONCLS") ? atoi(getenv("ELITE_ICONCLS")) : 3;
+        r3d_scene_set_icon_bg(0xF81Fu);             /* magenta key, no sky */
         Mat3 cam = m3_identity();
-        r3d_scene_begin(&cam, 52.0f);
-        r3d_pipe_set_sun(v3_norm(v3(0.45f, 0.55f, -0.70f)));
+        r3d_scene_begin(&cam, 50.0f);
+        r3d_pipe_set_sun(v3_norm(v3(0.50f, 0.60f, -0.62f)));
         R3DObject obj;
-        obj.mesh  = hull_mesh(0x5A17u, 4);          /* a sleek mid hull */
+        obj.mesh  = hull_mesh(0x5A17u, cls);        /* a real game hull */
         obj.basis = m3_identity();
         m3_rotate_local(&obj.basis, 1, 0.70f);      /* yaw  3/4 */
-        m3_rotate_local(&obj.basis, 0, 0.32f);      /* pitch nose-down */
-        float dist = obj.mesh->bound_r * 2.05f;
+        m3_rotate_local(&obj.basis, 0, 0.36f);      /* pitch nose-down (see the top) */
+        m3_rotate_local(&obj.basis, 2, -0.16f);     /* slight bank */
+        float dist = obj.mesh->bound_r * 2.0f;
         obj.pos   = v3(0.0f, 0.0f, dist);
         r3d_scene_add_object(&obj);
         r3d_scene_raster(g_fb, 0, ELITE_FB_H);

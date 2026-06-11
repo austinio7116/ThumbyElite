@@ -117,11 +117,29 @@ def space_bg():
     stars(img, 90, 7)
     return img
 
-def add_ship(img, cxf, cyf, scalef):
-    ship = draw_ship(int(W * 0.7), int(W * scalef / 3.2))
-    ship = ship.rotate(-32, resample=Image.BICUBIC, expand=False)
-    img.alpha_composite(ship, (int(W * cxf - ship.size[0] / 2),
-                               int(W * cyf - ship.size[1] / 2)))
+_ship_cache = [None]
+def load_ship():
+    """The real game hull, rendered by ELITE_APPICON on a magenta key bg."""
+    if _ship_cache[0] is not None:
+        return _ship_cache[0]
+    path = os.environ.get("ICON_SHIP", "/tmp/elite_icon.ppm")
+    s = Image.open(path).convert("RGBA")
+    px = s.load()
+    for y in range(s.size[1]):
+        for x in range(s.size[0]):
+            r, g, b, _ = px[x, y]
+            if r > 170 and b > 170 and g < 95:        # magenta key
+                px[x, y] = (0, 0, 0, 0)
+    s = s.crop(s.getbbox())                            # trim to the hull
+    _ship_cache[0] = s
+    return s
+
+def add_ship(img, cxf, cyf, widthf):
+    ship = load_ship()
+    w = int(W * widthf)
+    h = int(w * ship.size[1] / ship.size[0])
+    ship = ship.resize((w, h), Image.LANCZOS)
+    img.alpha_composite(ship, (int(W * cxf - w / 2), int(W * cyf - h / 2)))
 
 def render(mode):
     """'full' square icon | 'abg' adaptive background | 'afg' adaptive fg."""
@@ -134,10 +152,10 @@ def render(mode):
         draw_planet(img, W * 0.78, W * 1.04, W * 0.55, light=(-0.55, -0.45, 0.70))
 
     if mode == "full":
-        add_ship(img, 0.46, 0.40, 0.70)
+        add_ship(img, 0.48, 0.44, 0.82)
     elif mode == "afg":
         # ship centred + smaller so the launcher mask never crops it
-        add_ship(img, 0.50, 0.50, 0.52)
+        add_ship(img, 0.50, 0.50, 0.66)
 
     return img.resize((R, R), Image.LANCZOS)
 

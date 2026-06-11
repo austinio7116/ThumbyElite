@@ -181,6 +181,8 @@ static float    s_neb_str;          /* 0 = off, up to ~1 = thick */
 void r3d_scene_set_nebula(uint32_t seed, float strength) {
     s_nebula = seed; s_neb_str = strength;
 }
+static uint16_t s_icon_bg;          /* nonzero = flat key bg (icon render) */
+void r3d_scene_set_icon_bg(uint16_t c) { s_icon_bg = c; }
 static uint32_t nb_hash(int x, int y) {
     uint32_t h = (uint32_t)x * 374761393u + (uint32_t)y * 668265263u;
     h = (h ^ (h >> 13)) * 1274126177u; return h ^ (h >> 16);
@@ -236,13 +238,22 @@ void r3d_scene_raster(uint16_t *fb, int y0, int y1) {
     /* Callers pass logical rows; everything below runs physical. */
     int y0p = y0 * R3D_SS, y1p = y1 * R3D_SS;
 
-    if (s_nebula && s_neb_str > 0.01f) nebula_fill(fb, y0p, y1p);
-    else memset(fb + y0p * R3D_FB_W, 0,
-                (size_t)(y1p - y0p) * R3D_FB_W * sizeof(uint16_t));
-    r3d_raster_set_fb(fb);
-    r3d_depth_clear(y0p, y1p);
-    starfield_raster(fb, y0p, y1p);
-    r3d_planet_raster(fb, y0p, y1p); /* writes depth: ships pass behind */
+    if (s_icon_bg) {                     /* icon render: flat key colour, no sky */
+        for (int y = y0p; y < y1p; y++) {
+            uint16_t *row = fb + y * R3D_FB_W;
+            for (int x = 0; x < R3D_FB_W; x++) row[x] = s_icon_bg;
+        }
+        r3d_raster_set_fb(fb);
+        r3d_depth_clear(y0p, y1p);
+    } else {
+        if (s_nebula && s_neb_str > 0.01f) nebula_fill(fb, y0p, y1p);
+        else memset(fb + y0p * R3D_FB_W, 0,
+                    (size_t)(y1p - y0p) * R3D_FB_W * sizeof(uint16_t));
+        r3d_raster_set_fb(fb);
+        r3d_depth_clear(y0p, y1p);
+        starfield_raster(fb, y0p, y1p);
+        r3d_planet_raster(fb, y0p, y1p); /* writes depth: ships pass behind */
+    }
 
     const float SS = (float)R3D_SS;
     int n = s_ntris;
