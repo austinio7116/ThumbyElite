@@ -17,6 +17,8 @@ void loot_on_kill(Vec3 pos, Vec3 vel, int tier,
 const char *loot_tick(float dt);
 /* Add live canisters to the scene (camera-relative). */
 void loot_render(Vec3 cam_pos);
+/* Drop beacons (point + light-mast); false = bare cubes (title intro). */
+void loot_set_beacons(bool on);
 
 /* Scanner support: fill out[] with live canister positions (and
  * whether each holds a component). Returns the count. */

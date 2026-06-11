@@ -18,6 +18,11 @@
 #include "meshes_gen.h"
 #include <stdio.h>
 
+/* Drop beacons (bright point + light-mast) are hidden on the title so the
+ * cargo cubes don't read as prominent markers behind the wordmark. */
+static bool s_loot_beacons = true;
+void loot_set_beacons(bool on) { s_loot_beacons = on; }
+
 #define MAX_CANS   6
 #define SCOOP_RANGE 22.0f
 #define CAN_LIFE   45.0f
@@ -201,6 +206,7 @@ void loot_render(Vec3 cam_pos) {
         uint16_t bc = c->is_component
                           ? RGB565C(120, 230, 255)
                           : RGB565C(255, 210, 70);
+        if (!s_loot_beacons) continue;     /* title: bare cubes, no markers */
         float sx, sy;
         uint16_t d;
         Vec3 rel = v3_sub(c->pos, cam_pos);

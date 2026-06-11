@@ -634,6 +634,7 @@ static void arrive_in_system(SysAddr addr) {
     s_entry_salt++;
     s_distress_done = 0;       /* fresh system, fresh emergencies */
     set_nebula_for_addr(addr);
+    loot_set_beacons(true);
     system_enter(addr);
     Poi beacon;
     Poi pois[MAX_POIS];
@@ -750,6 +751,7 @@ static void cycle_target(void) {
 static void arrive_docked(const SaveMeta *meta) {
     s_addr = meta->addr;
     set_nebula_for_addr(meta->addr);
+    loot_set_beacons(true);
     system_enter(meta->addr);
     Poi pois[MAX_POIS];
     int n = system_pois(pois, MAX_POIS);
@@ -836,6 +838,7 @@ void elite_game_init(uint32_t seed) {
         s_title_perp = p->basis.r[0];
     }
     r3d_scene_set_nebula(seed | 1u, 1.0f);   /* blue/red galaxy wash on the title */
+    loot_set_beacons(false);                 /* bare cubes on the title */
 
     s_state = ST_TITLE;
     s_title_cursor = save_exists() ? 0 : 1;
@@ -1648,6 +1651,13 @@ static void title_battle_tick(float dt) {
     fx_tick(dt);
     collide_tick(false, 0.0f, false);
     flight_tick(dt);
+    /* Engine streams for every fighter (tick_flight does this in real flight). */
+    for (int i = 1; i < MAX_SHIPS; i++) {
+        Ship *s = &g_ships[i];
+        if (!s->alive) continue;
+        Vec3 rear = v3_sub(s->pos, v3_scale(s->basis.r[2], s->mesh->bound_r * 0.8f));
+        fx_engine_trail(rear, s->vel, s->throttle, dt);
+    }
 }
 
 void elite_game_tick(const CraftRawButtons *btn, float dt) {
