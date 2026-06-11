@@ -3086,6 +3086,38 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    /* Icon background: a real game world (lit, low) + the distant star on dark
+     * space with a faint nebula — composited under the hull by make_icon.py. */
+    if (getenv("ELITE_ICONBG")) {
+        const SystemInfo *si = system_info();
+        Mat3 cam = m3_identity();
+        Vec3 vista = v3(0, 0, 0);
+        if (si->n_planets > 0) {
+            Vec3 P = system_planet_pos_mm(0);
+            float pr = si->planets[0].radius_mm;
+            Vec3 up0 = v3(0, 1, 0);
+            Vec3 toStar = v3_norm(v3_scale(P, -1.0f));     /* lit side */
+            Vec3 side = v3_norm(v3_cross(up0, toStar));
+            /* Off to the lit side so we see a crescent AND the star beyond. */
+            vista = v3_add(P, v3_add(v3_scale(toStar, pr * 2.3f),
+                                     v3_scale(side, pr * 2.4f)));
+            Vec3 fwd = v3_norm(v3_sub(P, vista));
+            cam.r[2] = fwd;
+            cam.r[0] = v3_norm(v3_cross(up0, fwd));
+            cam.r[1] = v3_cross(fwd, cam.r[0]);
+            m3_rotate_local(&cam, 0, -0.55f);              /* world sits low */
+            m3_rotate_local(&cam, 1, 0.30f);               /* star into frame */
+        }
+        r3d_scene_set_nebula((uint32_t)si->seed | 1u, 0.34f);  /* accent, not wash */
+        r3d_scene_begin(&cam, 55.0f);
+        r3d_pipe_set_sun(v3_norm(v3(0.4f, 0.5f, -0.76f)));
+        r3d_planet_emit(vista);
+        r3d_scene_raster(g_fb, 0, ELITE_FB_H);
+        r3d_scene_set_nebula(0, 0.0f);
+        dump_ppm("/tmp/elite_iconbg.ppm");
+        return 0;
+    }
+
     /* Hull-roll variety + determinism. */
     if (getenv("ELITE_JITTERTEST")) {
         HullRoll a, b, c;

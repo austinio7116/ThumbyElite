@@ -132,6 +132,10 @@ set(WIN_CROSS FALSE)
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows" AND NOT MSVC)
     set(WIN_CROSS TRUE)
     set(ELITE_WIN_RC ${ELITE_ROOT}/host/win/thumbyelite.rc)   # icon + version
+    # windres only tracks the .rc, not the .ico it includes — make the compiled
+    # resource depend on the icon so re-rendering it triggers a rebuild.
+    set_source_files_properties(${ELITE_WIN_RC} PROPERTIES
+        OBJECT_DEPENDS ${ELITE_ROOT}/host/win/indemnityrun.ico)
 endif()
 
 # Linux/macOS build all three resolutions for dev/preview; the Windows
