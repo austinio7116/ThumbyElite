@@ -146,6 +146,9 @@ static float s_scoop_toast_t;
 static float s_frame_ms;
 static Vec3  s_title_ctr;        /* title brawl centre (local m) */
 static Vec3  s_title_perp;       /* side axis separating the two factions */
+static float s_intro_t;          /* lore-crawl scroll position (s) */
+static bool  s_intro_active;     /* play the intro crawl before the menu */
+static float intro_duration(void);
 static int   s_pause_cursor;
 static bool  s_prev_menu, s_prev_a;
 
@@ -842,6 +845,8 @@ void elite_game_init(uint32_t seed) {
 
     s_state = ST_TITLE;
     s_title_cursor = save_exists() ? 0 : 1;
+    s_intro_active = true;            /* lore crawl plays first, skippable */
+    s_intro_t = 0.0f;
     s_prev_menu = s_prev_a = false;
 }
 
@@ -1684,6 +1689,13 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
 
     switch (s_state) {
     case ST_TITLE: {
+        if (s_intro_active) {                       /* lore crawl, then menu */
+            s_intro_t += dt;
+            if (a_edge || menu_edge || s_intro_t >= intro_duration())
+                s_intro_active = false;
+            title_battle_tick(dt);
+            break;
+        }
         bool has_save = save_exists();
         static bool tu, td, trb;
         if (btn->up && !tu && s_title_cursor > 0) { s_title_cursor--; sfx_ui_move(); }
@@ -2433,6 +2445,63 @@ static void dash_settings_overlay(uint16_t *fb) {
       craft_font_draw(fb, h, 18, bot - 12, RGB565C(95, 110, 140)); }
 }
 
+/* Lore intro: a slow upward crawl over the live title brawl, in place of the
+ * wordmark. Blank entries are page gaps. Skippable with A or MENU. */
+static const char *const k_intro[] = {
+    "NOBODY BUILT THE INDEMNITY.",
+    "IT WAS ALREADY RUNNING.",
+    "",
+    "DIE INSURED, AND IT MAKES",
+    "YOU WHOLE - YOU WAKE AT PORT,",
+    "YOUR DEATH UNDONE.",
+    "",
+    "WHETHER THE PILOT WHO WAKES",
+    "IS YOU, NO ONE DARES ASK.",
+    "",
+    "THE POWER BEHIND IT:",
+    "THE UNDERWRITER.",
+    "IT COVERS THOSE WHO CAN PAY.",
+    "WHAT IT TAKES IN RETURN,",
+    "NO ONE KNOWS.",
+    "",
+    "THOSE WHO CAN'T PAY ARE",
+    "THE UNINSURED. THEY TURN",
+    "PIRATE - CLAWING BACK",
+    "THE COVER THEY LOST.",
+    "",
+    "AN INFINITE GALAXY.",
+    "TRADE.  FIGHT.  EXPLORE.",
+    "STAY COVERED.",
+    "",
+    "THIS IS YOUR",
+    "INDEMNITY RUN.",
+};
+#define INTRO_LINES ((int)(sizeof(k_intro) / sizeof(k_intro[0])))
+#define INTRO_SPEED 22.0f
+#define INTRO_LH    9
+
+static float intro_duration(void) {
+    return (128.0f + INTRO_LINES * INTRO_LH) / INTRO_SPEED;
+}
+
+static void draw_intro_crawl(uint16_t *fb) {
+    float topy = 128.0f - s_intro_t * INTRO_SPEED;
+    for (int i = 0; i < INTRO_LINES; i++) {
+        if (!k_intro[i][0]) continue;              /* page gap */
+        int y = (int)(topy + i * INTRO_LH);
+        if (y < -8 || y > 124) continue;
+        int x = (128 - craft_font_width(k_intro[i])) / 2;
+        if (x < 0) x = 0;
+        int b = 255;                               /* fade in/out at the edges */
+        if (y < 24)        b = 255 * y / 24;
+        else if (y > 98)   b = 255 * (124 - y) / 26;
+        if (b < 24) b = 24; if (b > 255) b = 255;
+        uint16_t col = RGB565C(b * 205 / 255, b * 220 / 255, b);
+        craft_font_draw(fb, k_intro[i], x, y, col);
+    }
+    craft_font_draw(fb, "A / MENU: SKIP", 35, 121, RGB565C(70, 80, 100));
+}
+
 void elite_game_draw_overlay(uint16_t *fb) {
     if (g_player.show_fps) {
         char fbuf[12];
@@ -2446,6 +2515,7 @@ void elite_game_draw_overlay(uint16_t *fb) {
 
     switch (s_state) {
     case ST_TITLE: {
+        if (s_intro_active) { draw_intro_crawl(fb); return; }
         /* Title wordmark: cool gradient INDEMNITY over a warm gradient RUN,
          * both with a dark outline so they read over the busy starfield. */
         craft_font_draw_title(fb, "INDEMNITY", 11, 14, 3,

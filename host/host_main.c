@@ -4248,7 +4248,8 @@ int main(int argc, char **argv) {
     /* Title screen capture. */
     if (getenv("ELITE_TITLESHOT")) {
         CraftRawButtons none = {0};
-        for (int k = 0; k < 45; k++) elite_game_tick(&none, 1.0f / 30.0f);
+        int nf = getenv("ELITE_TFRAMES") ? atoi(getenv("ELITE_TFRAMES")) : 45;
+        for (int k = 0; k < nf; k++) elite_game_tick(&none, 1.0f / 30.0f);  /* ELITE_TFRAMES: crawl frame */
         render_frame();
         dump_ppm("/tmp/title.ppm");
         return 0;
