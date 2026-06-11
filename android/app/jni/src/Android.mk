@@ -16,17 +16,14 @@ LOCAL_C_INCLUDES := \
     $(DEVICE) \
     $(LOCAL_PATH)/generated
 
-# Android has far more headroom than the RP2350. The two compile-time
-# overrides below are the whole port (everything else is the device code):
-#   - R3D_SS=2          : the 3D world rasterises at 256x256 (4x the device
-#                         pixels) for smooth ship/planet/starfield edges.
-#   - ELITE_OVERLAY_SPLIT: the 2D HUD/menus draw into a separate 128-logical
-#                         key-colour layer, composited (pixel-doubled) over
-#                         the 3D frame — so text stays crisp 2x and the
-#                         status-screen dim works without reading the 3D buf.
-# craft_buttons.h (DEVICE dir) supplies the CraftRawButtons type only; the
-# .c reader isn't linked — android_main.c builds the struct from input.
-LOCAL_CFLAGS := -DR3D_SS=2 -DELITE_OVERLAY_SPLIT=1 -DELITE_ANALOG_SETTINGS=1 -DNDEBUG \
+# Android renders at native 128 (SS=1), identical to the device — the SDL
+# surface scales the 128 frame up to the screen. (Earlier it supersampled at
+# R3D_SS=2; dropped so every platform matches the device pixel-for-pixel.)
+# ELITE_OVERLAY_SPLIT stays: android_main.c composites a separate 128 HUD layer
+# over the 3D frame (the composite is 1:1 at SS=1), and ui_status/ui_ctrlsetup
+# gate on it. craft_buttons.h (DEVICE dir) supplies the CraftRawButtons type
+# only; the .c reader isn't linked — android_main.c builds the struct from input.
+LOCAL_CFLAGS := -DELITE_OVERLAY_SPLIT=1 -DELITE_ANALOG_SETTINGS=1 -DNDEBUG \
                 -O3 -ffast-math -std=c11 \
                 -Wall -Wno-unused-parameter -Wno-unused-function \
                 -Wno-implicit-function-declaration

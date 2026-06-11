@@ -9,15 +9,15 @@ github.com/austinio7116/ThumbyElite). Full design: PLAN.md.
 ```bash
 # Host (all development happens here first) — one source set, three targets:
 cmake -B build_host -S host && cmake --build build_host -j8
-./build_host/thumbyelite_host       [seed]   # device-faithful 128x128 (SS=1)
-./build_host/thumbyelite_host_hires [seed]   # Android preview  256x256 (SS=2)
-./build_host/thumbyelite_host_quad  [seed]   # desktop quad-res 512x512 (SS=4)
+./build_host/thumbyelite_host       [seed]   # the game — native 128x128 (SS=1)
+./build_host/thumbyelite_host_quad  [seed]   # 512x512 (SS=4) — app-icon tool only
 ELITE_SHOT=/tmp/shot.ppm ./build_host/thumbyelite_host 42   # headless screenshot
 
-# The hires/quad builds render the 3D world at R3D_SS x resolution and
-# composite the 128-logical HUD pixel-multiplied on top (-DELITE_OVERLAY_SPLIT);
-# text scales with SS. This SDL2 host is the cross-platform "PC" build — same
-# source compiles on Linux and Windows (MSVC/MinGW + SDL2).
+# Every platform (PC, Android, device) renders at native 128 (SS=1) — the SDL
+# surface scales the 128 frame up to the window. This SDL2 host is the
+# cross-platform "PC" build — same source compiles on Linux and Windows
+# (MSVC/MinGW + SDL2). The SS=4 quad target survives only to render the app
+# icon (tools/build_icon.sh); it is not a game build.
 
 # Device (standalone)
 cmake -S device -B build_device -DPICO_SDK_PATH=$HOME/mp-thumby/lib/pico-sdk

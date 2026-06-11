@@ -112,12 +112,11 @@ set(ELITE_SRC
     ${MESHES_GEN_C}
 )
 
-# Three targets from one source set:
-#   thumbyelite_host        device-faithful 128x128 (SS=1)
-#   thumbyelite_host_hires  Android preview     256x256 (SS=2, split overlay)
-#   thumbyelite_host_quad   desktop quad-res    512x512 (SS=4, split overlay)
-# The hires/quad builds render the 3D world at the higher resolution and
-# composite the 128-logical HUD pixel-multiplied on top (text scales with SS).
+# Targets from one source set:
+#   thumbyelite_host        the game — native 128x128 (SS=1), device-faithful,
+#                           and the Windows deliverable. SDL scales it up.
+#   thumbyelite_host_quad   desktop-only 512x512 (SS=4) — app-icon render tool
+#                           (tools/build_icon.sh), NOT a game build.
 # This SDL2 host is the cross-platform "PC" build — the same source compiles
 # and runs on Linux and Windows.
 # Compiler flags: GCC/Clang (Linux, macOS, MinGW) vs MSVC (Windows/VS).
@@ -138,12 +137,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows" AND NOT MSVC)
         OBJECT_DEPENDS ${ELITE_ROOT}/host/win/indemnityrun.ico)
 endif()
 
-# Linux/macOS build all three resolutions for dev/preview; the Windows
-# distributable is the quad-res game only (MinGW cross or MSVC native).
+# Every platform renders at native 128 (SS=1) — the device resolution. The
+# quad-res target survives on desktop ONLY as the app-icon rendering tool
+# (tools/build_icon.sh); it is not a game build or a deliverable.
 if(WIN32)
-    set(ELITE_TARGETS thumbyelite_host_quad)
+    set(ELITE_TARGETS thumbyelite_host)
 else()
-    set(ELITE_TARGETS thumbyelite_host thumbyelite_host_hires thumbyelite_host_quad)
+    set(ELITE_TARGETS thumbyelite_host thumbyelite_host_quad)
 endif()
 
 foreach(tgt IN LISTS ELITE_TARGETS)
@@ -168,23 +168,21 @@ foreach(tgt IN LISTS ELITE_TARGETS)
         target_link_options(${tgt} PRIVATE -mwindows -static-libgcc)
     endif()
 endforeach()
-if(TARGET thumbyelite_host_hires)
-    target_compile_definitions(thumbyelite_host_hires PRIVATE
-        R3D_SS=2 ELITE_OVERLAY_SPLIT=1)
+# Desktop-only quad target: the app-icon rendering tool, not a game build.
+if(TARGET thumbyelite_host_quad)
+    target_compile_definitions(thumbyelite_host_quad PRIVATE
+        R3D_SS=4 ELITE_OVERLAY_SPLIT=1)
 endif()
-target_compile_definitions(thumbyelite_host_quad PRIVATE
-    R3D_SS=4 ELITE_OVERLAY_SPLIT=1)
 
 # --- Windows distribution package ---------------------------------------
-# The quad-res build is the shippable game: name it ThumbyElite.exe and drop
-# it next to SDL2.dll + a readme in build_win/dist/ for sideloading or a Steam
-# depot.
+# Native-128 build, named Indemnity Run.exe next to SDL2.dll + a readme in
+# build_win/dist/ for sideloading or a Steam depot.
 if(WIN_CROSS)
-    set_target_properties(thumbyelite_host_quad PROPERTIES OUTPUT_NAME "Indemnity Run")
+    set_target_properties(thumbyelite_host PROPERTIES OUTPUT_NAME "Indemnity Run")
     set(DIST ${CMAKE_BINARY_DIR}/dist)
-    add_custom_command(TARGET thumbyelite_host_quad POST_BUILD
+    add_custom_command(TARGET thumbyelite_host POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DIST}
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:thumbyelite_host_quad> "${DIST}/Indemnity Run.exe"
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:thumbyelite_host> "${DIST}/Indemnity Run.exe"
         COMMAND ${CMAKE_COMMAND} -E copy ${SDL2_DLL} ${DIST}/SDL2.dll
         COMMAND ${CMAKE_COMMAND} -E copy ${ELITE_ROOT}/host/win/DIST_README.txt ${DIST}/README.txt
         COMMAND ${CMAKE_COMMAND} -E copy ${ELITE_ROOT}/host/win/indemnityrun.ico "${DIST}/Indemnity Run.ico"
