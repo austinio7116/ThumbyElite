@@ -118,18 +118,11 @@ static float star_frand(void) {
     return (float)(star_rand() & 0xFFFF) * (1.0f / 65535.0f);
 }
 
-/* Space proposal v3 (v2 rejected as muddy/unclear in game): SUBTLE is
- * the brief. Style-1 bodies under ELITE_STYLE_LAB; live look untouched. */
-#ifdef ELITE_STYLE_LAB
-static int s_style;
-#endif
-void r3d_scene_set_style(int s) {
-#ifdef ELITE_STYLE_LAB
-    s_style = s;
-#else
-    (void)s;
-#endif
-}
+/* ADOPTED 2026-06-12: space v3 (dithered nebula, galactic band, star
+ * tints, hero halos) is the live look. Setter kept for harness compat;
+ * style 0 still selects the old sky for archival sheet comparisons. */
+static int s_style = 1;
+void r3d_scene_set_style(int s) { s_style = s; }
 
 void r3d_starfield_init(uint32_t seed) {
     s_star_rng = seed | 1u;
@@ -140,7 +133,6 @@ void r3d_starfield_init(uint32_t seed) {
                     star_frand() * 2 - 1);
         if (v3_len2(d) < 1e-4f) d = v3(0, 0, 1);
         s_stars[i].dir = v3_norm(d);
-#ifdef ELITE_STYLE_LAB
         if (s_style == 1) {
             /* PROPOSAL v3: same brightness ladder as live, but each
              * star leans gently warm or cool — variation you only
@@ -165,7 +157,6 @@ void r3d_starfield_init(uint32_t seed) {
             }
             continue;
         }
-#endif
         int tier = (int)(star_rand() % 8);
         if (tier == 0) {            /* bright, slightly tinted */
             uint8_t warm = (uint8_t)(star_rand() & 1);
@@ -195,7 +186,6 @@ static void starfield_raster(uint16_t *fb, int y0p, int y1p) {
         int sy = (int)((64.0f - focal * v.y * inv_z) * R3D_SS);
         if (sx < 0 || sy + R3D_SS * 2 <= y0p || sy >= y1p) continue;
         uint16_t c = s_stars[i].color;
-#ifdef ELITE_STYLE_LAB
         if (s_style == 1 && s_stars[i].big) {
             /* one-pixel additive halo ring around the hero stars —
              * a faint glow, not a sprite */
@@ -220,7 +210,6 @@ static void starfield_raster(uint16_t *fb, int y0p, int y1p) {
                     }
             }
         }
-#endif
         /* big: 2x1 + 1 below (device pattern), scaled. */
         int w = s_stars[i].big ? R3D_SS * 2 : R3D_SS;
         int h = R3D_SS;
@@ -265,8 +254,7 @@ static float nb_noise(float x, float y) {
 }
 /* Direction-based so the wash is fixed in space and rotates with the view
  * (sampled along each pixel's world ray), in coarse blocks to stay cheap. */
-#ifdef ELITE_STYLE_LAB
-/* PROPOSAL v3 nebula: the failure modes last time were mud (too bright,
+/* v3 nebula (ADOPTED): the failure modes of the first attempt were mud (too bright,
  * too busy) and the look of the renderer itself — 2x2 blocks and raw
  * RGB565 banding at low levels. Fixes, in order of importance:
  *   1. Bayer-dithered output: float colour + 4x4 ordered threshold
@@ -411,12 +399,9 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
     }
     #undef NB_V3
 }
-#endif
 
 static void nebula_fill(uint16_t *fb, int y0p, int y1p) {
-#ifdef ELITE_STYLE_LAB
     if (s_style == 1) { nebula_fill_v3(fb, y0p, y1p); return; }
-#endif
     const Mat3 *cam = r3d_pipe_camera();
     float focal = r3d_pipe_focal() * (float)R3D_SS;
     float cx = 64.0f * R3D_SS, cy = 64.0f * R3D_SS;
@@ -462,11 +447,8 @@ void r3d_scene_raster(uint16_t *fb, int y0, int y1) {
         r3d_raster_set_fb(fb);
         r3d_depth_clear(y0p, y1p);
     } else {
-#ifdef ELITE_STYLE_LAB
         if (s_style == 1) nebula_fill(fb, y0p, y1p);   /* band always on */
-        else
-#endif
-        if (s_nebula && s_neb_str > 0.01f) nebula_fill(fb, y0p, y1p);
+        else if (s_nebula && s_neb_str > 0.01f) nebula_fill(fb, y0p, y1p);
         else memset(fb + y0p * R3D_FB_W, 0,
                     (size_t)(y1p - y0p) * R3D_FB_W * sizeof(uint16_t));
         r3d_raster_set_fb(fb);

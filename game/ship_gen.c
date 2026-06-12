@@ -32,12 +32,8 @@ static uint32_t rnd(void) {
  * its randomness from a SECOND xorshift stream (s_rng2) inside its own
  * branches, so the style-0 rnd() sequence — and therefore every
  * shipped mesh — stays byte-identical. */
-#ifdef ELITE_STYLE_LAB
-static int s_style = 0;
+static int s_style = 1;   /* ADOPTED 2026-06-12 */
 void ship_gen_set_style(int s) { s_style = s; }
-#else
-void ship_gen_set_style(int s) { (void)s; }
-#endif
 static float rndf(float lo, float hi) {
     return lo + (hi - lo) * (float)(rnd() & 0xFFFF) * (1.0f / 65535.0f);
 }
@@ -242,7 +238,6 @@ static void gun_pair(float x, float y, float z, float blen, float br,
     tip_gun(-x, y, z, blen, br, col, muz);
 }
 
-#ifdef ELITE_STYLE_LAB
 /* ===================== STYLE-1 PROPOSAL KIT ========================
  * Only reachable when s_style == 1. Second rng stream keeps style-0
  * byte-identical. Hex (6-gon) sections keep gun/nozzle face costs
@@ -354,7 +349,6 @@ static void drum_x(float xin, float xout, float cy, float cz, float ry,
         for (int k = 1; k < 7; k++) face(b[0], b[k + 1], b[k], capc);
     }
 }
-#endif /* ELITE_STYLE_LAB */
 
 /* class-hint state (set by ship_gen_mesh_class; -1 = free roll) */
 static int s_hint = -1;
@@ -367,12 +361,10 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
     s_rng *= 1274126177u;
     if (s_rng == 0) s_rng = 1;
     s_nv = s_nf = 0;
-#ifdef ELITE_STYLE_LAB
     int s1 = (s_style == 1);
     s_rng2 = (seed ^ 0x9E3779B9u) * 747796405u + 2891336453u;
     s_rng2 ^= s_rng2 >> 13;
     if (s_rng2 == 0) s_rng2 = 1;
-#endif
 
     /* --- palette ------------------------------------------------------ */
     int tone = rndi(0, 3);
@@ -522,14 +514,12 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             wings(wz0, wz1, w * 0.9f, h * 0.4f, h * 0.14f,
                   w + span, wz0 - sweep, wz0 - sweep + len * 0.1f,
                   h * 0.4f + dihed_u, HULL2);
-#ifdef ELITE_STYLE_LAB
             if (s1) {
                 gun_v2(w + span, h * 0.4f + dihed_u, wz0 - sweep, gl,
                        w * 0.15f, ACC, GMUZ);
                 gun_v2(-(w + span), h * 0.4f + dihed_u, wz0 - sweep, gl,
                        w * 0.15f, ACC, GMUZ);
             } else
-#endif
             {
                 tip_gun(w + span, h * 0.4f + dihed_u, wz0 - sweep, gl,
                         w * 0.16f, ACC, GMUZ);
@@ -542,14 +532,12 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
               h * 0.14f, w + span, wz0 + scissor - sweep,
               wz0 + scissor - sweep + len * 0.1f,
               -h * 0.4f - dihed_l, HULL2);
-#ifdef ELITE_STYLE_LAB
         if (s1) {
             gun_v2(w + span, -h * 0.4f - dihed_l, wz0 + scissor - sweep,
                    gl, w * 0.15f, ACC, GMUZ);
             gun_v2(-(w + span), -h * 0.4f - dihed_l,
                    wz0 + scissor - sweep, gl, w * 0.15f, ACC, GMUZ);
         } else
-#endif
         {
             tip_gun(w + span, -h * 0.4f - dihed_l, wz0 + scissor - sweep,
                     gl, w * 0.16f, ACC, GMUZ);
@@ -563,10 +551,8 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
         float r = len * rndf(0.30f, 0.40f);
         int body = rndi(0, 3);   /* 0 ball, 1 capsule, 2 twin, 3 angular */
         float px;                /* pylon anchor x */
-#ifdef ELITE_STYLE_LAB
         /* style-1 hatch-ring band: per-body waist position/size */
         float bz = 0, bw2 = 0, bh2 = 0, bch = 0.5f;
-#endif
         if (body == 1) {
             /* capsule: stretched 4-ring pod */
             int a[8], b[8], c[8], d[8];
@@ -580,10 +566,8 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             cap_back(a, GLOW);
             cap_front(d, GLASS);
             px = r * 0.95f;
-#ifdef ELITE_STYLE_LAB
             bz = 0; bw2 = r * 0.95f * 1.07f; bh2 = r * 0.9f * 1.07f;
             bch = 0.55f;
-#endif
         } else if (body == 2) {
             /* twin: cockpit ball forward + engine block aft */
             int a[8], b[8], c[8];
@@ -600,10 +584,8 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             cap_back(a, HULL2);
             cap_front(c, GLASS);
             px = r * 0.9f;
-#ifdef ELITE_STYLE_LAB
             bz = r * 0.4f; bw2 = r * 0.9f * 1.07f;
             bh2 = r * 0.85f * 1.07f; bch = 0.55f;
-#endif
         } else {
             /* ball (chamfer .55) or angular (chamfer .2) */
             float chb = (body == 3) ? rndf(0.15f, 0.3f) : rndf(0.5f, 0.6f);
@@ -617,11 +599,8 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             cap_back(a, GLOW);
             cap_front(c, GLASS);
             px = r;
-#ifdef ELITE_STYLE_LAB
             bz = 0; bw2 = r * 1.06f; bh2 = r * rh * 1.06f; bch = chb;
-#endif
         }
-#ifdef ELITE_STYLE_LAB
         if (s1) {
             /* hatch detail ring, slightly proud of the body waist */
             int e0[8], e1[8];
@@ -631,10 +610,8 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             ring(bz + bt, bw2, bh2, 0, bch, e1);
             skin(e0, e1, BANDC, BANDC, BANDC);
         }
-#endif
         /* pylons */
         float pylon = r * rndf(1.4f, 1.8f);
-#ifdef ELITE_STYLE_LAB
         if (s1) {
             /* truss pylons: two angled spars per side, converging on
              * the panel hub — reads as a frame, not a stick */
@@ -667,7 +644,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
                 }
             }
         } else
-#endif
         for (int sd = 0; sd < 2; sd++) {
             float sx = sd ? -1.0f : 1.0f;
             int p0 = vtx(sx * px * 0.8f, -r * 0.12f, -r * 0.18f);
@@ -691,7 +667,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             }
         }
         /* Chin guns under the cockpit ball. */
-#ifdef ELITE_STYLE_LAB
         if (s1) {
             /* same rnd() count as the else branch keeps the twin's
              * downstream genes aligned with its style-0 sibling */
@@ -699,7 +674,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
                      r * rndf(0.5f, 0.9f) * 1.2f, r * 0.09f, HULL2,
                      RGB565C(40, 40, 48));
         } else
-#endif
         gun_pair(r * 0.35f, -r * 0.55f, r * 0.5f, r * rndf(0.5f, 0.9f),
                  r * 0.08f, HULL2, RGB565C(40, 40, 48));
 
@@ -745,7 +719,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
                 zz[3] = -pz * 0.4f; yy[3] = -ph;
                 break;
             }
-#ifdef ELITE_STYLE_LAB
             if (s1) {
                 /* TIE-style panel: raised outer frame loop around an
                  * inset dark panel face, plus a hub boss at the pylon */
@@ -792,7 +765,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
                 }
                 goto finish;
             }
-#endif
             for (int sd = 0; sd < 2; sd++) {
                 float sxn = sd ? -1.0f : 1.0f;
                 int outer[6], inner[6];
@@ -900,22 +872,18 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
         /* Chin gun(s) under the bow — mandible ships gun the notch,
          * pure discs carry a belly turret. */
         if (ml > 0) {
-#ifdef ELITE_STYLE_LAB
             if (s1) {
                 gun_v2(0, -ry * 0.4f, frontz, ml * rndf(0.35f, 0.6f) * 1.15f,
                        ry * 0.45f, HULL2, RGB565C(40, 40, 48));
             } else
-#endif
             tip_gun(0, -ry * 0.4f, frontz, ml * rndf(0.35f, 0.6f),
                     ry * 0.5f, HULL2, RGB565C(40, 40, 48));
         } else {
-#ifdef ELITE_STYLE_LAB
             if (s1) {
                 gun_twin(ax * 0.25f, -py * 0.8f, az * 0.4f,
                          az * rndf(0.15f, 0.25f) * 1.4f, ry * 0.4f,
                          HULL2, RGB565C(40, 40, 48));
             } else
-#endif
             gun_pair(ax * 0.25f, -py * 0.8f, az * 0.4f,
                      az * rndf(0.15f, 0.25f), ry * 0.45f, HULL2,
                      RGB565C(40, 40, 48));
@@ -935,7 +903,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             skin(d0, d1, HULL2, HULL2, HULL2);
             cap_front(d1, (rnd() & 1) ? GLASS : ACC);
         }
-#ifdef ELITE_STYLE_LAB
         if (s1 && hint >= 6 && hint <= 8) {
             /* cargo character: lofted cargo drums clamped on the rim
              * (read from every angle, never bare boxes) */
@@ -955,7 +922,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
                 cap_front(d1, HULL2);
             }
         }
-#endif
         goto finish;
     }
 
@@ -975,7 +941,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
     skin(rA, rB, HULL, HULL, HULL2);
     skin(rB, rC, HULL, HULL, HULL2);
     skin(rC, rD, HULL, HULL, HULL2);
-#ifdef ELITE_STYLE_LAB
     if (s1 && (family == 4 || family == 5)) {
         /* engine cluster: dark stern plate + recessed glow nozzles
          * instead of one flat glow cap */
@@ -991,9 +956,7 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             nozzle6(-w0 * 0.42f, y0, z0, nr, nr * 1.1f, HULL2, GLOW);
         }
     } else
-#endif
     cap_back(rA, GLOW);                       /* integrated engine tail */
-#ifdef ELITE_STYLE_LAB
     if (s1 && family == 5) {
         /* blunt tug prow: lofted bow block, clear front face */
         int rE[8];
@@ -1001,7 +964,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
         skin(rD, rE, HULL, HULL, HULL2);
         cap_front(rE, HULL2);
     } else
-#endif
     nose_apex(rD, 0, y3 - h3 * 0.3f, zf, HULL2);
 
     /* --- canopy: small glass loft on the fore-mid deck ----------------- */
@@ -1048,7 +1010,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
     case 3: { /* gunship: prongs + twin canted fins */
         float px = w_mid * rndf(0.4f, 0.85f);
         int npr = rndi(1, 2) * 2;            /* 2 or 4 prongs */
-#ifdef ELITE_STYLE_LAB
         if (s1) {
             /* weapon booms: tapered, vertically staggered on 4-boom
              * frames (style 0 stacks them on one axis), each tipped
@@ -1081,7 +1042,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
                          HULL2, RGB565C(40, 40, 48));
             }
         } else
-#endif
         for (int s2 = 0; s2 < npr; s2++) {
             float sx = (s2 & 1) ? -px : px;
             float sy2 = (s2 >= 2) ? -h2 * 0.8f : h2 * 0.3f;
@@ -1147,7 +1107,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
         break;
     }
     default:  /* hauler: side pods (cargo nacelles) */
-#ifdef ELITE_STYLE_LAB
         if (s1) {
             /* deliberate cargo massing: shoulder-mounted saddle drums
              * plus a belly keel tank (lofted, chamfered — no boxes) */
@@ -1157,7 +1116,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             nacelle(0, -h2 * 0.9f, z0 + len * 0.14f, z2,
                     w_mid * rndf2(0.30f, 0.40f), HULL, HULL2, 0);
         } else
-#endif
         nacelle(w_mid * 1.15f, 0, z0 + len * 0.1f, z2,
                 w_mid * rndf(0.35f, 0.5f), HULL2, GLOW, 1);
         break;
@@ -1169,19 +1127,16 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
         float gl2 = len * rndf(0.10f, 0.18f);
         switch (family) {
         case 0:   /* dart: single chin gun */
-#ifdef ELITE_STYLE_LAB
             if (s1) {
                 gun_v2(0, -h3 * 0.8f, z3, gl2 * 1.35f, w_mid * 0.065f,
                        HULL2, MUZ);
                 break;
             }
-#endif
             tip_gun(0, -h3 * 0.8f, z3, gl2 * 1.3f, w_mid * 0.07f,
                     HULL2, MUZ);
             break;
         case 1:
         case 2:   /* fighters: twin chin barrels under the nose */
-#ifdef ELITE_STYLE_LAB
             if (s1) {
                 /* same rnd() count as the else path (gene alignment) */
                 gun_twin(w3 * rndf(0.4f, 0.65f), -h3 * 0.75f, z3,
@@ -1189,22 +1144,18 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
                          HULL2, MUZ);
                 break;
             }
-#endif
             gun_pair(w3 * rndf(0.4f, 0.7f), -h3 * 0.7f, z3,
                      gl2 * rndf(1.0f, 1.6f), w_mid * 0.06f, HULL2, MUZ);
             break;
         case 3:   /* gunship: prongs already; add a top barrel */
-#ifdef ELITE_STYLE_LAB
             if (s1) {
                 gun_v2(0, h2 * 0.9f, z2, gl2 * 1.2f, w_mid * 0.06f,
                        ACC, MUZ);
                 break;
             }
-#endif
             tip_gun(0, h2 * 0.9f, z2, gl2, w_mid * 0.07f, ACC, MUZ);
             break;
         case 4:   /* cruiser: sponson barrels along both flanks */
-#ifdef ELITE_STYLE_LAB
             if (s1) {
                 /* recessed flank turrets: low mount pad + stepped gun */
                 for (int sd = 0; sd < 2; sd++) {
@@ -1218,14 +1169,12 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
                 }
                 break;
             }
-#endif
             gun_pair(w_mid * 1.0f, 0, z2 + len * 0.05f,
                      gl2 * 1.2f, w_mid * 0.06f, HULL2, MUZ);
             gun_pair(w_mid * 0.9f, h2 * 0.5f, z1 + len * 0.08f,
                      gl2, w_mid * 0.05f, HULL2, MUZ);
             break;
         default:  /* hauler: one defensive top turret nub */
-#ifdef ELITE_STYLE_LAB
             if (s1) {
                 /* turret moved aft of the canopy: low pad + stepped gun */
                 slab(0, y1 + h1 * 0.92f, z1 + len * 0.10f, w_mid * 0.20f,
@@ -1234,7 +1183,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
                        w_mid * 0.05f, HULL2, MUZ);
                 break;
             }
-#endif
             slab(0, h2 * 0.95f, z2, w_mid * 0.16f, h2 * 0.22f,
                  w_mid * 0.16f, HULL2, HULL2, HULL2);
             tip_gun(0, h2 * 1.05f, z2 + w_mid * 0.1f, gl2,
@@ -1245,7 +1193,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
 
     /* Engine nacelles for fighters/interceptors/cruisers (50%). */
     if ((family == 1 || family == 2 || family == 4) && rndi(0, 1)) {
-#ifdef ELITE_STYLE_LAB
         /* s1 cruisers already carry a stern nozzle cluster + turrets;
          * the pods would also bust the face budget. Burn the shared
          * rolls so nothing downstream shifts, then skip. */
@@ -1254,7 +1201,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             (void)rndf(0.3f, 0.42f);
             (void)rndf(0.22f, 0.34f);
         } else
-#endif
         nacelle(w_mid * rndf(0.95f, 1.25f), -h2 * 0.2f,
                 z0, z0 + len * rndf(0.3f, 0.42f),
                 w_mid * rndf(0.22f, 0.34f), HULL2, GLOW, 1);

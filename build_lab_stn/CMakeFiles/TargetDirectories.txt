@@ -1,0 +1,6 @@
+/home/maustin/thumby-color/ThumbyElite/build_lab_stn/CMakeFiles/thumbyelite_baker.dir
+/home/maustin/thumby-color/ThumbyElite/build_lab_stn/CMakeFiles/generate_meshes.dir
+/home/maustin/thumby-color/ThumbyElite/build_lab_stn/CMakeFiles/thumbyelite_host.dir
+/home/maustin/thumby-color/ThumbyElite/build_lab_stn/CMakeFiles/thumbyelite_host_quad.dir
+/home/maustin/thumby-color/ThumbyElite/build_lab_stn/CMakeFiles/edit_cache.dir
+/home/maustin/thumby-color/ThumbyElite/build_lab_stn/CMakeFiles/rebuild_cache.dir

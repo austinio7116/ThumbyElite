@@ -1,0 +1,1 @@
+/usr/bin/cc -O3 -DNDEBUG CMakeFiles/obj2mesh.dir/obj2mesh.c.o -o obj2mesh  -lm 

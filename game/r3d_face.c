@@ -609,12 +609,19 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
         }
     }
 
-    /* markings: scar (asymmetric on purpose) */
-    if (fr_pct(&r, kind == NK_PIRATE ? 70 : 12)) {
-        int sx = cx + (fr_pct(&r, 50) ? -edx : edx);
-        int sy0 = ey - eh - 2, sy1 = nly;
-        for (int y = sy0; y <= sy1; y++)
-            fpx(&c, sx + (y - sy0) / 3, y, shade(skin, 135));
+    /* markings: scar (asymmetric on purpose). Layering (user bug): a
+     * scar lives on SKIN — helmets and visors cover that whole region,
+     * so they suppress it; the rng rolls still burn either way so
+     * every other feature keeps its seed. Beaks own the avian face. */
+    {
+        int scar = fr_pct(&r, kind == NK_PIRATE ? 70 : 12);
+        int sside = fr_pct(&r, 50);
+        if (scar && !helmet && !visor && species != 2) {
+            int sx = cx + (sside ? -edx : edx);
+            int sy0 = ey - eh - 2, sy1 = nly;
+            for (int y = sy0; y <= sy1; y++)
+                fpx(&c, sx + (y - sy0) / 3, y, shade(skin, 135));
+        }
     }
 
     /* hood overlay: frames the face last */
