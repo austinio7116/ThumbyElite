@@ -605,6 +605,35 @@ void ai_tick(float dt) {
             continue;
         }
         if (g_ships[i].team != TEAM_HOSTILE) continue;
+        /* Hostile target selection (user bug: warzone enemies all
+         * dogpiled the player because ai_target defaults to 0=PLAYER).
+         * Hostiles fight the whole opposing side: keep a valid target
+         * with some stickiness, re-evaluate every few seconds, and
+         * pick the NEAREST of {player, lawful fighters}. civ_wp_t is
+         * free on hostiles — reused as the retarget clock. */
+        {
+            Ship *h = &g_ships[i];
+            int t = h->ai_target;
+            bool tvalid =
+                (t == PLAYER) ? g_ships[PLAYER].alive
+                : (t > 0 && t < MAX_SHIPS && g_ships[t].alive &&
+                   g_ships[t].team != TEAM_HOSTILE && t != i);
+            h->civ_wp_t += dt;
+            if (!tvalid || h->civ_wp_t > 5.0f) {
+                h->civ_wp_t = (float)(frnd_pub() % 100u) * 0.015f;   /* desync */
+                int best = g_ships[PLAYER].alive ? PLAYER : -1;
+                float bd = best >= 0
+                    ? v3_len2(v3_sub(g_ships[PLAYER].pos, h->pos)) : 1e30f;
+                for (int j = 1; j < MAX_SHIPS; j++) {
+                    if (!g_ships[j].alive || j == i) continue;
+                    if (g_ships[j].team != TEAM_NEUTRAL ||
+                        !g_ships[j].is_police) continue;
+                    float d = v3_len2(v3_sub(g_ships[j].pos, h->pos));
+                    if (d < bd) { bd = d; best = j; }
+                }
+                if (best >= 0) h->ai_target = (uint8_t)best;
+            }
+        }
         ai_ship(i, dt);
     }
 }

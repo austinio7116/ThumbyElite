@@ -6,11 +6,14 @@
  *     must therefore return stake + winnings).
  *   - $-tokens expand in body AND result texts ($N npc, $S system,
  *     $T station, $F faction, $G trade good).
- * Lore ids: 0/1/2 the Adjuster arc, 3 prospector's claim, 4 your file,
- * 5 the cover, 6 the other policyholder, 7 recalled.
- * Story flags: 1 stowaway rode along, 2 preacher's token, 3 purged file,
- * 8 met the stranger, 10 took the retainer, 11 Adjuster arc complete,
- * 12 opened the last pod, 13 stowaway repaid.
+ * THE POLICY (main thread): act 1 the Adjuster (flags 8/10/11, lore
+ * 0-2), act 2 the Beneficiary (flags 14/15/16, lore 8-10), act 3 the
+ * Terms (flags 17/18/19, lore 11-13). Side lore: 3 prospector, 4 your
+ * file, 5 the cover, 6 the pod, 7 recalled, 14 receipt, 15 arrears,
+ * 16 continued, 17 the wall.
+ * Story flags: 1 stowaway rode, 2 preacher's token, 3 purged file,
+ * 12 opened pod, 13 stowaway repaid, 20 kept the token, 21 read your
+ * file (gates the memorial).
  */
 #include "events.h"
 #include <stddef.h>
@@ -136,7 +139,7 @@ static const Choice e7_ch[] = {
 /* --- 8 CLINIC SHORTFALL -------------------------------------------------- */
 static const Op e8_meds[] = { {OP_CARGO,5,-1}, {OP_REP,-1,5}, {OP_DMG,-20,0},
                               {OP_RESULT,0,0}, {OP_END,0,0} };
-static const Op e8_fund[] = { {OP_REP,-1,3}, {OP_DMG,-15,0},
+static const Op e8_fund[] = { {OP_REP,-1,3}, {OP_DMG,-25,0},
                               {OP_RESULT,1,0}, {OP_END,0,0} };
 static const Op e8_walk[] = { {OP_RESULT,2,0}, {OP_END,0,0} };
 static const char *const e8_tx[] = {
@@ -151,7 +154,8 @@ static const Choice e8_ch[] = {
 };
 
 /* --- 9 THE REGISTRY FILE (oneshot, lore, no portrait) -------------------- */
-static const Op e9_read[]   = { {OP_LORE,4,0}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e9_read[]   = { {OP_LORE,4,0}, {OP_FLAG,21,0},
+                                {OP_RESULT,0,0}, {OP_END,0,0} };
 static const Op e9_delete[] = { {OP_FLAG,3,0}, {OP_RESULT,1,0}, {OP_END,0,0} };
 static const char *const e9_tx[] = {
     "A SHIP OF YOUR EXACT CLASS, LOST WITH ALL HANDS - FILED FORTY YEARS AGO. THE REGISTERED OWNER IS YOU. POLICY STATUS: CURRENT.",
@@ -245,14 +249,14 @@ static const Choice e14_ch[] = {
 };
 
 /* --- 15 THE NAVIGATOR'S TRICK --------------------------------------------- */
-static const Op e15_buy[]  = { {OP_FUEL,15,0}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e15_buy[]  = { {OP_FUEL,50,0}, {OP_RESULT,0,0}, {OP_END,0,0} };
 static const Op e15_pass[] = { {OP_RESULT,1,0}, {OP_END,0,0} };
 static const char *const e15_tx[] = {
     "SHE SKETCHES A SCOOP APPROACH ON A NAPKIN THAT SAVES YOU REAL HYDROGEN. CHEAPEST FUEL YOU EVER BOUGHT.",
     "SHE SHRUGS AND SELLS THE NAPKIN TO THE NEXT BOOTH.",
 };
 static const Choice e15_ch[] = {
-    { "BUY HER A ROUND", 0, 50, e15_buy },
+    { "BUY HER A ROUND", 0, 40, e15_buy },
     { "NOT TONIGHT",     0, 0,  e15_pass },
 };
 
@@ -333,12 +337,12 @@ static const Choice e19_ch[] = {
 };
 
 /* --- 20 STILL WARM (dangerous space) ---------------------------------------- */
-static const Op e20_grab[] = { {OP_CARGO,-1,1}, {OP_BRANCH,40,4},
+static const Op e20_grab[] = { {OP_CARGO,-1,2}, {OP_BRANCH,40,4},
                                {OP_RESULT,0,0}, {OP_END,0,0},
                                {OP_AMBUSH,2,2}, {OP_RESULT,1,0}, {OP_END,0,0} };
 static const Op e20_burn[] = { {OP_RESULT,2,0}, {OP_END,0,0} };
 static const char *const e20_tx[] = {
-    "ONE CRATE, QUICK AND QUIET. THE HULL PINGS AS IT COOLS - THIS KILL IS MINUTES OLD.",
+    "TWO CRATES, QUICK AND QUIET. THE HULL PINGS AS IT COOLS - THIS KILL IS MINUTES OLD.",
     "A CRATE ABOARD AND THE KILLERS COME BACK FOR THEIR LEAVINGS. THEY DON'T LOOK PLEASED TO SHARE.",
     "FRESH WRECK, NO BODIES, GUNS STILL COOLING SOMEWHERE CLOSE. YOU WERE NEVER HERE.",
 };
@@ -445,6 +449,272 @@ static const Choice e27_ch[] = {
     { "NOT YOUR WAR", 0, 0, e27_pass },
 };
 
+
+/* ================= THE POLICY, ACT 2: THE BENEFICIARY ===================
+ * Vessa the archivist (fixed_npc 2). Gated on Act 1 (flag 11).
+ * Flags: 14 met her, 15 saw the ledger, 16 act complete.
+ * The question Act 1 left: WHAT is the Indemnity? Act 2 makes it worse:
+ * it isn't about the galaxy. It's about you. */
+
+/* --- 28 THE ARCHIVIST (bar, act 2 step 1) -------------------------------- */
+static const Op e28_listen[] = { {OP_LORE,8,0}, {OP_FLAG,14,0},
+                                 {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e28_leave[]  = { {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e28_tx[] = {
+    "'CLAIMS THAT NEVER LAPSE. PREMIUMS FROM DEAD ACCOUNTS, ON TIME, FOREVER. I'VE FOUND ELEVEN.' SHE TAPS HER SLATE. 'YOURS MAKES TWELVE.'",
+    "SHE DOESN'T WATCH YOU GO. SHE'S ALREADY BACK IN THE LEDGERS, AND SOMETHING ABOUT THAT IS WORSE.",
+};
+static const Choice e28_ch[] = {
+    { "HEAR HER OUT", 0, 0, e28_listen },
+    { "WALK AWAY",    0, 0, e28_leave },
+};
+
+/* --- 29 THE LEDGER (bar, act 2 step 2) ----------------------------------- */
+static const Op e29_look[] = { {OP_LORE,9,0}, {OP_FLAG,15,0},
+                               {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e29_fund[] = { {OP_LORE,9,0}, {OP_FLAG,15,0}, {OP_REP,-1,2},
+                               {OP_RESULT,1,0}, {OP_END,0,0} };
+static const Op e29_no[]   = { {OP_RESULT,2,0}, {OP_END,0,0} };
+static const char *const e29_tx[] = {
+    "SHE TURNS THE SLATE AROUND. EVERY FEE YOU'VE EVER PAID, A FRACTION ROUTED UP - LARGER THAN ANYONE'S. 'YOU'RE PAYING A DEATH CLAIM,' SHE SAYS. 'THE NAME ON THE CLAIM IS YOURS.'",
+    "YOUR CREDITS BUY HER ARCHIVE TIME SHE COULDN'T AFFORD. THE TRACE COMES BACK CLEAN, TWICE. IT'S YOUR CLAIM. IT'S ALWAYS BEEN YOUR CLAIM.",
+    "'SUIT YOURSELF.' SHE CLOSES THE SLATE. 'IT KEEPS PAYING WHETHER YOU LOOK OR NOT.'",
+};
+static const Choice e29_ch[] = {
+    { "LOOK AT THE TRACE",  0, 0,   e29_look },
+    { "FUND A DEEPER TRACE",0, 200, e29_fund },
+    { "NOT TONIGHT",        0, 0,   e29_no },
+};
+
+/* --- 30 THE BENEFICIARY (dock, act 2 finale, oneshot) --------------------- */
+static const Op e30_read[] = { {OP_LORE,10,0}, {OP_FLAG,16,0},
+                               {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e30_burn[] = { {OP_LORE,10,0}, {OP_FLAG,16,0},
+                               {OP_RESULT,1,0}, {OP_END,0,0} };
+static const Op e30_pay[]  = { {OP_LORE,10,0}, {OP_FLAG,16,0}, {OP_LATER,8,0},
+                               {OP_RESULT,2,0}, {OP_END,0,0} };
+static const char *const e30_tx[] = {
+    "DISBURSEMENT RECORD, FORTY YEARS SEALED. CLAIM: ONE PILOT, LOST WITH ALL HANDS. STATUS: SETTLED IN FULL. SETTLEMENT: ONE (1) PILOT, CONTINUED. THE HANDWRITING ON THE RELEASE IS YOURS.",
+    "YOU FEED THE RECORD TO THE AIRLOCK. IT BURNS WRONG - TOO SLOW, TOO QUIET. VESSA'S COPY ARRIVES IN YOUR QUEUE BEFORE THE ASH SETTLES. SETTLEMENT: ONE (1) PILOT, CONTINUED.",
+    "VESSA WON'T TAKE YOUR MONEY. 'PUT IT TOWARD FUEL,' SHE SAYS, AND WIRES IT BACK WITH INTEREST. 'RUN FAR. I DON'T THINK IT MATTERS, BUT RUN FAR.'",
+};
+static const Choice e30_ch[] = {
+    { "READ IT",        0, 0,   e30_read },
+    { "BURN IT",        0, 0,   e30_burn },
+    { "PAY HER & READ", 0, 200, e30_pay },
+};
+
+/* ================= THE POLICY, ACT 3: THE TERMS =========================
+ * The grey ships turn toward YOU. Flags: 17 recalled, 18 audited,
+ * 19 the Terms (campaign climax). The Adjuster (fixed_npc 1) returns. */
+
+/* --- 31 RECALL NOTICE (arrival, act 3 step 1, oneshot) -------------------- */
+static const Op e31_ack[] = { {OP_LORE,11,0}, {OP_FLAG,17,0},
+                              {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e31_run[] = { {OP_LORE,11,0}, {OP_FLAG,17,0},
+                              {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e31_tx[] = {
+    "'ACKNOWLEDGED,' YOU SAY. A PAUSE LIKE A STAMP COMING DOWN. 'COOPERATION IS NOTED AND CREDITED. AN AUDITOR WILL FIND YOU.' THE GREY SHIP IS GONE BETWEEN SWEEPS.",
+    "YOU FIREWALL THE TRANSPONDER AND BURN. THE GREY SHIP DOESN'T FOLLOW. IT DOESN'T NEED TO - THE NOTICE IS ALREADY FILED, TIMESTAMPED 'RECEIVED'. IN YOUR OWN VOICE.",
+};
+static const Choice e31_ch[] = {
+    { "ACKNOWLEDGE", 0, 0, e31_ack },
+    { "RUN",         0, 0, e31_run },
+};
+
+/* --- 32 THE AUDIT (space, act 3 step 2, oneshot) -------------------------- */
+static const Op e32_play[] = { {OP_LORE,12,0}, {OP_FLAG,18,0},
+                               {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e32_rip[]  = { {OP_LORE,12,0}, {OP_FLAG,18,0}, {OP_ITEM,2,0},
+                               {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e32_tx[] = {
+    "THE RECORDER DOESN'T WAIT TO BE PLAYED. 'AUDIT LOG,' IT SAYS, IN YOUR VOICE, 'ASSET PERFORMING WITHIN PARAMETERS. CONTINUITY HOLDING. RE-ISSUE NOT YET REQUIRED.' THE HULK HAS YOUR SHIP'S BONES.",
+    "YOU TEAR THE RECORDER OUT WHOLE AND A WEAPON RACK COMES WITH IT - GREY-ISSUE, NO SERIAL. THE RECORDER KEEPS TALKING IN THE HOLD, FAINTLY, ALL THE WAY HOME.",
+};
+static const Choice e32_ch[] = {
+    { "LET IT SPEAK",     0, 0, e32_play },
+    { "STRIP THE WRECK",  0, 0, e32_rip },
+};
+
+/* --- 33 THE TERMS (dock, campaign climax, oneshot) ------------------------ */
+static const Op e33_read[]   = { {OP_LORE,13,0}, {OP_FLAG,19,0},
+                                 {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e33_demand[] = { {OP_LORE,13,0}, {OP_FLAG,19,0}, {OP_CR,40,0},
+                                 {OP_DMG,-100,0},
+                                 {OP_RESULT,1,0}, {OP_END,0,0} };
+static const Op e33_refuse[] = { {OP_FLAG,19,0}, {OP_CR,16,0},
+                                 {OP_RESULT,2,0}, {OP_END,0,0} };
+static const char *const e33_tx[] = {
+    "THE TERMS ARE ONE PAGE. 'THE INDEMNITY DOES NOT INSURE AGAINST LOSS. IT INSURES CONTINUITY. NOTHING COVERED IS EVER LOST - ONLY REPLACED, PERFECTLY, AND BILLED. YOU ARE NOT THE POLICYHOLDER.' THE ADJUSTER WAITS WHILE YOU FINISH. 'YOU ARE THE PAYOUT.'",
+    "'A SETTLEMENT, THEN. IN FULL.' CREDITS LAND. YOUR HULL SEAMS RE-KNIT WHERE NO YARD HAS TOUCHED. THE ADJUSTER FILES YOUR FACE AWAY LIKE A SIGNATURE. 'CLAIM CONTINUED. FLY WELL. WE ALWAYS RECOVER OUR ASSETS.'",
+    "YOU SLIDE THE PAGE BACK UNREAD. THE ADJUSTER ALMOST SMILES. 'NOTED. THE UNREAD TERMS REMAIN IN FORCE. A CONSIDERATION FOR YOUR DISCRETION.' FOUR HUNDRED CREDITS, AND THE LONG GREY COAT IS GONE.",
+};
+static const Choice e33_ch[] = {
+    { "READ THE TERMS",    0, 0, e33_read },
+    { "DEMAND SETTLEMENT", 0, 0, e33_demand },
+    { "REFUSE TO READ",    0, 0, e33_refuse },
+};
+
+/* ================= planted-flag payoffs ================================= */
+
+/* --- 34 THE COLLECTOR (bar, preacher token payoff, oneshot) --------------- */
+static const Op e34_sell[] = { {OP_CR,12,0}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e34_keep[] = { {OP_LORE,14,0}, {OP_FLAG,20,0},
+                               {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e34_tx[] = {
+    "THE COLLECTOR PAYS WITHOUT HAGGLING AND LEAVES WITHOUT DRINKING. THROUGH THE WINDOW YOU WATCH THEM DROP THE TOKEN INTO A CASE WITH ELEVEN OTHERS.",
+    "YOU CLOSE YOUR HAND OVER IT. COLD AS EVER. THE COLLECTOR NODS SLOWLY - ALMOST RESPECT. 'KEEP CURRENT, THEN.' HELD TO YOUR EAR, IT SOUNDS LIKE A LEDGER TURNING.",
+};
+static const Choice e34_ch[] = {
+    { "SELL IT (300 CR)", 0, 0, e34_sell },
+    { "KEEP IT",          0, 0, e34_keep },
+};
+
+/* --- 35 RESUBMITTED (dock, purged-file payoff, oneshot) -------------------- */
+static const Op e35_take[] = { {OP_CR,8,0}, {OP_LORE,15,0},
+                               {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e35_ref[]  = { {OP_LORE,15,0}, {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e35_tx[] = {
+    "THE FILE YOU PURGED IS BACK IN YOUR DOCKET - PLUS 200 CR, ITEMISED AS 'ARREARS: INTEREST ON INTERRUPTED RECORD'. THE SYSTEM DOES NOT MIND BEING DOUBTED.",
+    "YOU DECLINE THE CREDITS. AT THE NEXT REFRESH THEY'RE BACK, PLUS A SECOND LINE: 'DECLINATION FEE, WAIVED - COURTESY'.",
+};
+static const Choice e35_ch[] = {
+    { "TAKE THE CREDITS", 0, 0, e35_take },
+    { "REFUSE THEM",      0, 0, e35_ref },
+};
+
+/* --- 36 THE OTHER YOU (bar, opened-pod payoff, oneshot) -------------------- */
+static const Op e36_press[] = { {OP_LORE,16,0}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e36_laugh[] = { {OP_LORE,16,0}, {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e36_tx[] = {
+    "'THREE WEEKS BACK. YOUR FACE, YOUR WALK. GREY COAT THOUGH.' THE BARKEEP PULLS THE TAB: GOOD TIPPER. SIGNED IT 'CONTINUED'.",
+    "YOU LAUGH IT OFF. THE BARKEEP DOESN'T. 'PAID IN EXACT CHANGE,' THEY SAY, LIKE THAT SETTLES SOMETHING. 'NOBODY PAYS IN EXACT CHANGE.'",
+};
+static const Choice e36_ch[] = {
+    { "PRESS FOR DETAILS", 0, 0, e36_press },
+    { "LAUGH IT OFF",      0, 0, e36_laugh },
+};
+
+/* ================= standalone texture ==================================== */
+
+/* --- 37 UNION DUES (dock) -------------------------------------------------- */
+static const Op e37_sup[]   = { {OP_REP,-1,4}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e37_cross[] = { {OP_CR,8,0}, {OP_REP,-1,-3},
+                                {OP_RESULT,1,0}, {OP_END,0,0} };
+static const Op e37_walk[]  = { {OP_RESULT,2,0}, {OP_END,0,0} };
+static const char *const e37_tx[] = {
+    "YOUR CREDITS BUY THE PICKET LINE A HOT MEAL. SOMEBODY PAINTS YOUR HULL NUMBER ON THE 'FRIENDS' BOARD.",
+    "YOU HAUL THE PALLETS THE STRIKERS WOULDN'T. THE FOREMAN PAYS CASH AND DOESN'T MEET YOUR EYES. NEITHER DOES ANYONE ELSE.",
+    "NOT YOUR DOCK, NOT YOUR FIGHT. THE CHANTING FOLLOWS YOU UP THE GANTRY.",
+};
+static const Choice e37_ch[] = {
+    { "FEED THE LINE",  0, 100, e37_sup },
+    { "WORK THE CARGO", 0, 0,   e37_cross },
+    { "WALK ON",        0, 0,   e37_walk },
+};
+
+/* --- 38 THE MEMORIAL (dock, needs YOUR FILE read, oneshot) ------------------ */
+static const Op e38_token[] = { {OP_LORE,17,0}, {OP_REP,-1,2},
+                                {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e38_look[]  = { {OP_LORE,17,0}, {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e38_tx[] = {
+    "YOU LEAVE A COIN UNDER YOUR OWN NAME, FORTY YEARS WEATHERED. THE DOCKHANDS APPROVE - THEY THINK IT'S FOR FAMILY. UNDERNEATH, FRESH-SCRATCHED: 'PAID'.",
+    "THE WALL LISTS EVERY HULL THIS PORT HAS LOST. YOURS IS THERE, FORTY YEARS WEATHERED. SOMEONE RECENT HAS SCRATCHED ONE WORD BENEATH IT: 'PAID'.",
+};
+static const Choice e38_ch[] = {
+    { "LEAVE A TOKEN", 0, 25, e38_token },
+    { "JUST LOOK",     0, 0,  e38_look },
+};
+
+/* --- 39 HOT CARGO (dock) ----------------------------------------------------*/
+static const Op e39_buy[]  = { {OP_BRANCH,55,5}, {OP_BRANCH,50,8},
+                               {OP_RESULT,2,0}, {OP_END,0,0}, {OP_END,0,0},
+                               {OP_CARGO,-1,2}, {OP_RESULT,0,0}, {OP_END,0,0},
+                               {OP_CARGO,16,2}, {OP_RESULT,1,0}, {OP_END,0,0} };
+static const Op e39_pass[] = { {OP_RESULT,3,0}, {OP_END,0,0} };
+static const char *const e39_tx[] = {
+    "TWO CRATES OF HONEST GOODS UNDER THE GREASE. SOMEBODY'S LOSS, PAPERWORK PERMITTING.",
+    "UNDER THE GREASE: NARCOTICS, FACTORY-SEALED. WORTH A FORTUNE AND A SENTENCE. YOUR PROBLEM NOW.",
+    "THE CRATE IS EMPTY. BY THE TIME YOU LOOK UP, SO IS THE CORNER WHERE THE SELLER STOOD.",
+    "YOU KNOW UNCLAIMED FREIGHT WHEN YOU SMELL IT. SOMEBODY ELSE CAN OWN THAT STORY.",
+};
+static const Choice e39_ch[] = {
+    { "BUY UNSEEN (80 CR)", GATE_CARGO_SPACE, 80, e39_buy },
+    { "PASS",               0,                0,  e39_pass },
+};
+
+/* --- 40 THE CARTOGRAPHER (bar) ---------------------------------------------- */
+static const Op e40_sell[]   = { {OP_CR,6,0}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e40_haggle[] = { {OP_BRANCH,50,3}, {OP_RESULT,1,0}, {OP_END,0,0},
+                                 {OP_CR,12,0}, {OP_RESULT,2,0}, {OP_END,0,0} };
+static const Op e40_no[]     = { {OP_RESULT,3,0}, {OP_END,0,0} };
+static const char *const e40_tx[] = {
+    "SHE PAYS STANDARD RATE FOR YOUR FLIGHT LOGS AND MERGES THEM INTO A CHART OLDER THAN THE STATION. 'EVERY LINE HELPS.'",
+    "'STANDARD RATE OR NOTHING, PILOT. THE CHART OUTLIVES US BOTH EITHER WAY.' SHE BUYS THE NEXT ROUND ANYWAY.",
+    "SHE SQUINTS, THEN DOUBLES IT. 'FINE. YOUR LANES CROSS A GAP I'VE CHASED FOR A DECADE.'",
+    "YOUR LOGS STAY YOURS. SHE SHRUGS AND GOES BACK TO A CHART WITH ONE STUBBORN HOLE IN IT.",
+};
+static const Choice e40_ch[] = {
+    { "SELL YOUR LOGS", 0, 0, e40_sell },
+    { "HAGGLE",         0, 0, e40_haggle },
+    { "DECLINE",        0, 0, e40_no },
+};
+
+/* --- 41 LAST ROUND (bar, oneshot) -------------------------------------------- */
+static const Op e41_acc[] = { {OP_ITEM,2,0}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e41_dec[] = { {OP_REP,-1,2}, {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e41_tx[] = {
+    "'FORTY YEARS SHE NEVER JAMMED.' HE SLIDES THE OLD GUN ACROSS LIKE IT'S THE LAST OF HIS CARGO. 'FLY HER SOMEWHERE I HAVEN'T.'",
+    "YOU DRINK TO HIS RETIREMENT INSTEAD. HE TELLS THE STORY OF THE BASILISK AND THE BELT ONE LAST TIME, AND FOR ONCE NOBODY INTERRUPTS.",
+};
+static const Choice e41_ch[] = {
+    { "ACCEPT THE GUN", 0, 0, e41_acc },
+    { "DRINK WITH HIM", 0, 0, e41_dec },
+};
+
+/* --- 42 GRAVE MARKER (space) -------------------------------------------------*/
+static const Op e42_sal[]  = { {OP_REP,-1,3}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e42_loot[] = { {OP_CR,6,0}, {OP_BRANCH,35,4},
+                               {OP_RESULT,1,0}, {OP_END,0,0},
+                               {OP_AMBUSH,1,2}, {OP_RESULT,2,0}, {OP_END,0,0} };
+static const char *const e42_tx[] = {
+    "YOU CUT THRUST AND HOLD STATION FOR A LONG MINUTE. SOMEWHERE, SOMEONE'S TRAFFIC LOG NOTES THE COURTESY.",
+    "THE OFFERINGS ARE HARD CURRENCY AND NOBODY'S WATCHING. THE TOMB BEACON BLINKS ON, INDIFFERENT.",
+    "THE OFFERINGS ARE HARD CURRENCY - AND SOMEBODY WAS WATCHING. KIN, BY THE WAY THEY'RE BURNING IN.",
+};
+static const Choice e42_ch[] = {
+    { "HOLD AND SALUTE",   0, 0, e42_sal },
+    { "TAKE THE OFFERINGS",0, 0, e42_loot },
+};
+
+/* --- 43 TOLL GATE (arrival, lawful) -------------------------------------------*/
+static const Op e43_pay[] = { {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e43_jam[] = { {OP_BRANCH,50,3}, {OP_RESULT,1,0}, {OP_END,0,0},
+                              {OP_LEGAL,1,0}, {OP_CR,-4,0},
+                              {OP_RESULT,2,0}, {OP_END,0,0} };
+static const char *const e43_tx[] = {
+    "THE BARRIER DRONE TAKES ITS FIFTY AND SINGS YOU THROUGH WITH A JINGLE THAT WILL HAUNT YOUR DREAMS.",
+    "YOUR JAMMER HICCUPS THE DRONE MID-SCAN. IT BILLS A SHIP THAT ISN'T THERE AND WAVES YOU BOTH THROUGH.",
+    "THE DRONE OUT-COMPUTES YOUR JAMMER, FILES A VIOLATION, AND FINES YOU ON THE SPOT. IT ADDS A COURTESY JINGLE.",
+};
+static const Choice e43_ch[] = {
+    { "PAY THE TOLL (50)", 0, 50, e43_pay },
+    { "JAM THE SCAN",      0, 0,  e43_jam },
+};
+
+/* --- 44 PILGRIM CONVOY (arrival) ------------------------------------------------*/
+static const Op e44_esc[] = { {OP_REP,-1,3}, {OP_LATER,4,0},
+                              {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e44_ig[]  = { {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e44_tx[] = {
+    "YOU RIDE SHOTGUN ON THE SLOW BARGES UNTIL THE LANE CLEARS. THE PILGRIMS TITHE WHAT THEY CAN - IT ARRIVES AT YOUR NEXT DOCK, BLESSED, APPARENTLY.",
+    "THE CONVOY CRAWLS ON WITHOUT YOU, RUNNING LIGHTS LIKE A STRING OF VOTIVE CANDLES IN THE DARK.",
+};
+static const Choice e44_ch[] = {
+    { "FLY ESCORT", 0, 0, e44_esc },
+    { "FLY ON",     0, 0, e44_ig },
+};
+
 /* --- pool ----------------------------------------------------------------*/
 const Event k_events[] = {
     { .id = 1, .weight = 12, .npc_kind = NK_CIVILIAN, .trig = TRIG_DOCK,
@@ -518,7 +788,7 @@ const Event k_events[] = {
       .texts = e14_tx, .choices = e14_ch, .n_choices = 2 },
     { .id = 15, .weight = 10, .npc_kind = NK_CIVILIAN, .trig = TRIG_BAR,
       .title = "THE NAVIGATOR",
-      .body = "AN EX-SURVEY NAVIGATOR NURSES AN EMPTY GLASS. 'I KNOW A SCOOP LINE THROUGH $S THAT BEATS THE BOOK BY HALF A TANK.'",
+      .body = "AN EX-SURVEY NAVIGATOR NURSES AN EMPTY GLASS. 'I KNOW A SCOOP LINE THROUGH $S WORTH HALF A TANK. YOURS FOR A DRINK.'",
       .texts = e15_tx, .choices = e15_ch, .n_choices = 2 },
     { .id = 16, .weight = 10, .npc_kind = NK_CIVILIAN, .trig = TRIG_BAR,
       .title = "OLD WAR STORY",
@@ -585,6 +855,95 @@ const Event k_events[] = {
       .title = "THE RECRUITER",
       .body = "A $F OFFICER WORKS THE ARRIVALS QUEUE, UNIFORM PRESSED, VOICE TIRED. 'THE FRONT NEEDS GUNS. YOURS WILL DO. SIGNING BONUS, COMBAT PAY, GRATITUDE.'",
       .texts = e27_tx, .choices = e27_ch, .n_choices = 2 },
+
+    /* THE POLICY act 2: the Beneficiary (Vessa, fixed_npc 2) */
+    { .id = 28, .weight = 13, .npc_kind = NK_CIVILIAN, .trig = TRIG_BAR,
+      .need_flag = 1 + 11, .not_flag = 1 + 14, .fixed_npc = 2,
+      .title = "THE ARCHIVIST",
+      .body = "A WOMAN WITH ARCHIVE-SERVICE INK ON HER KNUCKLES SITS DOWN UNINVITED. 'YOU'RE THE PILOT FROM THE GREY-SHIP BUSINESS. GOOD. I STUDY POLICIES THAT DON'T DIE - AND I FOUND YOUR NAME ON A MANIFEST OLDER THAN YOU.'",
+      .texts = e28_tx, .choices = e28_ch, .n_choices = 2 },
+    { .id = 29, .weight = 13, .npc_kind = NK_CIVILIAN, .trig = TRIG_BAR,
+      .need_flag = 1 + 14, .not_flag = 1 + 15, .fixed_npc = 2,
+      .title = "THE LEDGER",
+      .body = "VESSA HAS THE CORNER BOOTH AND A SLATE FULL OF YOUR LIFE. 'I TRACED THE PREMIUMS ON THAT UNLAPSED CLAIM,' SHE SAYS, TOO QUIETLY. 'YOU SHOULD SIT.'",
+      .texts = e29_tx, .choices = e29_ch, .n_choices = 3 },
+    { .id = 30, .weight = 15, .flags = EV_ONESHOT, .npc_kind = NK_CIVILIAN,
+      .trig = TRIG_DOCK, .need_flag = 1 + 15, .fixed_npc = 2,
+      .title = "THE BENEFICIARY",
+      .body = "VESSA IS WAITING AT YOUR PAD, HOLLOW-EYED, HOLDING A SEALED ARCHIVE FLIMSY LIKE IT MIGHT GO OFF. 'THE DISBURSEMENT RECORD. WHO THE PAYOUT WENT TO.' SHE DOESN'T HAND IT OVER SO MUCH AS SURRENDER IT.",
+      .texts = e30_tx, .choices = e30_ch, .n_choices = 3 },
+
+    /* THE POLICY act 3: the Terms (the Adjuster returns) */
+    { .id = 31, .weight = 60, .flags = EV_ONESHOT, .npc_kind = NK_OFFICIAL,
+      .trig = TRIG_ARRIVAL, .need_flag = 1 + 16, .fixed_npc = 1,
+      .title = "RECALL NOTICE",
+      .body = "THE HAIL ARRIVES BEFORE YOUR DRIVE COOLS, ON A CHANNEL YOUR SHIP SHOULDN'T HAVE. A PLAIN GREY VOICE READS A POLICY NUMBER - YOURS - AND SAYS: 'YOUR CLAIM IS UNDER REVIEW.'",
+      .texts = e31_tx, .choices = e31_ch, .n_choices = 2 },
+    { .id = 32, .weight = 60, .flags = EV_ONESHOT, .npc_kind = NK_NONE,
+      .trig = TRIG_SPACE, .need_flag = 1 + 17,
+      .title = "THE AUDIT",
+      .body = "THE DERELICT IS GREY, REGISTRYLESS - AND THE LAYOUT IS YOUR SHIP'S, DOWN TO THE WELD YOU NEVER LIKED. ON THE DEAD FLIGHT DECK, ONE RECORDER, STILL WARM.",
+      .texts = e32_tx, .choices = e32_ch, .n_choices = 2 },
+    { .id = 33, .weight = 15, .flags = EV_ONESHOT, .npc_kind = NK_OFFICIAL,
+      .trig = TRIG_DOCK, .need_flag = 1 + 18, .fixed_npc = 1,
+      .title = "THE TERMS",
+      .body = "THE ADJUSTER IS IN YOUR BAY WHEN THE CLAMPS ENGAGE, GREY COAT IMMACULATE, A SINGLE PAGE IN HAND. 'AUDIT COMPLETE. REVIEW FAVOURABLE. YOU ARE OWED DISCLOSURE - ONCE. THESE ARE THE TERMS.'",
+      .texts = e33_tx, .choices = e33_ch, .n_choices = 3 },
+
+    /* planted-flag payoffs */
+    { .id = 34, .weight = 11, .flags = EV_ONESHOT, .npc_kind = NK_MYSTIC,
+      .trig = TRIG_BAR, .need_flag = 1 + 2,
+      .title = "THE COLLECTOR",
+      .body = "A GLOVED STRANGER SETS DOWN A CASE LINED WITH SMALL COLD TOKENS - ELEVEN OF THEM. 'YOU HOLD A RECEIPT OF THE COVER,' THEY SAY. 'THREE HUNDRED CREDITS. MOST DON'T GET AN OFFER.'",
+      .texts = e34_tx, .choices = e34_ch, .n_choices = 2 },
+    { .id = 35, .weight = 11, .flags = EV_ONESHOT, .npc_kind = NK_NONE,
+      .trig = TRIG_DOCK, .need_flag = 1 + 3,
+      .title = "RESUBMITTED",
+      .body = "THE HARBOURMASTER'S TERMINAL CHIMES TWICE FOR YOU TODAY. THE UNCLAIMED-VESSEL RECORD YOU PURGED IS BACK IN YOUR DOCKET - WITH A CREDIT ATTACHMENT.",
+      .texts = e35_tx, .choices = e35_ch, .n_choices = 2 },
+    { .id = 36, .weight = 11, .flags = EV_ONESHOT, .npc_kind = NK_DOCKHAND,
+      .trig = TRIG_BAR, .need_flag = 1 + 12,
+      .title = "THE OTHER YOU",
+      .body = "THE BARKEEP DOES A DOUBLE-TAKE THAT LASTS TOO LONG. 'BACK ALREADY? NO - WAIT.' THEY LOWER THE GLASS THEY WERE POLISHING. 'SOMEONE DRANK HERE THREE WEEKS AGO. I'D HAVE SWORN IT WAS YOU.'",
+      .texts = e36_tx, .choices = e36_ch, .n_choices = 2 },
+
+    /* standalone texture */
+    { .id = 37, .weight = 9, .npc_kind = NK_DOCKHAND, .trig = TRIG_DOCK,
+      .title = "UNION DUES",
+      .body = "THE LOADING GANG HAS DOWNED TOOLS AND CHAINED THE CRANES. A PICKET CAPTAIN WITH A SPLIT LIP LAYS IT OUT: '$T PAYS HALF-RATES AND BURIES THE INJURED QUIETLY. NOTHING MOVES TODAY. UNLESS YOU MOVE IT.'",
+      .texts = e37_tx, .choices = e37_ch, .n_choices = 3 },
+    { .id = 38, .weight = 12, .flags = EV_ONESHOT, .npc_kind = NK_NONE,
+      .trig = TRIG_DOCK, .need_flag = 1 + 21,
+      .title = "THE MEMORIAL",
+      .body = "BY THE BAY LIFTS, A WALL OF SMALL BRASS PLATES: EVERY HULL THIS PORT EVER LOST. YOU READ IT THE WAY EVERYONE DOES - UNTIL ONE NAME READS BACK.",
+      .texts = e38_tx, .choices = e38_ch, .n_choices = 2 },
+    { .id = 39, .weight = 9, .npc_kind = NK_PIRATE, .trig = TRIG_DOCK,
+      .gate = GATE_CARGO_SPACE,
+      .title = "HOT CARGO",
+      .body = "A FORKLIFT 'BREAKS DOWN' BESIDE YOUR PAD. ITS DRIVER TALKS WITHOUT MOVING HIS LIPS: 'UNCLAIMED CRATE, NO QUESTIONS, EIGHTY. GREASE SAYS MACHINE PARTS. GREASE SAYS A LOT OF THINGS.'",
+      .texts = e39_tx, .choices = e39_ch, .n_choices = 2 },
+    { .id = 40, .weight = 10, .npc_kind = NK_CIVILIAN, .trig = TRIG_BAR,
+      .title = "THE CARTOGRAPHER",
+      .body = "AN OLD SURVEYOR HAS A CHART SPREAD ACROSS TWO TABLES, ANNOTATED IN FIVE HANDS OVER FIFTY YEARS. 'FRESH LANES, PILOT? I PAY STANDARD RATE FOR HONEST LOGS.'",
+      .texts = e40_tx, .choices = e40_ch, .n_choices = 3 },
+    { .id = 41, .weight = 8, .flags = EV_ONESHOT, .npc_kind = NK_DOCKHAND,
+      .trig = TRIG_BAR,
+      .title = "LAST ROUND",
+      .body = "THE WHOLE BAR IS DRINKING TO A WHITE-HAIRED PILOT WHOSE DOCKING LICENCE EXPIRED AT MIDNIGHT. HE'S GIVING HIS LIFE AWAY PIECE BY PIECE, AND HE'S JUST SPOTTED YOU.",
+      .texts = e41_tx, .choices = e41_ch, .n_choices = 2 },
+    { .id = 42, .weight = 10, .npc_kind = NK_NONE, .trig = TRIG_SPACE,
+      .title = "GRAVE MARKER",
+      .body = "NOT A WRECK - A TOMB. THE HULL IS WELDED SHUT FROM OUTSIDE, RINGED WITH OFFERINGS: COINS, RATION TINS, A CHILD'S TOY SEALED IN RESIN. THE BEACON TICKS LIKE A SLOW HEART.",
+      .texts = e42_tx, .choices = e42_ch, .n_choices = 2 },
+    { .id = 43, .weight = 9, .npc_kind = NK_NONE, .trig = TRIG_ARRIVAL,
+      .gate = GATE_LAWFUL,
+      .title = "TOLL GATE",
+      .body = "A BARRIER DRONE PARKS ITSELF ACROSS YOUR APPROACH LANE, ALL STRIPES AND CHEERFUL MENACE. 'WELCOME, PILOT! LANE MAINTENANCE LEVY: FIFTY CREDITS. HAVE A COMPLIANT DAY.'",
+      .texts = e43_tx, .choices = e43_ch, .n_choices = 2 },
+    { .id = 44, .weight = 9, .npc_kind = NK_MYSTIC, .trig = TRIG_ARRIVAL,
+      .title = "PILGRIM CONVOY",
+      .body = "SIX SLOW BARGES IN PROCESSION, HULLS PAINTED WITH CONSTELLATIONS THAT DON'T EXIST. THE LEAD SHIP HAILS: 'THE LANES AHEAD ARE UNKIND, PILOT. RIDE WITH US A WHILE - THE WATCHED ROAD IS THE SAFE ONE.'",
+      .texts = e44_tx, .choices = e44_ch, .n_choices = 2 },
 };
 const int k_n_events = (int)(sizeof k_events / sizeof k_events[0]);
 
@@ -606,5 +965,25 @@ const Lore k_lore[] = {
       "A CRYOPOD MANIFEST: YOUR NAME, YOUR PRINTS, YOUR BLOOD TYPE - ABOARD A SHIP YOU NEVER CREWED. THE POD WAS WARM, AND RECENTLY VACATED." },
     /* 7 */ { "RECALLED",
       "GREY PLATES, NO REGISTRY, SYSTEMS WIPED CLEANER THAN ANY SALVAGER WORKS. THE ADJUSTERS DECOMMISSION THEIR OWN - AND LEAVE NOTHING TO CLAIM." },
+    /* 8 */ { "THE UNLAPSED",
+      "SOME POLICIES NEVER LAPSE. THE ARCHIVE LISTS CLAIMS PAID CENTURIES AGO WHOSE PREMIUMS STILL ARRIVE - ON TIME, IN FULL, FROM ACCOUNTS THAT DIED WITH THEIR HOLDERS. TWELVE ARE KNOWN. ONE IS YOURS." },
+    /* 9 */ { "THE PREMIUM",
+      "TRACE ANY PILOT'S FEES FAR ENOUGH UP AND A FRACTION VANISHES INTO THE COVER. TRACE YOURS AND THE FRACTION IS LARGER. YOU ARE PAYING A DEATH CLAIM. THE NAME ON THE CLAIM IS YOURS." },
+    /* 10 */ { "SETTLEMENT",
+      "DISBURSEMENT RECORD, FORTY YEARS SEALED. CLAIM: ONE PILOT, LOST WITH ALL HANDS. STATUS: SETTLED IN FULL. SETTLEMENT: ONE (1) PILOT, CONTINUED. THE HANDWRITING ON THE RELEASE IS YOURS." },
+    /* 11 */ { "UNDER REVIEW",
+      "THE GREY SHIPS NO LONGER ARRIVE BEFORE OTHER PEOPLE'S DISASTERS. THEY ARRIVE WHERE YOU ARE GOING TO BE, AND WAIT, AND FILE YOUR PUNCTUALITY APPROVINGLY." },
+    /* 12 */ { "THE AUDIT",
+      "AUDIT LOG, RECOVERED FROM A GREY WRECK WITH YOUR SHIP'S BONES: 'ASSET PERFORMING WITHIN PARAMETERS. CONTINUITY HOLDING. RE-ISSUE NOT YET REQUIRED.' THE VOICE ON THE LOG IS YOURS." },
+    /* 13 */ { "THE TERMS",
+      "THE INDEMNITY DOES NOT INSURE AGAINST LOSS. IT INSURES CONTINUITY. NOTHING COVERED IS EVER LOST - ONLY REPLACED, PERFECTLY, AND BILLED. YOU ARE NOT THE POLICYHOLDER. YOU ARE THE PAYOUT." },
+    /* 14 */ { "THE RECEIPT",
+      "THE TOKEN IS A METAL NOBODY CAN NAME AND IT IS ALWAYS COLD. ELEVEN OTHERS EXIST; SOMEONE COLLECTS THEM. HELD TO THE EAR IT MAKES A SOUND LIKE A LEDGER TURNING." },
+    /* 15 */ { "ARREARS",
+      "DELETE THE RECORD AND THE RECORD RETURNS, WITH INTEREST PAID FOR THE INCONVENIENCE. THE SYSTEM DOES NOT MIND BEING DOUBTED. IT DOES NOT MIND ANYTHING AT ALL." },
+    /* 16 */ { "CONTINUED",
+      "A PILOT WITH YOUR FACE DRANK AT THIS BAR THREE WEEKS BEFORE YOU ARRIVED. TIPPED WELL. PAID IN EXACT CHANGE. WORE GREY. SIGNED THE TAB: 'CONTINUED'." },
+    /* 17 */ { "THE WALL",
+      "YOUR HULL'S NAME IS ON THE MEMORIAL, FORTY YEARS WEATHERED, AMONG THE HONESTLY DEAD. SOMEONE RECENT HAS SCRATCHED ONE WORD BENEATH IT: 'PAID'." },
 };
 const int k_n_lore = (int)(sizeof k_lore / sizeof k_lore[0]);

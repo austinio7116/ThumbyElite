@@ -1185,10 +1185,10 @@ int main(int argc, char **argv) {
                 int8_t rep0 = g_rep[system_faction(si_any.addr)];
                 events_run_choice(ev, 1);        /* FUND THE WARD */
                 const EvReceipt *r = events_receipt();
-                EVCHECK(r->cr == -100 && r->hull_pct == 15 &&
+                EVCHECK(r->cr == -100 && r->hull_pct == 25 &&
                         g_ships[PLAYER].hull > 50.0f &&
                         g_rep[system_faction(si_any.addr)] == rep0 + 3,
-                        "fund ward: -100cr +15% hull +3 rep");
+                        "fund ward: -100cr +25% hull +3 rep");
             }
             /* distress GIVE: fuel out now, credits at next dock */
             FIND_EV(si_any, 1, ev);
@@ -1224,6 +1224,80 @@ int main(int argc, char **argv) {
                    item_runs, item_hits);
             EVCHECK(item_runs == 40 && item_hits > 0,
                     "derelict strips can pay in hardware");
+        }
+
+        /* THE POLICY acts 2-3: ordered, gated, recurring faces */
+        {
+            events_init();
+            g_player.credits = 5000;
+            /* act 2 locked before act 1 completes */
+            int early = 0;
+            for (int k = 0; k < 2500; k++) {
+                const Event *e2 = events_roll_bar(&si_any, 0);
+                if (e2 && (e2->id == 28 || e2->id == 29)) early++;
+                e2 = events_roll_dock(&si_any, 0);
+                if (e2 && e2->id == 30) early++;
+            }
+            EVCHECK(early == 0, "act 2 waits for act 1");
+            /* fast-forward act 1 */
+            uint8_t *bits = events_save_bits();
+            bits[(128 + 11) >> 3] |= 1 << ((128 + 11) & 7);   /* flag 11 */
+            const Event *ev = NULL;
+            for (int k = 0; k < 30000 && !ev; k++) {
+                const Event *e2 = events_roll_bar(&si_any, 0);
+                if (e2 && e2->id == 28) ev = e2;
+            }
+            EVCHECK(ev != NULL, "archivist appears post-act-1");
+            uint32_t vessa = events_npc_seed();
+            events_run_choice(ev, 0);            /* flag 14, lore 8 */
+            EVCHECK(events_lore_seen(8), "act 2 step 1 reveals lore 8");
+            ev = NULL;
+            for (int k = 0; k < 30000 && !ev; k++) {
+                const Event *e2 = events_roll_bar(&si_any, 0);
+                if (e2 && e2->id == 29) ev = e2;
+            }
+            EVCHECK(ev && events_npc_seed() == vessa,
+                    "vessa keeps her face");
+            events_run_choice(ev, 0);            /* flag 15, lore 9 */
+            ev = NULL;
+            for (int k = 0; k < 30000 && !ev; k++) {
+                const Event *e2 = events_roll_dock(&si_any, 0);
+                if (e2 && e2->id == 30) ev = e2;
+            }
+            EVCHECK(ev != NULL, "beneficiary finale at dock");
+            events_run_choice(ev, 0);            /* flag 16, lore 10 */
+            EVCHECK(events_lore_seen(10), "act 2 complete");
+            /* act 3 chain: arrival -> space -> dock climax */
+            ev = NULL;
+            for (int k = 0; k < 30000 && !ev; k++) {
+                const Event *e2 = events_roll_arrival(&si_any);
+                if (e2 && e2->id == 31) ev = e2;
+            }
+            EVCHECK(ev != NULL, "recall notice on arrival");
+            events_run_choice(ev, 0);
+            ev = NULL;
+            for (int k = 0; k < 30000 && !ev; k++) {
+                const Event *e2 = events_roll_space(&si_any);
+                if (e2 && e2->id == 32) ev = e2;
+            }
+            EVCHECK(ev != NULL, "the audit at a derelict");
+            events_run_choice(ev, 0);
+            ev = NULL;
+            for (int k = 0; k < 30000 && !ev; k++) {
+                const Event *e2 = events_roll_dock(&si_any, 0);
+                if (e2 && e2->id == 33) ev = e2;
+            }
+            EVCHECK(ev != NULL, "the terms reachable");
+            events_run_choice(ev, 0);
+            EVCHECK(events_lore_seen(13) && events_flag(19),
+                    "campaign climax: the terms read");
+            /* climax is oneshot — never again */
+            int again = 0;
+            for (int k = 0; k < 3000; k++) {
+                const Event *e2 = events_roll_dock(&si_any, 0);
+                if (e2 && e2->id == 33) again++;
+            }
+            EVCHECK(again == 0, "the terms never repeat");
         }
 
         /* save round-trip carries lore bits (v5) */

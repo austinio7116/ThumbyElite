@@ -39,7 +39,7 @@ roll). Same-visit outcomes are fixed (no save-scum rerolls).
 | | | | DONATE (25 CR) | LORE 5 + FLAG 2 (future hook) |
 | | | | MOVE ALONG | nothing |
 | 8 | CLINIC SHORTFALL | always | DONATE MEDICINE *(needs MEDICINE)* | −1 MEDICINE, +5 REP local, **+20% hull patched** |
-| | | | FUND THE WARD (100 CR) | +3 REP local, **+15% hull patched** |
+| | | | FUND THE WARD (100 CR) | +3 REP local, **+25% hull patched** (~50 CR repair value) |
 | | | | NOT YOUR PROBLEM | nothing |
 | 9 | REGISTRY ERROR *(oneshot)* | always | READ THE FILE | **LORE 4** |
 | | | | DELETE IT | FLAG 3 (future hook) |
@@ -60,7 +60,7 @@ roll). Same-visit outcomes are fixed (no save-scum rerolls).
 | | | | WALK AWAY | nothing (offer returns) |
 | 14 | CARD GAME | always | SIT IN (100 CR) | 55%: +200 CR back (net **+100**) · 45%: net −100 |
 | | | | JUST WATCH | nothing |
-| 15 | THE NAVIGATOR | always | BUY HER A ROUND (50 CR) | **+1.5 LY fuel** |
+| 15 | THE NAVIGATOR | always | BUY HER A ROUND (40 CR) | **+5.0 LY fuel** (60 CR at the pump — a real deal now; was 50 CR for 18 CR of fuel, user-caught) |
 | | | | NOT TONIGHT | nothing |
 | 16 | OLD WAR STORY | always | LISTEN | +2 REP local |
 | | | | BUY THE ROUND (25 CR) | +4 REP local, **+1 LIQUOR** ("for the road") |
@@ -80,7 +80,7 @@ roll). Same-visit outcomes are fixed (no save-scum rerolls).
 | 19 | THE LAST POD *(oneshot)* | always | OPEN IT | **LORE 6**, FLAG 12 (future hook) |
 | | | | SCAN AND SEAL | LORE 6 |
 | | | | LEAVE - NOW | nothing |
-| 20 | STILL WARM | threat ≥2 | GRAB AND GO *(needs cargo space)* | +1 good; 40%: **killers return — tier-2 ambush** |
+| 20 | STILL WARM | threat ≥2 | GRAB AND GO *(needs cargo space)* | **+2 goods**; 40%: killers return — tier-2 ambush |
 | | | | BURN AWAY | nothing |
 | 21 | GREY PAINT *(oneshot)* | arc complete (FLAG 11) | BOARD HER | **LORE 7** |
 | | | | KEEP CLEAR | nothing |
@@ -126,3 +126,45 @@ yet) · 13 stowaway repaid
   in the save (v6). Buffs applied: #1, #8, #13, #16, #18 (bold above).
 - #23 ROUTINE SWEEP stays rep-only — the receipt makes +1 REP visible,
   which was the actual complaint.
+
+
+---
+
+# THE POLICY — the main lore thread (added 2026-06-12)
+
+Audit verdict that drove this: the old lore was a strong premise used as
+wallpaper — 8 fragments all whispering "spooky" with no escalation, no
+answers, no personal stakes. Restructured as three acts; each answers a
+question and raises a worse one.
+
+**Act 1 — THE ADJUSTER** *(existing #11/12/13)*: it exists and watches.
+**Act 2 — THE BENEFICIARY** *(new, gated on act 1)*: it's about YOU.
+| # | Event | Where | Reveals |
+|---|---|---|---|
+| 28 | THE ARCHIVIST | bar | Vessa (recurring): twelve unlapsed claims; yours is one. LORE 8 |
+| 29 | THE LEDGER | bar | your own fees pay your own death claim. LORE 9 (option: fund a deeper trace, 200 CR) |
+| 30 | THE BENEFICIARY | dock, oneshot | the payout was disbursed 40 years ago — AS you. "ONE (1) PILOT, CONTINUED." LORE 10 |
+
+**Act 3 — THE TERMS** *(new, gated on act 2)*: the grey ships turn toward you.
+| # | Event | Where | Reveals |
+|---|---|---|---|
+| 31 | RECALL NOTICE | arrival, oneshot | hailed by policy number: "your claim is under review". LORE 11 |
+| 32 | THE AUDIT | derelict, oneshot | a grey wreck with your ship's bones; the recorder speaks in your voice. LORE 12 (option: strip it — grey-issue weapon) |
+| 33 | THE TERMS | dock, climax, oneshot | READ: "you are not the policyholder. You are the payout." LORE 13 · DEMAND SETTLEMENT: +1000 CR, hull fully re-knit · REFUSE: +400 CR, the unread terms remain in force |
+
+**Planted-flag payoffs** (every old dangling thread now lands):
+| # | Event | Needs | Pays |
+|---|---|---|---|
+| 34 | THE COLLECTOR | preacher's token | sell 300 CR, or keep → LORE 14 |
+| 35 | RESUBMITTED | purged the registry file | +200 CR "arrears", LORE 15 |
+| 36 | THE OTHER YOU | opened the pod | the barkeep served "you" 3 weeks ago. LORE 16 |
+| 38 | THE MEMORIAL | read your file | your hull on the wall, 40 years weathered, scratched: "PAID". LORE 17 |
+
+**New standalone texture**: 37 UNION DUES (picket line: feed/cross/walk),
+39 HOT CARGO (80 CR mystery crate: 55% goods / 30% sealed narcotics / 15%
+empty), 40 THE CARTOGRAPHER (sell flight logs, haggle), 41 LAST ROUND
+(retiring ace gifts his never-jammed gun — OP_ITEM), 42 GRAVE MARKER
+(salute or rob a tomb-ship; kin may object), 43 TOLL GATE (pay the drone
+or jam it), 44 PILGRIM CONVOY (escort the slow barges, tithe at next dock).
+
+Totals: 44 events, 18 lore fragments, DATABASE screen now scrolls.

@@ -1672,8 +1672,15 @@ static void tick_supercruise(const CraftRawButtons *btn, float dt) {
      * is automatic, opening to 500 Mm/s in deep space. Planets keep a
      * standoff so we don't cruise into the lithosphere. */
     float standoff = 0.0f;
-    if (s_sc_has_dest && s_sc_dest.kind == POI_PLANET)
-        standoff = system_info()->planets[s_sc_dest.index].radius_mm * 3.5f;
+    if (s_sc_has_dest && s_sc_dest.kind == POI_PLANET) {
+        /* AFFINE standoff (user bug: 'all planets look the same size').
+         * The old radius*3.5 made apparent size constant by
+         * construction — r/(3.5r) cancels. radius*1.8 + 10 Mm keeps
+         * the lithosphere guard while letting true size show: a 2 Mm
+         * moonlet arrives small (~16 px), a 25 Mm giant LOOMS (~50 px). */
+        float r = system_info()->planets[s_sc_dest.index].radius_mm;
+        standoff = r * 1.8f + 10.0f;
+    }
     /* 12,000 cap + 0.6 slope (user: 42s end-to-end too long — worst
      * diameter now ~23s, short hops keep a ~5s journey feel; ODE-sim
      * picked). */

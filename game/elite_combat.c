@@ -261,6 +261,19 @@ void combat_direct_damage(int shooter, int victim, float dmg, Vec3 hit_pos) {
             }
         }
     }
+    if (shooter > PLAYER && v->team == TEAM_HOSTILE &&
+        g_ships[shooter].team == TEAM_NEUTRAL &&
+        g_ships[shooter].is_police) {
+        /* Allied fire draws aggro: the wounded hostile turns on the
+         * wing that's actually hurting it (warzone dogpile fix). */
+        union { float f; uint32_t u; } hb = { v->hull };
+        uint32_t hr = (hb.u ^ (uint32_t)(shooter * 2654435761u));
+        hr ^= hr >> 13; hr *= 1274126177u; hr ^= hr >> 16;
+        if ((hr % 100u) < 60) {
+            v->ai_target = (uint8_t)shooter;
+            v->civ_wp_t = 0;            /* hold this grudge a while */
+        }
+    }
     if (shooter == PLAYER) {
         s_hitmark = 0.12f;
         /* Distress wings fight the civilian until YOU engage. */

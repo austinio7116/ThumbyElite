@@ -2018,8 +2018,14 @@ static void draw_codex(uint16_t *fb) {
     hl(fb, 19, COL_GRID);
     if (seen == 0)
         craft_font_draw(fb, "NO RECORDS DECRYPTED", 2, 30, COL_DIM);
-    for (int i = 0; i < k_n_lore; i++) {
-        int y = 26 + i * 9;
+    /* the archive outgrew the screen: 10 visible rows, cursor-follow */
+    const int CODEX_ROWS = 10;
+    if (s_cursor < s_scroll) s_scroll = s_cursor;
+    if (s_cursor >= s_scroll + CODEX_ROWS)
+        s_scroll = s_cursor - CODEX_ROWS + 1;
+    for (int r = 0; r < CODEX_ROWS && s_scroll + r < k_n_lore; r++) {
+        int i = s_scroll + r;
+        int y = 26 + r * 9;
         bool unlocked = events_lore_seen(i);
         if (i == s_cursor)
             craft_font_draw(fb, ">", 2, y, unlocked ? COL_TXT : COL_DIM);
@@ -2028,6 +2034,8 @@ static void draw_codex(uint16_t *fb) {
                         unlocked ? (i == s_cursor ? COL_TXT : COL_HDR)
                                  : COL_GRID);
     }
+    if (s_scroll + CODEX_ROWS < k_n_lore)
+        craft_font_draw(fb, "...", 8, 26 + CODEX_ROWS * 9, COL_DIM);
     hl(fb, 118, COL_GRID);
     { char h[28]; snprintf(h, sizeof h, "%s:READ %s:BACK",
         plat_menu_btn(MB_A), plat_menu_btn(MB_B));
