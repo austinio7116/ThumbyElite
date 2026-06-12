@@ -133,6 +133,12 @@ bool save_matches_galaxy(uint32_t seed) {
     return read_blob(&b) && b.p.galaxy_seed == seed;
 }
 
+void save_wipe(void) {
+    SaveHeader h;
+    memset(&h, 0, sizeof h);          /* bad magic = no save */
+    plat_save((const uint8_t *)&h, (int)sizeof h);
+}
+
 bool save_load(SaveMeta *out) {
     SaveBlob b;
     if (!read_blob(&b)) return false;

@@ -715,6 +715,123 @@ static const Choice e44_ch[] = {
     { "FLY ON",     0, 0, e44_ig },
 };
 
+
+/* ============= THE POLICY, ACT 4: THE LEDGER BLEEDS (D) =================
+ * Post-Terms the smugness cracks: the disasters are MANUFACTURED. The
+ * Indemnity is insolvent — claims must flow or the book collapses.
+ * Flags: 22 both sides, 23 caught the origination, 24 the misprint,
+ * 25 act complete (the write-off / Collection gateway). */
+
+/* --- 45 BOTH SIDES (dock, frontline) -------------------------------------- */
+static const Op e45_look[] = { {OP_LORE,18,0}, {OP_FLAG,22,0},
+                               {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e45_no[]   = { {OP_FLAG,22,0}, {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e45_tx[] = {
+    "THE DYING MERC PRESSES HER PAY VOUCHER INTO YOUR HAND. SAME BROKER SEAL AS YOURS. SAME ACCOUNT. 'WHO DO YOU THINK HIRES BOTH TRENCHES, PILOT? WARS DON'T BALANCE THEMSELVES.'",
+    "YOU DON'T TAKE THE VOUCHER. THE SEAL ON IT WATCHES YOU LEAVE ANYWAY - YOU'VE SIGNED ENOUGH OF THEM TO KNOW IT BY HEART.",
+};
+static const Choice e45_ch[] = {
+    { "TAKE THE VOUCHER", 0, 0, e45_look },
+    { "WALK AWAY",        0, 0, e45_no },
+};
+
+/* --- 46 THE ORIGINATION (arrival, oneshot) --------------------------------- */
+static const Op e46_watch[] = { {OP_LORE,19,0}, {OP_FLAG,23,0},
+                                {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e46_help[]  = { {OP_LORE,19,0}, {OP_FLAG,23,0}, {OP_REP,-1,3},
+                                {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e46_tx[] = {
+    "THE GREY SHIP HOLDS ITS LANCE ON THE FREIGHTER UNTIL THE REACTOR GOES, THEN FILES SOMETHING AND LEAVES. IT KNEW YOU WERE WATCHING. IT WANTED A WITNESS - OR A QUOTE.",
+    "YOU PULL TWO CREW OUT OF THE FIRE. THE GREY SHIP DOESN'T INTERFERE - IT AMENDS THE CLAIM, POLITELY, TO ACCOUNT FOR SALVAGE.",
+};
+static const Choice e46_ch[] = {
+    { "HOLD AND WATCH",   0, 0, e46_watch },
+    { "RUN THE RESCUE",   0, 0, e46_help },
+};
+
+/* --- 47 THE MISPRINT (bar, Vessa) ------------------------------------------ */
+static const Op e47_hear[] = { {OP_LORE,20,0}, {OP_FLAG,24,0},
+                               {OP_RESULT,0,0}, {OP_END,0,0} };
+static const char *const e47_tx[] = {
+    "VESSA LOOKS LIKE SHE HASN'T SLEPT SINCE THE LAST TIME. 'THE DOUBLE OF YOU? NOT SURVEILLANCE. A DOUBLE ISSUE. THE PRESS IS WORN, THE BOOK IS BLEEDING, AND THE INDEMNITY IS PRINTING CLAIMS TO COVER CLAIMS. IT'S A RUN ON THE BANK - AND WE'RE THE CURRENCY.'",
+};
+static const Choice e47_ch[] = {
+    { "HEAR ALL OF IT", 0, 0, e47_hear },
+};
+
+/* --- 48 THE WRITE-OFF (space, oneshot — the Collection gateway) ------------- */
+static const Op e48_take[] = { {OP_LORE,21,0}, {OP_FLAG,25,0},
+                               {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e48_mark[] = { {OP_LORE,21,0}, {OP_FLAG,25,0}, {OP_CR,8,0},
+                               {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e48_tx[] = {
+    "A BEACON FROM THE COLONY THAT 'NEVER EXISTED', STILL TICKING. ITS LAST LOG: 'THEY DIDN'T DESTROY US. THEY TOWED US.' THE BEARING IT RECORDED POINTS CLEAN OUT OF THE GALAXY - THE PROSPECTOR'S COORDINATES.",
+    "YOU SELL THE BEACON'S SALVAGE RIGHTS BUT KEEP ITS LOG CORE. SOME PROOF SHOULDN'T HAVE A PRICE. THE BEARING POINTS OUT OF THE GALAXY.",
+};
+static const Choice e48_ch[] = {
+    { "TAKE THE LOG",        0, 0, e48_take },
+    { "LOG + SELL SALVAGE",  0, 0, e48_mark },
+};
+
+/* ============= THE POLICY, ACT 4B: THE COLLECTION (B) ===================
+ * Flags: 31 saw the Collection (campaign stake: the original is THERE). */
+
+/* --- 49 THE THRESHOLD (space, oneshot) -------------------------------------- */
+static const Op e49_look[] = { {OP_LORE,22,0}, {OP_FLAG,31,0},
+                               {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e49_flee[] = { {OP_LORE,22,0}, {OP_FLAG,31,0},
+                               {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e49_tx[] = {
+    "PAST THE HULK, FAR PAST, YOUR SCOPE RESOLVES WHAT SHOULDN'T FIT ON A SCOPE: SHIPS, STATIONS, WHOLE LIT CITIES - RACKED IN ROWS LIKE EVIDENCE. NOTHING ORBITS. EVERYTHING IS KEPT. SOMEWHERE IN THE ROWS, A HULL WITH YOUR NAME, FORTY YEARS OLDER.",
+    "YOU LOOK ONCE AND BURN FOR HOME. THE ROWS DON'T END BEFORE YOUR SCOPE DOES. ALL OF IT KEPT. NONE OF IT FREE.",
+};
+static const Choice e49_ch[] = {
+    { "LOOK CLOSER",  0, 0, e49_look },
+    { "TURN BACK",    0, 0, e49_flee },
+};
+
+/* ============= THE POLICY, ACT 5: THE RUN (D climax, C door) =============
+ * Flags: 26 triage offered, 27 network met, 28 LAPSED (mechanical:
+ * death is final), 29 underwrote, 30 kept current. */
+
+/* --- 50 THE TRIAGE (dock, oneshot, the Adjuster) ----------------------------- */
+static const Op e50_pen[] = { {OP_LORE,23,0}, {OP_FLAG,26,0}, {OP_FLAG,29,0},
+                              {OP_CR,80,0}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e50_ref[] = { {OP_LORE,23,0}, {OP_FLAG,26,0},
+                              {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e50_tx[] = {
+    "YOU TAKE THE PEN. THE LIST IS SYSTEMS, AND THE COLUMN YOU INITIAL IS 'COVERAGE WITHDRAWN'. THE ADJUSTER FILES IT WITHOUT READING. 'THE BOOK THANKS YOU. THE BOOK ALWAYS BALANCES.' THE CREDITS LAND LIKE A VERDICT.",
+    "YOU PUSH THE LIST BACK. THE ADJUSTER NODS AS IF YOU'D INITIALLED A DIFFERENT COLUMN. 'DECLINED. NOTED. THE TRIAGE PROCEEDS WITHOUT YOU - IT ALWAYS HAS.'",
+};
+static const Choice e50_ch[] = {
+    { "TAKE THE PEN (2000)", 0, 0, e50_pen },
+    { "REFUSE THE LIST",     0, 0, e50_ref },
+};
+
+/* --- 51 THE NETWORK (bar, oneshot — the Lapsed) ------------------------------ */
+static const Op e51_hear[] = { {OP_LORE,24,0}, {OP_FLAG,27,0},
+                               {OP_RESULT,0,0}, {OP_END,0,0} };
+static const char *const e51_tx[] = {
+    "THE PREACHER, THE COLLECTOR, TWO FACES YOU'VE TRADED WITH FOR MONTHS - ALL ONE TABLE NOW. 'TWELVE TOKENS. TWELVE SURRENDERS. A POLICY GIVEN UP FREELY SETTLES IN FULL - AND SETTLED COLLATERAL GOES FREE. EVERYTHING IT KEEPS OF YOURS, PILOT. EVERYONE.'",
+};
+static const Choice e51_ch[] = {
+    { "SIT DOWN", 0, 0, e51_hear },
+};
+
+/* --- 52 INDEMNITY RUN (dock, campaign climax, oneshot) ------------------------ */
+static const Op e52_keep[]  = { {OP_LORE,25,0}, {OP_FLAG,30,0}, {OP_CR,20,0},
+                                {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e52_lapse[] = { {OP_LORE,26,0}, {OP_FLAG,28,0},
+                                {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e52_tx[] = {
+    "'CONTINUITY MAINTAINED.' THE ADJUSTER COUNTERSIGNS, AND SOMETHING IN THE ROWS BEYOND THE GALAXY STAYS RACKED. A LOYALTY DIVIDEND LANDS IN YOUR ACCOUNT. IT SPENDS LIKE ANY OTHER MONEY. ALMOST.",
+    "YOU SIGN THE SURRENDER. SOMEWHERE A LEDGER CLOSES A LINE FORTY YEARS LONG, AND IN THE ROWS BEYOND THE GALAXY A RACK UNLOCKS. THE ADJUSTER'S VOICE, FOR ONCE, IS NOT GREY: 'PAID IN FULL. FLY CAREFULLY, PILOT. THERE IS EXACTLY ONE OF YOU NOW.'",
+};
+static const Choice e52_ch[] = {
+    { "KEEP CURRENT",        0, 0, e52_keep },
+    { "LAPSE - SET IT FREE", 0, 0, e52_lapse },
+};
+
 /* --- pool ----------------------------------------------------------------*/
 const Event k_events[] = {
     { .id = 1, .weight = 12, .npc_kind = NK_CIVILIAN, .trig = TRIG_DOCK,
@@ -944,6 +1061,52 @@ const Event k_events[] = {
       .title = "PILGRIM CONVOY",
       .body = "SIX SLOW BARGES IN PROCESSION, HULLS PAINTED WITH CONSTELLATIONS THAT DON'T EXIST. THE LEAD SHIP HAILS: 'THE LANES AHEAD ARE UNKIND, PILOT. RIDE WITH US A WHILE - THE WATCHED ROAD IS THE SAFE ONE.'",
       .texts = e44_tx, .choices = e44_ch, .n_choices = 2 },
+
+    /* THE POLICY act 4: the ledger bleeds (D) */
+    { .id = 45, .weight = 14, .npc_kind = NK_PIRATE, .trig = TRIG_DOCK,
+      .need_flag = 1 + 19, .not_flag = 1 + 22, .gate = GATE_FRONTLINE,
+      .title = "BOTH SIDES",
+      .body = "A SHOT-UP MERCENARY FROM THE OTHER TRENCH IS DYING IN YOUR PAD'S SHADOW, AND WAVES YOU CLOSE LIKE AN OLD FRIEND. 'YOU FLEW THE ZONE TOO. THEN YOU'LL WANT TO SEE WHO PAID ME.'",
+      .texts = e45_tx, .choices = e45_ch, .n_choices = 2 },
+    { .id = 46, .weight = 50, .flags = EV_ONESHOT, .npc_kind = NK_NONE,
+      .trig = TRIG_ARRIVAL, .need_flag = 1 + 22,
+      .title = "THE ORIGINATION",
+      .body = "YOU DROP EARLY - AND THE SKY IS ALREADY OCCUPIED. A PLAIN GREY SHIP SITS LANCE-ON TO A LOADED FREIGHTER THAT HASN'T NOTICED IT YET. NOTHING ABOUT THIS IS A RESCUE.",
+      .texts = e46_tx, .choices = e46_ch, .n_choices = 2 },
+    { .id = 47, .weight = 14, .npc_kind = NK_CIVILIAN, .trig = TRIG_BAR,
+      .need_flag = 1 + 23, .not_flag = 1 + 24, .fixed_npc = 2,
+      .title = "THE MISPRINT",
+      .body = "VESSA FINDS YOU THIS TIME, AND SHE'S CARRYING TWO SLATES NOW. 'I KNOW WHAT YOUR DOUBLE IS. SIT DOWN. IT'S WORSE THAN A GHOST.'",
+      .texts = e47_tx, .choices = e47_ch, .n_choices = 1 },
+    { .id = 48, .weight = 50, .flags = EV_ONESHOT, .npc_kind = NK_NONE,
+      .trig = TRIG_SPACE, .need_flag = 1 + 24,
+      .title = "THE WRITE-OFF",
+      .body = "THE HULK'S HOLD IS EMPTY EXCEPT FOR ONE THING NOBODY STRIPS: A COLONY BEACON, REGISTRY SCRUBBED FROM EVERY CHART YOU OWN - STILL TRANSMITTING TO NOBODY.",
+      .texts = e48_tx, .choices = e48_ch, .n_choices = 2 },
+
+    /* act 4b: the Collection (B) */
+    { .id = 49, .weight = 50, .flags = EV_ONESHOT, .npc_kind = NK_NONE,
+      .trig = TRIG_SPACE, .need_flag = 1 + 25,
+      .title = "THE THRESHOLD",
+      .body = "THIS WRECK ISN'T DRIFTING - IT'S MOORED. A TOW-LINE OF FUSED GREY CABLE RUNS FROM ITS SPINE TOWARD THE RIM, TAUT, MAINTAINED, AND VERY LONG. YOUR SCOPE FOLLOWS IT OUT PAST THE LAST CHARTED STAR.",
+      .texts = e49_tx, .choices = e49_ch, .n_choices = 2 },
+
+    /* act 5: the run (D climax + C door) */
+    { .id = 50, .weight = 15, .flags = EV_ONESHOT, .npc_kind = NK_OFFICIAL,
+      .trig = TRIG_DOCK, .need_flag = 1 + 31, .fixed_npc = 1,
+      .title = "THE TRIAGE",
+      .body = "THE ADJUSTER IS BACK IN YOUR BAY, AND THIS TIME THE PAGE IS A LIST. 'THE BOOK MUST BALANCE. YOU HAVE SEEN WHY. INITIAL TEN LINES - ANY TEN - AND BE GENEROUSLY REMEMBERED. OR DON'T, AND THE LINES CHOOSE THEMSELVES.'",
+      .texts = e50_tx, .choices = e50_ch, .n_choices = 2 },
+    { .id = 51, .weight = 15, .flags = EV_ONESHOT, .npc_kind = NK_MYSTIC,
+      .trig = TRIG_BAR, .need_flag = 1 + 26,
+      .title = "THE NETWORK",
+      .body = "EVERY LAMP IN THE BAR FLICKERS ONCE AS YOU ENTER - AND THE CORNER TABLE IS WAITING FOR YOU. PEOPLE YOU KNOW. PEOPLE WHO HAVE BEEN STEERING YOU, GENTLY, FOR A LONG TIME.",
+      .texts = e51_tx, .choices = e51_ch, .n_choices = 1 },
+    { .id = 52, .weight = 15, .flags = EV_ONESHOT, .npc_kind = NK_OFFICIAL,
+      .trig = TRIG_DOCK, .need_flag = 1 + 27, .fixed_npc = 1,
+      .title = "INDEMNITY RUN",
+      .body = "ONE PAGE, TWO LINES, THE ADJUSTER'S PEN HELD OUT TO YOU. LINE ONE KEEPS YOU COVERED FOREVER. LINE TWO SURRENDERS THE POLICY - SETTLES IT - AND EVERYTHING HELD AGAINST IT GOES FREE. THE PEN IS COLD. IT IS ALWAYS COLD.",
+      .texts = e52_tx, .choices = e52_ch, .n_choices = 2 },
 };
 const int k_n_events = (int)(sizeof k_events / sizeof k_events[0]);
 
@@ -985,5 +1148,23 @@ const Lore k_lore[] = {
       "A PILOT WITH YOUR FACE DRANK AT THIS BAR THREE WEEKS BEFORE YOU ARRIVED. TIPPED WELL. PAID IN EXACT CHANGE. WORE GREY. SIGNED THE TAB: 'CONTINUED'." },
     /* 17 */ { "THE WALL",
       "YOUR HULL'S NAME IS ON THE MEMORIAL, FORTY YEARS WEATHERED, AMONG THE HONESTLY DEAD. SOMEONE RECENT HAS SCRATCHED ONE WORD BENEATH IT: 'PAID'." },
+    /* 18 */ { "BOTH SIDES",
+      "ONE BROKER SEAL ON EVERY WAR VOUCHER, BOTH TRENCHES, EVERY FRONT. WARS DO NOT BREAK OUT. THEY ARE ORIGINATED - LIKE LOANS." },
+    /* 19 */ { "THE ORIGINATION",
+      "THE GREY SHIPS DO NOT ARRIVE BEFORE DISASTERS. THEY ARRIVE WITH THEM. A CLAIM MUST EXIST BEFORE IT CAN BE PAID, AND THE BOOK NEEDS PAYING CLAIMS THE WAY A FIRE NEEDS AIR." },
+    /* 20 */ { "DOUBLE ISSUE",
+      "YOUR DOUBLE IS NOT A GHOST AND NOT A SPY. IT IS A MISPRINT. THE PRESS IS WORN, THE BOOK IS BLEEDING, AND CONTINUITY IS BEING PRINTED FASTER THAN IT CAN BE FUNDED. A RUN ON THE BANK, AND WE ARE THE CURRENCY." },
+    /* 21 */ { "THE WRITE-OFF",
+      "THE ERASED COLONY WAS NEVER DESTROYED. 'COVERAGE WITHDRAWN' MEANS THE ASSET IS REPOSSESSED - TOWED OFF THE BOOKS, OUT PAST THE LAST CHARTED STAR. NOTHING THE INDEMNITY TOUCHES IS EVER WASTED." },
+    /* 22 */ { "THE COLLECTION",
+      "ROWS PAST THE RIM, RACKED AND LIT: EVERY SHIP, EVERY COLONY, EVERY LIFE EVER WRITTEN OFF OR REPLACED. KEPT AS COLLATERAL AGAINST A BOOK THAT NO LONGER BALANCES. SOMEWHERE IN THE ROWS, FORTY YEARS OLDER: YOU." },
+    /* 23 */ { "THE TRIAGE",
+      "THE BOOK BALANCES ONE WAY NOW: COVERAGE WITHDRAWN, TEN LINES AT A TIME. SOMEONE INITIALS THE COLUMN. IF NOBODY DOES, THE COLUMN INITIALS ITSELF." },
+    /* 24 */ { "THE SURRENDER",
+      "A POLICY GIVEN UP FREELY - BY ITS OWN PAYOUT, IN PERSON, IN FULL KNOWLEDGE - SETTLES. SETTLED COLLATERAL IS RELEASED. TWELVE HAVE DONE IT. THE TOKENS ARE THEIR RECEIPTS." },
+    /* 25 */ { "KEPT CURRENT",
+      "YOU REMAIN COVERED. THE RACK REMAINS LOCKED. THE DIVIDEND SPENDS LIKE ANY OTHER MONEY, AND EVERY FEE STILL TITHES UPWARD, AND SOMEWHERE A LEDGER TURNS A PAGE WITH YOUR NAME AT THE TOP OF THE NEXT ONE TOO." },
+    /* 26 */ { "PAID IN FULL",
+      "THE POLICY IS SURRENDERED. THE LINE IS CLOSED. THE RACK IS OPEN AND THE ORIGINAL IS FREE AND OWES NOTHING, AND NEITHER DO YOU - EXCEPT EVERYTHING, ONCE, THE WAY EVERYONE ELSE PAYS IT. THERE IS EXACTLY ONE OF YOU NOW. FLY CAREFULLY." },
 };
 const int k_n_lore = (int)(sizeof k_lore / sizeof k_lore[0]);

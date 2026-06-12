@@ -1559,6 +1559,15 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
         }
         s_respawn_t -= dt;
         if (s_respawn_t <= 0.0f && btn->a) {
+            /* LAPSED (campaign ending C): the policy was surrendered —
+             * there is no re-issue. The save burns with the ship. */
+            if (events_flag(28)) {
+                save_wipe();
+                /* full re-init: back to the title, no CONTINUE — the
+                 * run is over and the galaxy never reloads this pilot */
+                elite_game_init(s_boot_seed);
+                return;
+            }
             /* Insurance: revert to the last dock save (journey since is
              * lost). No save yet -> fresh hull at the local beacon. */
             SaveMeta meta;

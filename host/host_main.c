@@ -1298,6 +1298,89 @@ int main(int argc, char **argv) {
                 if (e2 && e2->id == 33) again++;
             }
             EVCHECK(again == 0, "the terms never repeat");
+
+            /* acts 4-5: the ledger bleeds -> the Collection -> the run */
+            SystemInfo si_warf;
+            bool got_wf = false;
+            for (int sy = -20; sy <= 20 && !got_wf; sy++)
+                for (int sx = -20; sx <= 20 && !got_wf; sx++) {
+                    int ns2 = galaxy_sector_stars(sx, sy);
+                    for (int i2 = 0; i2 < ns2 && !got_wf; i2++) {
+                        SysAddr a2 = { sx, sy, (uint8_t)i2 };
+                        SystemInfo s2;
+                        galaxy_generate(a2, &s2);
+                        if (s2.n_stations > 0 && mission_near_front(a2)) {
+                            si_warf = s2;
+                            got_wf = true;
+                        }
+                    }
+                }
+            EVCHECK(got_wf, "front system for act 4");
+            const Event *e4 = NULL;
+            for (int k = 0; k < 60000 && !e4; k++) {
+                const Event *e2 = events_roll_dock(&si_warf, 0);
+                if (e2 && e2->id == 45) e4 = e2;
+            }
+            EVCHECK(e4 != NULL, "act 4 opens at the front");
+            events_run_choice(e4, 0);            /* flag 22, lore 18 */
+            e4 = NULL;
+            for (int k = 0; k < 30000 && !e4; k++) {
+                const Event *e2 = events_roll_arrival(&si_any);
+                if (e2 && e2->id == 46) e4 = e2;
+            }
+            EVCHECK(e4 != NULL, "the origination witnessed");
+            events_run_choice(e4, 0);            /* flag 23 */
+            e4 = NULL;
+            for (int k = 0; k < 30000 && !e4; k++) {
+                const Event *e2 = events_roll_bar(&si_any, 0);
+                if (e2 && e2->id == 47) e4 = e2;
+            }
+            EVCHECK(e4 && events_npc_seed() == vessa,
+                    "vessa explains the misprint");
+            events_run_choice(e4, 0);            /* flag 24 */
+            e4 = NULL;
+            for (int k = 0; k < 30000 && !e4; k++) {
+                const Event *e2 = events_roll_space(&si_any);
+                if (e2 && e2->id == 48) e4 = e2;
+            }
+            EVCHECK(e4 != NULL, "the write-off found");
+            events_run_choice(e4, 0);            /* flag 25 */
+            e4 = NULL;
+            for (int k = 0; k < 30000 && !e4; k++) {
+                const Event *e2 = events_roll_space(&si_any);
+                if (e2 && e2->id == 49) e4 = e2;
+            }
+            EVCHECK(e4 != NULL, "the threshold (Collection seen)");
+            events_run_choice(e4, 0);            /* flag 31 */
+            e4 = NULL;
+            for (int k = 0; k < 30000 && !e4; k++) {
+                const Event *e2 = events_roll_dock(&si_any, 0);
+                if (e2 && e2->id == 50) e4 = e2;
+            }
+            EVCHECK(e4 != NULL, "the triage offered");
+            events_run_choice(e4, 1);            /* REFUSE, flag 26 */
+            e4 = NULL;
+            for (int k = 0; k < 30000 && !e4; k++) {
+                const Event *e2 = events_roll_bar(&si_any, 0);
+                if (e2 && e2->id == 51) e4 = e2;
+            }
+            EVCHECK(e4 != NULL, "the network surfaces");
+            events_run_choice(e4, 0);            /* flag 27 */
+            e4 = NULL;
+            for (int k = 0; k < 30000 && !e4; k++) {
+                const Event *e2 = events_roll_dock(&si_any, 0);
+                if (e2 && e2->id == 52) e4 = e2;
+            }
+            EVCHECK(e4 != NULL, "INDEMNITY RUN reachable");
+            events_run_choice(e4, 1);            /* LAPSE */
+            EVCHECK(events_flag(28) && events_lore_seen(26),
+                    "lapsed: flag 28 + closing lore");
+            /* the lapse survives the save round-trip (death honors it) */
+            save_write(si_any.addr, 0, 0);
+            events_init();
+            SaveMeta meta2;
+            EVCHECK(save_load(&meta2) && events_flag(28),
+                    "lapse persists through the save");
         }
 
         /* save round-trip carries lore bits (v5) */
