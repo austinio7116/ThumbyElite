@@ -432,6 +432,19 @@ static const Choice e26_ch[] = {
     { "KEEP THEM",      0, 0, e26_wave },
 };
 
+/* --- 27 THE RECRUITER (faction war, near the front) ----------------------- */
+static const Op e27_sign[] = { {OP_MISSION,0,0}, {OP_CR,4,0},
+                               {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e27_pass[] = { {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e27_tx[] = {
+    "A SIGNING BONUS HITS YOUR ACCOUNT AND A WAR CONTRACT HITS YOUR LOG. 'HOLD THE LINE, PILOT. WE'LL KNOW IF YOU DON'T.'",
+    "THE RECRUITER'S EYES ARE ALREADY ON THE NEXT PILOT DOWN THE GANTRY. THE WAR DOESN'T WAIT.",
+};
+static const Choice e27_ch[] = {
+    { "SIGN ON",      0, 0, e27_sign },
+    { "NOT YOUR WAR", 0, 0, e27_pass },
+};
+
 /* --- pool ----------------------------------------------------------------*/
 const Event k_events[] = {
     { .id = 1, .weight = 12, .npc_kind = NK_CIVILIAN, .trig = TRIG_DOCK,
@@ -565,6 +578,13 @@ const Event k_events[] = {
       .title = "A FAMILIAR FACE",
       .body = "SOMEONE PUSHES THROUGH THE CROWD TOWARD YOUR TABLE - AND YOU KNOW THE FACE, THOUGH IT LAST LOOKED OUT FROM BEHIND YOUR CARGO RACKS.",
       .texts = e26_tx, .choices = e26_ch, .n_choices = 2 },
+
+    /* faction war */
+    { .id = 27, .weight = 13, .npc_kind = NK_OFFICIAL, .trig = TRIG_DOCK,
+      .gate = GATE_FRONTLINE,
+      .title = "THE RECRUITER",
+      .body = "A $F OFFICER WORKS THE ARRIVALS QUEUE, UNIFORM PRESSED, VOICE TIRED. 'THE FRONT NEEDS GUNS. YOURS WILL DO. SIGNING BONUS, COMBAT PAY, GRATITUDE.'",
+      .texts = e27_tx, .choices = e27_ch, .n_choices = 2 },
 };
 const int k_n_events = (int)(sizeof k_events / sizeof k_events[0]);
 

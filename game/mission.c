@@ -46,6 +46,111 @@ static void rep_add(int faction, int amt) {
     g_rep[faction] = (int8_t)v;
 }
 
+/* --- faction war --------------------------------------------------------
+ * Factions own 4x4-sector cells (system_faction). A cell that borders a
+ * different-faction cell is a FRONT; systems in it are contested. */
+static Faction cell_faction(int cx, int cy) {
+    uint32_t h = (uint32_t)cx * 2654435761u ^ (uint32_t)cy * 668265263u ^
+                 (galaxy_get_seed() * 951274213u);
+    h ^= h >> 13;
+    return (Faction)(h % N_FACTIONS);
+}
+
+bool faction_contested(SysAddr a, Faction *enemy) {
+    int cx = a.sx >> 2, cy = a.sy >> 2;
+    Faction own = cell_faction(cx, cy);
+    static const int k_n4[4][2] = { {1,0}, {-1,0}, {0,1}, {0,-1} };
+    for (int i = 0; i < 4; i++) {
+        Faction f = cell_faction(cx + k_n4[i][0], cy + k_n4[i][1]);
+        if (f != own) {
+            if (enemy) *enemy = f;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool mission_near_front(SysAddr a) {
+    if (faction_contested(a, NULL)) return true;
+    /* one cell of slack: garrison systems behind the line recruit too */
+    int cx = a.sx >> 2, cy = a.sy >> 2;
+    Faction own = cell_faction(cx, cy);
+    for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++)
+            if (cell_faction(cx + dx, cy + dy) != own) return true;
+    return false;
+}
+
+static bool s_war_active;                /* anchored at the target beacon */
+void mission_warzone_set_active(bool active) { s_war_active = active; }
+
+bool mission_warzone_here(SysAddr a, int *kills_left) {
+    for (int i = 0; i < MAX_MISSIONS; i++) {
+        const Mission *m = &g_missions[i];
+        if (m->type == MIS_WARZONE && !m->done &&
+            sysaddr_eq(m->target, a)) {
+            if (kills_left) *kills_left = m->count;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Find a contested friendly system within recruiting reach. */
+static bool find_warzone(SysAddr from, uint32_t salt, Faction fac,
+                         SysAddr *out, Faction *enemy) {
+    for (int tries = 0; tries < 32; tries++) {
+        uint32_t h = salt * 2654435761u + (uint32_t)tries * 131u;
+        h ^= h >> 15;
+        int dx = (int)(h % 9u) - 4;
+        int dy = (int)((h >> 8) % 9u) - 4;
+        SysAddr a = { from.sx + dx, from.sy + dy, 0 };
+        int n = galaxy_sector_stars(a.sx, a.sy);
+        if (n == 0) continue;
+        a.idx = (uint8_t)((h >> 16) % (uint32_t)n);
+        Faction en;
+        if (!faction_contested(a, &en)) continue;
+        if (system_faction(a) != fac) continue;   /* defend OUR side */
+        *out = a;
+        *enemy = en;
+        return true;
+    }
+    return false;
+}
+
+static bool warzone_build(const SystemInfo *si, uint32_t h, Mission *m) {
+    Faction fac = system_faction(si->addr);
+    SysAddr dest;
+    Faction enemy;
+    if (!find_warzone(si->addr, h, fac, &dest, &enemy)) return false;
+    if (mission_warzone_here(dest, NULL)) return false;   /* one per zone */
+    float rep_bonus = 1.0f + 0.004f * (float)g_rep[fac];
+    m->type = MIS_WARZONE;
+    m->faction = (uint8_t)fac;
+    m->tier = (uint8_t)enemy;            /* tier field = enemy faction */
+    m->target = dest;
+    m->count = (uint8_t)(5 + ((h >> 20) % 3u));   /* 5-7 kills */
+    m->reward = (int32_t)((m->count * 380 + 600) * rep_bonus);
+    char dname[14];
+    galaxy_system_name(dest, dname);
+    snprintf(m->label, sizeof m->label, "WAR: HOLD %s", dname);
+    return true;
+}
+
+bool mission_grant_warzone(const SystemInfo *si) {
+    int slot = -1;
+    for (int i = 0; i < MAX_MISSIONS; i++)
+        if (g_missions[i].type == MIS_NONE) { slot = i; break; }
+    if (slot < 0) return false;
+    Mission m;
+    memset(&m, 0, sizeof m);
+    uint32_t h = (uint32_t)(si->seed >> 10) ^ s_visit_salt ^ 0x3AA3u;
+    h ^= h >> 13; h *= 1274126177u; h ^= h >> 16;
+    if (!warzone_build(si, h, &m)) return false;
+    g_missions[slot] = m;
+    return true;
+}
+
 /* Find a nearby system with a station (delivery destinations). */
 static bool find_dest(SysAddr from, uint32_t salt, SysAddr *out, int *out_st) {
     for (int tries = 0; tries < 24; tries++) {
@@ -82,6 +187,12 @@ void mission_make_offers(const SystemInfo *si, int station,
 
         int roll = (int)(h % 100u);
         m->faction = (uint8_t)fac;
+
+        /* Near a front, the war recruits hard — a quarter of the board
+         * becomes HOLD-the-line contracts (replacing some deliveries). */
+        if (mission_near_front(si->addr) && roll < 25 &&
+            warzone_build(si, h, m))
+            continue;
 
         if (roll < 45) {
             /* Delivery: goods the local economy exports. */
@@ -179,6 +290,12 @@ void mission_on_kill(int victim_tier, bool was_bounty_mark,
         } else if (m->type == MIS_ASSASSINATE && was_bounty_mark &&
                    was_civilian) {
             m->done = true;
+        } else if (m->type == MIS_WARZONE && s_war_active &&
+                   !was_civilian && m->count > 0) {
+            /* only kills INSIDE the zone count (set while anchored at
+             * the contested beacon) */
+            m->count--;
+            if (m->count == 0) m->done = true;
         }
     }
     (void)victim_tier;
@@ -197,7 +314,7 @@ bool mission_objective_here(SysAddr a) {
         const Mission *m = &g_missions[i];
         if (m->done) continue;
         if ((m->type == MIS_BOUNTY || m->type == MIS_DELIVERY ||
-             m->type == MIS_ASSASSINATE) &&
+             m->type == MIS_ASSASSINATE || m->type == MIS_WARZONE) &&
             sysaddr_eq(m->target, a))
             return true;
     }
@@ -228,7 +345,10 @@ int mission_collect(const SystemInfo *si, int station) {
         paid += m->reward;
         g_player.credits += m->reward;
         rep_add(m->faction, (m->type == MIS_BOUNTY) ? 8
-                          : (m->type == MIS_ASSASSINATE) ? 5 : 4);
+                          : (m->type == MIS_ASSASSINATE) ? 5
+                          : (m->type == MIS_WARZONE) ? 7 : 4);
+        if (m->type == MIS_WARZONE)
+            rep_add(m->tier, -7);        /* the other side remembers */
         g_player.xp_trading += (m->type == MIS_DELIVERY) ? 2 : 0;
         g_player.xp_gunnery += (m->type != MIS_DELIVERY) ? 1 : 0;
         m->type = MIS_NONE;

@@ -111,6 +111,8 @@ static uint32_t s_distress_done;  /* per-POI resolved bits, this system
 static bool  s_distress_paid;
 static int   s_derelict_idx = -1; /* live derelict hulk (boardable)   */
 static uint32_t s_derelict_done;  /* per-POI boarded bits, this system */
+static float s_war_wave_t;        /* reinforcement cadence            */
+static bool  s_war_won_toast;     /* "zone secure" said once          */
 static int   s_tgt_class = 0;    /* 0 AUTO, 1 SALVAGE, 2 ROCKS — LB
                                     double-tap demotes the class so you
                                     can mine through floating salvage or
@@ -381,8 +383,53 @@ void elite_game_poi_intel(const Poi *poi, PoiIntel *out) {
                     !(s_distress_done & (1u << (poi->index & 31)));
 }
 
+/* One combatant of the battle line. Allies fly police AI (hunt every
+ * hostile in the zone) — and friendly fire carries police consequences,
+ * which is exactly what shooting your own side should do. */
+static void war_spawn_ship(bool ally, int tier) {
+    const SystemInfo *si = system_info();
+    Faction enemy = (Faction)0;
+    faction_contested(s_addr, &enemy);
+    float a = frand(0, 6.2831f);
+    float r = frand(450, 850);
+    Vec3 pos = v3(cosf(a) * r, frand(-200, 200), sinf(a) * r);
+    int cls = ally ? 3 : 2 + (int)(xorshift32() % 3u);
+    uint32_t livery = ally
+        ? galaxy_get_seed() ^ (uint32_t)(system_faction(s_addr) * 0x51u)
+        : galaxy_get_seed() ^ (uint32_t)((int)enemy * 0x77u);
+    int idx = ship_spawn(hull_mesh(livery, cls), pos,
+                         ally ? TEAM_NEUTRAL : TEAM_HOSTILE);
+    if (idx > 0) {
+        ship_set_tier(idx, tier, cls);
+        if (ally) g_ships[idx].is_police = 1;
+    }
+    (void)si;
+}
+
+static void war_spawn_battle(void) {
+    for (int i = 0; i < 3; i++) war_spawn_ship(true, 2 + (i == 0));
+    for (int i = 0; i < 4; i++) war_spawn_ship(false, 2);
+    war_spawn_ship(false, 3);                  /* the wing leader */
+    s_war_wave_t = 0;
+    s_war_won_toast = false;
+    snprintf(s_scoop_toast, sizeof s_scoop_toast, "WARZONE - ENGAGE");
+    s_scoop_toast_t = 3.0f;
+}
+
 static void spawn_poi_content(void) {
     const SystemInfo *si = system_info();
+
+    /* Faction battle: an accepted WAR contract turns this system's
+     * beacon into the front line — the battle replaces the ambient
+     * spawns entirely. */
+    if (s_anchor_has_poi && s_anchor_poi.kind == POI_BEACON) {
+        int left;
+        if (mission_warzone_here(s_addr, &left)) {
+            mission_warzone_set_active(true);
+            war_spawn_battle();
+            return;
+        }
+    }
     /* Contraband heat (user req): illegal cargo draws ambushes — every
      * unit of narcotics/weapons/slaves/contraband raises the odds, and
      * a serious load brings a bigger wing. */
@@ -660,6 +707,7 @@ static void try_arrival_hail(void) {
 static const Mesh *s_station_mesh;   /* generated for the anchored station */
 
 static void drop_anchor(Vec3 pos_mm, const Poi *poi) {
+    mission_warzone_set_active(false);   /* leaving the zone stops the clock */
     s_anchor_mm = pos_mm;
     s_anchor_has_poi = (poi != NULL);
     if (poi) s_anchor_poi = *poi;
@@ -1352,6 +1400,50 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
                         player_apply_to_ship();   /* caps track repair */
                     }
                 }
+            }
+        }
+        /* Warzone: hold the line. Enemy waves keep coming while the
+         * contract has kills left; allies thin out and get topped up
+         * more slowly (you are the difference-maker, not a spectator). */
+        if (s_anchor_has_poi && s_anchor_poi.kind == POI_BEACON) {
+            int left;
+            if (mission_warzone_here(s_addr, &left)) {
+                s_war_wave_t += dt;
+                int hostiles = ships_alive_hostile();
+                int allies = 0;
+                for (int i = 1; i < MAX_SHIPS; i++)
+                    if (g_ships[i].alive &&
+                        g_ships[i].team == TEAM_NEUTRAL &&
+                        g_ships[i].is_police) allies++;
+                if (hostiles == 0 && left > 0 && s_war_wave_t > 6.0f) {
+                    int n = left < 3 ? left : 3;
+                    for (int i = 0; i < n; i++)
+                        war_spawn_ship(false, 2 + (i == 0 && left > 4));
+                    s_war_wave_t = 0;
+                    snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                             "ENEMY REINFORCEMENTS");
+                    s_scoop_toast_t = 2.5f;
+                } else if (allies < 2 && left > 2 && s_war_wave_t > 10.0f) {
+                    war_spawn_ship(true, 2);
+                    s_war_wave_t = 0;
+                    snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                             "ALLIED WING JOINS");
+                    s_scoop_toast_t = 2.5f;
+                }
+            }
+            /* Completion: warzone_here goes false the moment the quota
+             * fills (mission flips done). Say it once. */
+            if (!mission_warzone_here(s_addr, NULL) && !s_war_won_toast) {
+                for (int i = 0; i < MAX_MISSIONS; i++)
+                    if (g_missions[i].type == MIS_WARZONE &&
+                        g_missions[i].done &&
+                        sysaddr_eq(g_missions[i].target, s_addr)) {
+                        s_war_won_toast = true;
+                        mission_warzone_set_active(false);
+                        snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                                 "ZONE SECURE - PAY AT ANY DOCK");
+                        s_scoop_toast_t = 4.0f;
+                    }
             }
         }
         /* Derelict boarding: drift up to the cold hull with the sky

@@ -1144,6 +1144,107 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (getenv("ELITE_WARTEST")) {
+        /* Faction war: contested detection, offers, grant, quota,
+         * rep swing, and the real beacon battle via the debug jump. */
+        int fails = 0;
+#define WCHECK(cond, name) do { \
+        int ok_ = !!(cond); \
+        printf("[wartest] %-34s %s\n", name, ok_ ? "PASS" : "FAIL"); \
+        if (!ok_) fails++; } while (0)
+        galaxy_set_seed(42);
+        player_init();
+        missions_init();
+        events_init();
+        /* find a near-front system with a station */
+        SystemInfo si_front;
+        bool got = false;
+        for (int sy = -20; sy <= 20 && !got; sy++)
+            for (int sx = -20; sx <= 20 && !got; sx++) {
+                int ns = galaxy_sector_stars(sx, sy);
+                for (int i = 0; i < ns && !got; i++) {
+                    SysAddr a = { sx, sy, (uint8_t)i };
+                    SystemInfo si;
+                    galaxy_generate(a, &si);
+                    if (si.n_stations > 0 && mission_near_front(a)) {
+                        si_front = si;
+                        got = true;
+                    }
+                }
+            }
+        WCHECK(got, "near-front station system found");
+        /* contested coherence: an enemy is never your own faction */
+        {
+            Faction en;
+            int bad = 0, n = 0;
+            for (int sy = -20; sy <= 20; sy++)
+                for (int sx = -20; sx <= 20; sx++) {
+                    SysAddr a = { sx, sy, 0 };
+                    if (!faction_contested(a, &en)) continue;
+                    n++;
+                    if (en == system_faction(a)) bad++;
+                }
+            printf("[wartest] contested systems in scan: %d\n", n);
+            WCHECK(n > 0 && bad == 0, "fronts exist, enemy != own side");
+        }
+        /* offers near the front include WAR contracts */
+        {
+            Mission offers[MISSION_OFFERS];
+            int war = -1;
+            for (int v = 0; v < 40 && war < 0; v++) {
+                mission_on_docked(&si_front, 0);    /* bump visit salt */
+                mission_make_offers(&si_front, 0, offers);
+                for (int i = 0; i < MISSION_OFFERS; i++)
+                    if (offers[i].type == MIS_WARZONE) war = i;
+                if (war >= 0) {
+                    WCHECK(mission_accept(&offers[war]),
+                           "war contract accepted");
+                }
+            }
+            WCHECK(war >= 0, "front stations offer WAR contracts");
+        }
+        /* the battle: jump to the zone, anchor the beacon, count sides */
+        {
+            Mission *m = NULL;
+            for (int i = 0; i < MAX_MISSIONS; i++)
+                if (g_missions[i].type == MIS_WARZONE) m = &g_missions[i];
+            WCHECK(m != NULL, "contract in the log");
+            if (m) {
+                int quota = m->count;
+                elite_game_debug_jump(m->target);
+                elite_game_debug_goto_poi(0);       /* beacon */
+                int allies = 0, hostiles = 0;
+                for (int i = 1; i < MAX_SHIPS; i++) {
+                    if (!g_ships[i].alive) continue;
+                    if (g_ships[i].team == TEAM_HOSTILE) hostiles++;
+                    if (g_ships[i].team == TEAM_NEUTRAL &&
+                        g_ships[i].is_police) allies++;
+                }
+                printf("[wartest] battle: %d allies vs %d hostiles, "
+                       "quota %d\n", allies, hostiles, quota);
+                WCHECK(allies == 3 && hostiles == 5,
+                       "beacon battle spawns 3v5");
+                /* fight: player kills count the quota down */
+                for (int k = 0; k < quota; k++)
+                    mission_on_kill(2, false, false);
+                WCHECK(m->done && m->count == 0, "quota fills, zone won");
+                /* payday: rep swings BOTH ways */
+                int8_t own0 = g_rep[m->faction], en0 = g_rep[m->tier];
+                int32_t cr0 = g_player.credits;
+                SystemInfo zi;
+                galaxy_generate(m->target, &zi);
+                int paid = mission_collect(&zi, 0);
+                WCHECK(paid > 0 && g_player.credits == cr0 + paid &&
+                       g_rep[m->faction] == own0 + 7 &&
+                       g_rep[m->tier] == en0 - 7,
+                       "war pay + rep swing both ways");
+            }
+        }
+        printf("[wartest] %s (%d failures)\n",
+               fails ? "FAILED" : "ALL PASS", fails);
+        return fails ? 1 : 0;
+    }
+
     if (getenv("ELITE_BARSHOT") || getenv("ELITE_CODEXSHOT")) {
         /* Drive the station UI headless: bar encounter row + modal, or
          * the DATABASE list + read view. */

@@ -88,6 +88,7 @@ static bool gate_ok(uint16_t gate, const SystemInfo *si) {
     if ((gate & GATE_WANTED) && g_player.legal == 0) return false;
     if ((gate & GATE_HAS_MEDS) && g_player.cargo[5] == 0) return false;
     if ((gate & GATE_NO_ILLEGAL) && illegal_units() > 0) return false;
+    if ((gate & GATE_FRONTLINE) && !mission_near_front(si->addr)) return false;
     return true;
 }
 
@@ -360,6 +361,9 @@ int events_run_choice(const Event *ev, int choice) {
         }
         case OP_LATER:
             s_pending_cr += (int32_t)op->a * 25;
+            break;
+        case OP_MISSION:
+            if (mission_grant_warzone(s_si)) s_rcpt.mission = 1;
             break;
         default:
             ev_diff(&snap);

@@ -208,6 +208,10 @@ void ui_event_draw(uint16_t *fb) {
             snprintf(ln[n], sizeof ln[n], "DATABASE UPDATED");
             lc[n++] = COL_DATA;
         }
+        if (r->mission && n < 8) {
+            snprintf(ln[n], sizeof ln[n], "CONTRACT LOGGED");
+            lc[n++] = COL_DATA;
+        }
         if (r->ambush_n && n < 8) {
             snprintf(ln[n], sizeof ln[n], "%d HOSTILES INBOUND",
                      r->ambush_n);

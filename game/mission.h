@@ -24,6 +24,10 @@ typedef enum {
     MIS_CULL,          /* destroy N pirates anywhere */
     MIS_BOUNTY,        /* kill the marked ace at a system's nav beacon */
     MIS_ASSASSINATE,   /* murder a marked CIVILIAN -- pays well, makes you wanted */
+    MIS_WARZONE,       /* join a faction battle at a contested system's
+                          beacon; kill N enemy fighters. tier = ENEMY
+                          faction id. Signing up where you stand IS
+                          taking sides — the other front recruits too. */
 } MissionType;
 
 typedef struct {
@@ -64,5 +68,19 @@ bool mission_assassinate_here(SysAddr a);
 bool mission_objective_here(SysAddr a);
 /* Try to complete missions at the docked station; returns credits paid. */
 int mission_collect(const SystemInfo *si, int station);
+
+/* --- faction war ------------------------------------------------------- */
+/* Contested: this system's faction cell borders a different faction.
+ * Returns true and the enemy faction when so. */
+bool faction_contested(SysAddr a, Faction *enemy);
+/* Within recruiting range of a front (this or a neighbouring cell). */
+bool mission_near_front(SysAddr a);
+/* Active warzone mission targeting this system? Fills kills left. */
+bool mission_warzone_here(SysAddr a, int *kills_left);
+/* elite_game marks the battle live while anchored at the target beacon
+ * (warzone kills only count inside the zone). */
+void mission_warzone_set_active(bool active);
+/* The recruiter event path: log a warzone contract directly. */
+bool mission_grant_warzone(const SystemInfo *si);
 
 #endif

@@ -33,6 +33,7 @@ enum {
     OP_ITEM,      /* salvaged hardware into the rack (a = quality floor;
                      rack full -> 100 CR scrap value instead)              */
     OP_LATER,     /* a*25 CR arrives at the NEXT dock (deferred transfer)  */
+    OP_MISSION,   /* log a contract (a: 0 = warzone). No-op if log full    */
 };
 
 typedef struct { uint8_t op; int8_t a; int8_t b; } Op;
@@ -49,6 +50,7 @@ typedef struct { uint8_t op; int8_t a; int8_t b; } Op;
 #define GATE_WANTED      0x0080   /* legal > CLEAN                  */
 #define GATE_HAS_MEDS    0x0100   /* carrying MEDICINE              */
 #define GATE_NO_ILLEGAL  0x0200   /* hold is clean of contraband    */
+#define GATE_FRONTLINE   0x0400   /* near a faction front           */
 
 typedef struct {
     const char *label;        /* "GIVE THEM FUEL"                          */
@@ -128,6 +130,7 @@ typedef struct {
     int     lore_id;          /* revealed fragment, -1 none            */
     int     item_type;        /* salvaged hardware type, -1 none       */
     uint8_t ambush_n;         /* hostiles now inbound                  */
+    uint8_t mission;          /* contract logged this choice           */
 } EvReceipt;
 const EvReceipt *events_receipt(void);
 
