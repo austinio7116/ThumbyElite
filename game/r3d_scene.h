@@ -50,6 +50,10 @@ int r3d_scene_project(Vec3 cam_rel, float *sx, float *sy, uint16_t *d);
 
 /* Starfield: regenerate the fixed direction table (e.g. on system entry). */
 void r3d_starfield_init(uint32_t seed);
+#ifdef ELITE_STYLE_LAB
+/* Sheet harness: direction of background galaxy i (0 = none). */
+int r3d_scene_galaxy_dir(int i, Vec3 *out);
+#endif
 
 /* Proposal-look switch (contact sheets only): 0 = live look (default).
  * Style-1 bodies exist only under ELITE_STYLE_LAB (host builds); the

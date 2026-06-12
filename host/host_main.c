@@ -1575,6 +1575,35 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (getenv("ELITE_GALSHOT")) {
+        /* zoomed look at each background galaxy of a few seeds */
+        const char *path = getenv("ELITE_GALSHOT");
+        sheet_clear(2 + 4 * 130, 2 + 3 * 130);
+        for (int r = 0; r < 3; r++) {
+            uint32_t sd = 909091u * (uint32_t)(r + 1) + 7u;
+            r3d_starfield_init(sd);
+            r3d_scene_set_nebula(sd, 0.0f);
+            for (int i = 0; i < 4; i++) {
+                Vec3 gd;
+                if (!r3d_scene_galaxy_dir(i, &gd)) continue;
+                /* camera looking straight down gd, zoomed (fov 18) */
+                Mat3 cam;
+                Vec3 ref = (gd.y > 0.9f || gd.y < -0.9f) ? v3(1, 0, 0)
+                                                         : v3(0, 1, 0);
+                cam.r[2] = gd;
+                cam.r[0] = v3_norm(v3_cross(ref, gd));
+                cam.r[1] = v3_cross(gd, cam.r[0]);
+                r3d_scene_begin(&cam, 18.0f);
+                r3d_scene_raster(g_fb, 0, ELITE_FB_H);
+                sheet_blit(g_fb, ELITE_FB_W, 128, 128,
+                           2 + i * 130, 2 + r * 130, 1);
+            }
+        }
+        sheet_save(path);
+        r3d_scene_set_nebula(0, 0);
+        return 0;
+    }
+
     if (getenv("ELITE_BANDSHEET")) {
         /* 100 skies, one per seed: band orientation/width/gain/core +
          * nebula clouds on every third — the variety audit. */

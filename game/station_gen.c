@@ -791,6 +791,12 @@ static void s1_arch_cross(float B, const S1Pal *p) {
 
 /* PLATFORM: open drydock — two slabs, lit hangar gap, gantry tower. */
 static void s1_arch_platform(float B, const S1Pal *p) {
+    /* Three frame layouts (user: 'the box stations look too similar'):
+     * 0 classic two-slab drydock; 1 SIDE-WALL dock — one slab rotates
+     * into a vertical wall, L-section; 2 DOUBLE-DECK — three slabs,
+     * two stacked bays. Plus a crane gantry, side tank farm and per-
+     * layout silhouettes below. */
+    int lay = rndi(0, 2);
     float W  = B * rndf(0.62f, 0.85f);    /* half-width  x */
     float D  = B * rndf(0.50f, 0.70f);    /* half-depth  z */
     float G  = B * rndf(0.30f, 0.40f);    /* half-gap    y */
@@ -801,7 +807,23 @@ static void s1_arch_platform(float B, const S1Pal *p) {
     uint16_t fcB[6] = { p->HULL2, p->HULL, p->HULL2, p->HULL2,
                         p->WIN, p->HULL2 };
     box(0,  G + sh, 0, W, sh, D, p->HULL, fcT);
-    box(0, -G - sh, 0, W, sh, D, p->HULL, fcB);
+    if (lay == 1) {
+        /* L-section: the lower slab becomes a vertical side wall with
+         * a window band facing the bay */
+        uint16_t fcW[6] = { p->HULL2, p->HULL2, p->WIN, p->HULL2,
+                            p->HULL, p->HULL2 };
+        box(-W - sh, 0, 0, sh, G + 2 * sh, D, p->HULL, fcW);
+        /* short lower lip so ships still read the floor line */
+        box(0, -G - sh, 0, W * 0.45f, sh, D * 0.8f, p->HULL2, fcB);
+    } else {
+        box(0, -G - sh, 0, W, sh, D, p->HULL, fcB);
+    }
+    if (lay == 2) {
+        /* double-deck: a third slab splits the gap into two bays */
+        uint16_t fcM[6] = { p->HULL2, p->HULL, p->HULL2, p->HULL2,
+                            p->WIN, p->WIN };
+        box(0, 0, 0, W * 0.95f, sh * 0.8f, D * 0.92f, p->HULL, fcM);
+    }
     /* Recessed control wall on-axis: lit glass face toward the bay
      * mouth; narrow, so the frame stays see-through at the sides. */
     uint16_t fcK[6] = { p->GLASS, p->HULL2, p->HULL2, p->HULL2,
@@ -831,6 +853,32 @@ static void s1_arch_platform(float B, const S1Pal *p) {
                         p->ACCENT, p->HULL2 };
     box(tx, ty + th + B * 0.08f, -D * 0.3f, B * 0.012f, B * 0.08f,
         B * 0.012f, p->HULL2, fcA);
+
+    /* Crane gantry: a bridge over the deck with a hanging arm (60%). */
+    if (rndi(0, 9) < 6) {
+        float gx = rndf(-0.4f, 0.4f) * W;
+        float gy = G + 2 * sh;
+        box(gx - W * 0.35f, gy + B * 0.10f, D * 0.2f, B * 0.022f,
+            B * 0.10f, B * 0.022f, p->DARK, NULL);
+        box(gx + W * 0.35f, gy + B * 0.10f, D * 0.2f, B * 0.022f,
+            B * 0.10f, B * 0.022f, p->DARK, NULL);
+        uint16_t fcG[6] = { p->HULL2, p->HULL2, p->HULL2, p->HULL2,
+                            p->ACCENT, p->HULL2 };
+        box(gx, gy + B * 0.20f, D * 0.2f, W * 0.38f, B * 0.022f,
+            B * 0.03f, p->HULL2, fcG);
+        box(gx + rndf(-0.25f, 0.25f) * W, gy + B * 0.13f, D * 0.2f,
+            B * 0.015f, B * 0.05f, B * 0.015f, p->DARK, NULL);
+    }
+    /* Side tank farm: a rank of drums off one edge (50%). */
+    if (rndi(0, 1)) {
+        float side = (rnd() & 1) ? 1.0f : -1.0f;
+        int nt = rndi(2, 3);
+        for (int k = 0; k < nt; k++)
+            s1_pod(side * (W + B * 0.13f),
+                   -G * 0.3f + (float)k * B * 0.16f,
+                   -D * 0.4f + (float)k * B * 0.10f,
+                   B * 0.075f, B * 0.12f, p->HULL, p->HULL2);
+    }
 
     /* Cargo stacks on deck, fuel pods slung beneath. */
     int nc = rndi(2, 4);

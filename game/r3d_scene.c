@@ -124,8 +124,49 @@ static float star_frand(void) {
 static int s_style = 1;
 void r3d_scene_set_style(int s) { s_style = s; }
 
+/* Distant galaxies (user req): 2-4 tiny resolved neighbours per sky —
+ * spirals, edge-on streaks with a core bump, soft ellipticals. Fixed
+ * directions like stars; each carries a TANGENT so the sprite's spin
+ * stays world-anchored while the ship rolls. */
+#define GAL_COUNT 4
+typedef struct {
+    Vec3 dir, tan;
+    uint8_t type;      /* 0 spiral, 1 edge-on, 2 elliptical */
+    uint8_t size;      /* half-extent px, 4-9 */
+    uint8_t hue;       /* 0 cool 1 neutral 2 warm */
+    uint8_t on;
+} BgGalaxy;
+static BgGalaxy s_gal[GAL_COUNT];
+#ifdef ELITE_STYLE_LAB
+int r3d_scene_galaxy_dir(int i, Vec3 *out) {
+    if (i < 0 || i >= GAL_COUNT || !s_gal[i].on) return 0;
+    *out = s_gal[i].dir;
+    return 1;
+}
+#endif
+
 void r3d_starfield_init(uint32_t seed) {
     s_star_rng = seed | 1u;
+    {
+        int ngal = 2 + (int)(star_rand() % 3u);
+        for (int i = 0; i < GAL_COUNT; i++) {
+            BgGalaxy *g = &s_gal[i];
+            g->on = i < ngal;
+            Vec3 d = v3(star_frand() * 2 - 1, star_frand() * 2 - 1,
+                        star_frand() * 2 - 1);
+            if (v3_len2(d) < 1e-4f) d = v3(0, 0, 1);
+            g->dir = v3_norm(d);
+            Vec3 ref = (g->dir.y > 0.9f || g->dir.y < -0.9f)
+                           ? v3(1, 0, 0) : v3(0, 1, 0);
+            Vec3 t1 = v3_norm(v3_cross(g->dir, ref));
+            Vec3 t2 = v3_cross(g->dir, t1);
+            float a = star_frand() * 6.2831853f;
+            g->tan = v3_add(v3_scale(t1, cosf(a)), v3_scale(t2, sinf(a)));
+            g->type = (uint8_t)(star_rand() % 3u);
+            g->size = (uint8_t)(7 + star_rand() % 6u);
+            g->hue = (uint8_t)(star_rand() % 3u);
+        }
+    }
     for (int i = 0; i < STAR_COUNT; i++) {
         /* Uniform direction: normalise a cube-distributed vector (good
          * enough for scenery; rejection-free). */
@@ -169,6 +210,78 @@ void r3d_starfield_init(uint32_t seed) {
         } else {
             s_stars[i].color = RGB565C(110, 110, 125);
             s_stars[i].big = 0;
+        }
+    }
+}
+
+static inline float nb_grain(int x, int y);   /* defined with the nebula */
+
+/* Tiny additive galaxy sprites, world-anchored spin. */
+static void galaxies_raster(uint16_t *fb, int y0p, int y1p) {
+    const Mat3 *cam = r3d_pipe_camera();
+    const float focal = r3d_pipe_focal();
+    for (int i = 0; i < GAL_COUNT; i++) {
+        const BgGalaxy *g = &s_gal[i];
+        if (!g->on) continue;
+        Vec3 v = m3_mul_v3_t(cam, g->dir);
+        if (v.z < 0.1f) continue;
+        float inv_z = 1.0f / v.z;
+        float sx = (64.0f + focal * v.x * inv_z) * R3D_SS;
+        float sy = (64.0f - focal * v.y * inv_z) * R3D_SS;
+        /* world-anchored spin: project the tangent for the local angle */
+        Vec3 vt = m3_mul_v3_t(cam, v3_add(g->dir, v3_scale(g->tan, 0.05f)));
+        float tx2 = (64.0f + focal * vt.x / vt.z) * R3D_SS - sx;
+        float ty2 = (64.0f - focal * vt.y / vt.z) * R3D_SS - sy;
+        float tl = sqrtf(tx2 * tx2 + ty2 * ty2);
+        if (tl < 1e-4f) { tx2 = 1; ty2 = 0; tl = 1; }
+        float ux = tx2 / tl, uy = ty2 / tl;       /* sprite x-axis */
+        int R = (int)g->size * R3D_SS;
+        int gr8 = g->hue == 2 ? 11 : g->hue == 0 ? 7 : 9;
+        int gg8 = g->hue == 2 ? 9 : 9;
+        int gb8 = g->hue == 2 ? 6 : g->hue == 0 ? 12 : 10;
+        for (int dy = -R; dy <= R; dy++) {
+            int py = (int)sy + dy;
+            if (py < y0p || py >= y1p) continue;
+            uint16_t *row = fb + py * R3D_FB_W;
+            for (int dx = -R; dx <= R; dx++) {
+                int px = (int)sx + dx;
+                if ((unsigned)px >= R3D_FB_W) continue;
+                /* into the sprite frame */
+                float u = (dx * ux + dy * uy) / (float)R;
+                float w = (-dx * uy + dy * ux) / (float)R;
+                float I = 0;
+                if (g->type == 2) {                /* elliptical */
+                    float q = u * u + w * w * 2.6f;
+                    if (q < 1) { float f = 1 - q; I = f * f * 1.1f; }
+                } else if (g->type == 1) {         /* edge-on */
+                    float au = u < 0 ? -u : u;
+                    float aw = w < 0 ? -w : w;
+                    if (au < 1 && aw < 0.22f)
+                        I = (1 - au * au) * (1 - aw * 4.5f) * 1.2f;
+                    float q = u * u * 9.0f + w * w * 4.0f;
+                    if (q < 1) { float f = 1 - q; I += f * f * 1.1f; }
+                } else {                           /* 2-arm spiral */
+                    float rr = sqrtf(u * u + w * w);
+                    if (rr < 1 && rr > 0.02f) {
+                        float th = atan2f(w, u);
+                        float arm = cosf(2.0f * th - 4.2f * logf(rr + 0.14f));
+                        arm = arm < 0 ? 0 : arm;
+                        I = arm * arm * arm * (1 - rr) * 1.5f;
+                    }
+                    float q = (u * u + w * w) * 22.0f;
+                    if (q < 1) { float f = 1 - q; I += f * 1.0f; }
+                }
+                if (I <= 0.015f) continue;
+                if (I > 1.3f) I = 1.3f;
+                I *= 0.60f + 0.8f * nb_grain(px + 173, py + 59);
+                int r = ((row[px] >> 11) & 31) + (int)(gr8 * I);
+                int gg = ((row[px] >> 5) & 63) + (int)(gg8 * I);
+                int b = (row[px] & 31) + (int)(gb8 * I);
+                if (r > 31) r = 31;
+                if (gg > 63) gg = 63;
+                if (b > 31) b = 31;
+                row[px] = (uint16_t)((r << 11) | (gg << 5) | b);
+            }
         }
     }
 }
@@ -495,6 +608,7 @@ void r3d_scene_raster(uint16_t *fb, int y0, int y1) {
                     (size_t)(y1p - y0p) * R3D_FB_W * sizeof(uint16_t));
         r3d_raster_set_fb(fb);
         r3d_depth_clear(y0p, y1p);
+        galaxies_raster(fb, y0p, y1p);
         starfield_raster(fb, y0p, y1p);
         r3d_planet_raster(fb, y0p, y1p); /* writes depth: ships pass behind */
     }

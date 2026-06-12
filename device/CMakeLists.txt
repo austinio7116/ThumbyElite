@@ -53,16 +53,8 @@ ExternalProject_Add(thumbyelite_baker
 )
 set(MESHES_GEN_C ${CMAKE_CURRENT_BINARY_DIR}/generated/meshes_gen.c)
 set(MESH_ARGS
-    shuttle=${MODELS}/shuttle.obj
-    courier=${MODELS}/courier.obj
     fighter=${MODELS}/fighter.obj
-    mauler=${MODELS}/mauler.obj
     viper=${MODELS}/viper.obj
-    cutter=${MODELS}/cutter.obj
-    lighthauler=${MODELS}/lighthauler.obj
-    freighter=${MODELS}/freighter.obj
-    hauler=${MODELS}/hauler.obj
-    dread=${MODELS}/dread.obj
     canister=${MODELS}/canister.obj
     station=${MODELS}/station.obj
     beacon=${MODELS}/beacon.obj
@@ -72,7 +64,7 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
     COMMAND ${CMAKE_CURRENT_BINARY_DIR}/baker/obj2mesh ${MESHES_GEN_C}
             ${CMAKE_CURRENT_BINARY_DIR}/generated/meshes_gen.h ${MESH_ARGS}
-    DEPENDS thumbyelite_baker ${MODELS}/shuttle.obj ${MODELS}/courier.obj ${MODELS}/fighter.obj ${MODELS}/mauler.obj ${MODELS}/viper.obj ${MODELS}/cutter.obj ${MODELS}/lighthauler.obj ${MODELS}/freighter.obj ${MODELS}/hauler.obj ${MODELS}/dread.obj ${MODELS}/canister.obj ${MODELS}/station.obj ${MODELS}/beacon.obj ${MODELS}/ships.mtl
+    DEPENDS thumbyelite_baker ${MODELS}/fighter.obj ${MODELS}/viper.obj ${MODELS}/canister.obj ${MODELS}/station.obj ${MODELS}/beacon.obj ${MODELS}/ships.mtl
     COMMENT "Baking ship meshes"
 )
 add_custom_target(generate_elite_meshes DEPENDS ${MESHES_GEN_C})

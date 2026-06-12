@@ -4,18 +4,20 @@
 #include "elite_ships.h"
 #include "meshes_gen.h"
 
+/* .mesh is a legacy field — never read since ships went procedural
+ * (hull_mesh). All rows point at the one baked hull we still link. */
 const HullDef k_hulls[N_HULLS] = {
     /* name        mesh              price  ns slots      cargo sT hT  speed accel turn  hull shld  jump */
-    { "SKIFF",     &mesh_shuttle,      900, 2, {1, 1, 0},   12,  1, 1,   85,  40, 1.5f,   70,  50,  6.5f, 3, 1, 0 },
-    { "DART",      &mesh_courier,     3200, 2, {2, 1, 0},   4,  1, 1,  150,  85, 2.3f,   60,  55, 7.0f, 2, 1, 0 },
-    { "SPARROW",   &mesh_fighter,     8500, 2, {2, 1, 0},  16,  2, 2,  120,  60, 2.1f,  100,  80,  8.0f, 4, 1, 0 },
+    { "SKIFF",     &mesh_viper,      900, 2, {1, 1, 0},   12,  1, 1,   85,  40, 1.5f,   70,  50,  6.5f, 3, 1, 0 },
+    { "DART",      &mesh_viper,     3200, 2, {2, 1, 0},   4,  1, 1,  150,  85, 2.3f,   60,  55, 7.0f, 2, 1, 0 },
+    { "SPARROW",   &mesh_viper,     8500, 2, {2, 1, 0},  16,  2, 2,  120,  60, 2.1f,  100,  80,  8.0f, 4, 1, 0 },
     { "VIPER",     &mesh_viper,      16000, 2, {2, 2, 0},   10,  2, 2,  135,  70, 2.4f,  110,  95,  8.5f, 3, 1, 0 },
-    { "REAVER",    &mesh_cutter,     24000, 3, {2, 2, 1},  24,  2, 3,  125,  62, 2.2f,  130, 100,  9.5f, 7, 1, 0 },
-    { "MAULER",    &mesh_mauler,     42000, 3, {3, 2, 2},  18,  3, 3,  110,  55, 1.9f,  170, 140,  10.0f, 5, 1, 0 },
-    { "PACK MULE", &mesh_lighthauler, 7000, 2, {1, 1, 0},  48,  1, 2,   80,  35, 1.2f,  110,  70,  7.5f, 6, 1, 0 },
-    { "MULE",      &mesh_freighter,  21000, 2, {2, 1, 0},  96,  2, 2,   70,  30, 1.0f,  150, 100,  9.0f, 8, 1, 1 },
-    { "ATLAS",     &mesh_hauler,     58000, 2, {2, 2, 0}, 200,  2, 3,   60,  25, 0.8f,  210, 130,  11.0f, 10, 2, 1 },
-    { "BASILISK",  &mesh_dread,     130000, 3, {3, 3, 2},  60,  3, 3,   95,  45, 1.4f,  280, 220,  12.5f, 8, 2, 1 },
+    { "REAVER",    &mesh_viper,     24000, 3, {2, 2, 1},  24,  2, 3,  125,  62, 2.2f,  130, 100,  9.5f, 7, 1, 0 },
+    { "MAULER",    &mesh_viper,     42000, 3, {3, 2, 2},  18,  3, 3,  110,  55, 1.9f,  170, 140,  10.0f, 5, 1, 0 },
+    { "PACK MULE", &mesh_viper, 7000, 2, {1, 1, 0},  48,  1, 2,   80,  35, 1.2f,  110,  70,  7.5f, 6, 1, 0 },
+    { "MULE",      &mesh_viper,  21000, 2, {2, 1, 0},  96,  2, 2,   70,  30, 1.0f,  150, 100,  9.0f, 8, 1, 1 },
+    { "ATLAS",     &mesh_viper,     58000, 2, {2, 2, 0}, 200,  2, 3,   60,  25, 0.8f,  210, 130,  11.0f, 10, 2, 1 },
+    { "BASILISK",  &mesh_viper,     130000, 3, {3, 3, 2},  60,  3, 3,   95,  45, 1.4f,  280, 220,  12.5f, 8, 2, 1 },
 };
 
 /* Defensive tier multiplier (armour/shield Z1-Z3). Widened so
