@@ -45,6 +45,7 @@ typedef struct { uint8_t op; int8_t a; int8_t b; } Op;
 #define GATE_CLEAN       0x0040   /* legal == CLEAN                 */
 #define GATE_WANTED      0x0080   /* legal > CLEAN                  */
 #define GATE_HAS_MEDS    0x0100   /* carrying MEDICINE              */
+#define GATE_NO_ILLEGAL  0x0200   /* hold is clean of contraband    */
 
 typedef struct {
     const char *label;        /* "GIVE THEM FUEL"                          */
@@ -56,7 +57,7 @@ typedef struct {
 #define EV_ONESHOT 0x01       /* never offered again once seen            */
 
 /* Where an event can fire. */
-enum { TRIG_DOCK = 0, TRIG_BAR, TRIG_SPACE };
+enum { TRIG_DOCK = 0, TRIG_BAR, TRIG_SPACE, TRIG_ARRIVAL };
 
 /* NPC portrait archetype hint (biases r3d_face). */
 enum { NK_CIVILIAN = 0, NK_OFFICIAL, NK_PIRATE, NK_MYSTIC, NK_DOCKHAND,
@@ -97,6 +98,11 @@ void events_init(void);                       /* new game: clear all bits */
 const Event *events_roll_dock(const SystemInfo *si, int station);
 /* Roll the bar encounter (once per dock visit; ui_station owns it). */
 const Event *events_roll_bar(const SystemInfo *si, int station);
+/* Boarding a derelict — the spawn was the odds, so this always deals
+ * if the pool has an eligible event (NULL = hulk already stripped). */
+const Event *events_roll_space(const SystemInfo *si);
+/* Supercruise-drop comm hail (rare — docks carry the hail load). */
+const Event *events_roll_arrival(const SystemInfo *si);
 
 bool events_choice_enabled(const Event *ev, int choice);
 /* Deduct cost, run ops. Returns texts[] index for the aftermath panel,

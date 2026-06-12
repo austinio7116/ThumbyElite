@@ -981,6 +981,71 @@ int main(int argc, char **argv) {
             if (ev3) {
                 events_run_choice(ev3, 0);       /* DEMAND -> lore 2 */
                 EVCHECK(events_lore_seen(2), "step 3 reveals lore 2");
+                /* flag 11 now set: GREY PAINT joins the derelict pool */
+                const Event *gp = NULL;
+                for (int k = 0; k < 4000 && !gp; k++) {
+                    const Event *e2 = events_roll_space(&si_any);
+                    if (e2 && e2->id == 21) gp = e2;
+                }
+                EVCHECK(gp != NULL, "grey paint unlocked post-arc");
+            }
+        }
+
+        /* space + arrival pools: separate, gated, reachable */
+        {
+            events_init();
+            g_player.credits = 1000;
+            for (int g = 0; g < N_GOODS; g++) g_player.cargo[g] = 0;
+            int cross = 0, hull18 = 0, grey21 = 0;
+            for (int k = 0; k < 2500; k++) {
+                const Event *e2 = events_roll_space(&si_any);
+                if (e2 && e2->trig != TRIG_SPACE) cross++;
+                if (e2 && e2->id == 18) hull18++;
+                if (e2 && e2->id == 21) grey21++;
+                e2 = events_roll_arrival(&si_any);
+                if (e2 && e2->trig != TRIG_ARRIVAL) cross++;
+            }
+            EVCHECK(cross == 0, "space/arrival pools separate");
+            EVCHECK(hull18 > 0, "cold hull deals");
+            EVCHECK(grey21 == 0, "grey paint locked pre-arc");
+            /* lawful arrivals split by cargo state */
+            int dirty22 = 0, clean23 = 0, wrong = 0;
+            g_player.cargo[16] = 3;
+            for (int k = 0; k < 4000; k++) {
+                const Event *e2 = events_roll_arrival(&si_law);
+                if (e2 && e2->id == 23) wrong++;
+                if (e2 && e2->id == 22) dirty22++;
+            }
+            g_player.cargo[16] = 0;
+            for (int k = 0; k < 4000; k++) {
+                const Event *e2 = events_roll_arrival(&si_law);
+                if (e2 && e2->id == 22) wrong++;
+                if (e2 && e2->id == 23) clean23++;
+            }
+            EVCHECK(wrong == 0 && dirty22 > 0 && clean23 > 0,
+                    "patrol picks scan vs sweep by cargo");
+        }
+
+        /* continuity: the stowaway comes back if you let them ride */
+        {
+            events_init();
+            int early = 0;
+            for (int k = 0; k < 3000; k++) {
+                const Event *e2 = events_roll_bar(&si_any, 0);
+                if (e2 && e2->id == 26) early++;
+            }
+            EVCHECK(early == 0, "familiar face needs flag 1");
+            const Event *st = NULL;
+            FIND_EV(si_any, 4, st);
+            EVCHECK(st != NULL, "stowaway reachable");
+            if (st) {
+                events_run_choice(st, 1);        /* LET THEM RIDE */
+                const Event *ff = NULL;
+                for (int k = 0; k < 30000 && !ff; k++) {
+                    const Event *e2 = events_roll_bar(&si_any, 0);
+                    if (e2 && e2->id == 26) ff = e2;
+                }
+                EVCHECK(ff != NULL, "familiar face returns");
             }
         }
 
@@ -1056,6 +1121,9 @@ int main(int argc, char **argv) {
         float dt2 = 1.0f / 30.0f;
         station_tick(&none, dt2);                /* release the debounce */
         char p1[256];
+        station_draw(g_fb);                      /* home menu, for layout */
+        snprintf(p1, sizeof p1, "%s_home.ppm", codp ? codp : barp);
+        dump_ppm(p1);
         int moves = codp ? 6 : 4;                /* DATABASE row vs BAR */
         for (int k = 0; k < moves; k++) {
             b = none; b.down = true;
@@ -1118,10 +1186,17 @@ int main(int argc, char **argv) {
             }
         if (!got && fall) si = si_fall;          /* any station system */
         if (!got && !fall) { printf("[evshot] no system\n"); return 1; }
+        int wtrig = TRIG_DOCK;
+        for (int i = 0; i < k_n_events; i++)
+            if (k_events[i].id == want) wtrig = k_events[i].trig;
         const Event *ev = NULL;
         for (uint32_t s2 = 0; s2 < 200000u && !ev; s2++) {
             events_init(); events_set_salt(s2);
-            const Event *e2 = events_roll_dock(&si, 0);
+            const Event *e2 =
+                (wtrig == TRIG_BAR)     ? events_roll_bar(&si, 0)
+              : (wtrig == TRIG_SPACE)   ? events_roll_space(&si)
+              : (wtrig == TRIG_ARRIVAL) ? events_roll_arrival(&si)
+                                        : events_roll_dock(&si, 0);
             if (e2 && e2->id == want) ev = e2;
         }
         if (!ev) { printf("[evshot] event %d not reachable\n", want); return 1; }

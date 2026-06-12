@@ -13,13 +13,20 @@
 /* elite_game.c: spawn a hostile wing outside the station (they wait). */
 void elite_game_event_ambush(int n, int tier);
 
-#define EVENT_DOCK_PCT 35
-#define EVENT_BAR_PCT  60
+#define EVENT_DOCK_PCT    35
+#define EVENT_BAR_PCT     60
+#define EVENT_SPACE_PCT   100   /* the derelict spawn WAS the odds */
+#define EVENT_ARRIVAL_PCT 14
 static int s_override = -1;            /* -1 = per-trigger defaults */
 void events_set_chance(int pct) { s_override = pct; }
 static int chance_for(int trig) {
     if (s_override >= 0) return s_override;
-    return (trig == TRIG_BAR) ? EVENT_BAR_PCT : EVENT_DOCK_PCT;
+    switch (trig) {
+    case TRIG_BAR:     return EVENT_BAR_PCT;
+    case TRIG_SPACE:   return EVENT_SPACE_PCT;
+    case TRIG_ARRIVAL: return EVENT_ARRIVAL_PCT;
+    default:           return EVENT_DOCK_PCT;
+    }
 }
 
 /* Persistent bits: lore 0..127, story flags 128..159, oneshot-seen
@@ -77,6 +84,7 @@ static bool gate_ok(uint16_t gate, const SystemInfo *si) {
     if ((gate & GATE_CLEAN) && g_player.legal != 0) return false;
     if ((gate & GATE_WANTED) && g_player.legal == 0) return false;
     if ((gate & GATE_HAS_MEDS) && g_player.cargo[5] == 0) return false;
+    if ((gate & GATE_NO_ILLEGAL) && illegal_units() > 0) return false;
     return true;
 }
 
@@ -146,6 +154,14 @@ const Event *events_roll_dock(const SystemInfo *si, int station) {
 
 const Event *events_roll_bar(const SystemInfo *si, int station) {
     return roll(si, station, TRIG_BAR);
+}
+
+const Event *events_roll_space(const SystemInfo *si) {
+    return roll(si, -1, TRIG_SPACE);
+}
+
+const Event *events_roll_arrival(const SystemInfo *si) {
+    return roll(si, -1, TRIG_ARRIVAL);
 }
 
 /* --- text ----------------------------------------------------------------

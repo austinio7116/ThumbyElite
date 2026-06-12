@@ -7,9 +7,10 @@
  *   - $-tokens expand in body AND result texts ($N npc, $S system,
  *     $T station, $F faction, $G trade good).
  * Lore ids: 0/1/2 the Adjuster arc, 3 prospector's claim, 4 your file,
- * 5 the cover.
+ * 5 the cover, 6 the other policyholder, 7 recalled.
  * Story flags: 1 stowaway rode along, 2 preacher's token, 3 purged file,
- * 8 met the stranger, 10 took the retainer, 11 Adjuster arc complete.
+ * 8 met the stranger, 10 took the retainer, 11 Adjuster arc complete,
+ * 12 opened the last pod, 13 stowaway repaid.
  */
 #include "events.h"
 #include <stddef.h>
@@ -283,6 +284,147 @@ static const Choice e17_ch[] = {
     { "WALK ON",       0, 0,   e17_pass },
 };
 
+/* ======================= in-space: boarding a derelict ==================== */
+
+/* --- 18 COLD HULL (repeatable) -------------------------------------------- */
+static const Op e18_strip[] = { {OP_BRANCH,60,5}, {OP_BRANCH,38,8},
+                                {OP_RESULT,1,0}, {OP_END,0,0}, {OP_END,0,0},
+                                {OP_CARGO,-1,2}, {OP_RESULT,0,0}, {OP_END,0,0},
+                                {OP_AMBUSH,2,1}, {OP_RESULT,2,0}, {OP_END,0,0} };
+static const Op e18_rec[]   = { {OP_BRANCH,55,4}, {OP_CR,4,0}, {OP_RESULT,4,0},
+                                {OP_END,0,0},
+                                {OP_LORE,1,0}, {OP_RESULT,3,0}, {OP_END,0,0} };
+static const Op e18_leave[] = { {OP_RESULT,5,0}, {OP_END,0,0} };
+static const char *const e18_tx[] = {
+    "TWO CRATES COME FREE OF THE WRECKAGE, SEALS INTACT. THE REST IS SLAG AND SILENCE.",
+    "THE HOLD WAS STRIPPED LONG BEFORE YOU GOT HERE. EVEN THE DECK PLATING IS GONE.",
+    "THE 'WRECK' LIGHTS UP - A LURE. TWO CONTACTS BURN IN FROM THE SHADOW OF THE DEBRIS.",
+    "THE RECORDER'S LAST ENTRY: A PLAIN GREY SHIP HOLDING STATION OFF THE BOW. LOGGED SIX HOURS BEFORE THE HULL BREACH.",
+    "THE LOGS ARE MUNDANE - BUT COMPLETE, AND SALVAGE REGISTRIES PAY FOR CLOSURE. 100 CR.",
+    "YOU LEAVE THE DEAD THEIR QUIET. THE HULK TUMBLES ON BEHIND YOU.",
+};
+static const Choice e18_ch[] = {
+    { "STRIP THE HOLD",    GATE_CARGO_SPACE, 0, e18_strip },
+    { "PULL THE RECORDER", 0,                0, e18_rec },
+    { "LEAVE IT BE",       0,                0, e18_leave },
+};
+
+/* --- 19 THE LAST POD (oneshot) --------------------------------------------- */
+static const Op e19_open[] = { {OP_LORE,6,0}, {OP_FLAG,12,0},
+                               {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e19_scan[] = { {OP_LORE,6,0}, {OP_RESULT,1,0}, {OP_END,0,0} };
+static const Op e19_go[]   = { {OP_RESULT,2,0}, {OP_END,0,0} };
+static const char *const e19_tx[] = {
+    "THE POD IS EMPTY. WARM. THE MANIFEST LISTS ONE OCCUPANT: YOUR NAME, YOUR PRINTS, YOUR BLOOD TYPE. VACATED, IT SAYS. RECENTLY.",
+    "THE SCAN COMPLETES AND THE POD SEALS ITSELF. THE MANIFEST UPLOADS SOMEWHERE YOU CAN'T TRACE - MARKED 'CLAIM CONTINUED'.",
+    "YOU BURN AWAY AND DON'T LOOK BACK. THE CYCLING LIGHT OF THE POD BLINKS IN YOUR MIRRORS FOR LONGER THAN PHYSICS ALLOWS.",
+};
+static const Choice e19_ch[] = {
+    { "OPEN IT",       0, 0, e19_open },
+    { "SCAN AND SEAL", 0, 0, e19_scan },
+    { "LEAVE - NOW",   0, 0, e19_go },
+};
+
+/* --- 20 STILL WARM (dangerous space) ---------------------------------------- */
+static const Op e20_grab[] = { {OP_CARGO,-1,1}, {OP_BRANCH,40,4},
+                               {OP_RESULT,0,0}, {OP_END,0,0},
+                               {OP_AMBUSH,2,2}, {OP_RESULT,1,0}, {OP_END,0,0} };
+static const Op e20_burn[] = { {OP_RESULT,2,0}, {OP_END,0,0} };
+static const char *const e20_tx[] = {
+    "ONE CRATE, QUICK AND QUIET. THE HULL PINGS AS IT COOLS - THIS KILL IS MINUTES OLD.",
+    "A CRATE ABOARD AND THE KILLERS COME BACK FOR THEIR LEAVINGS. THEY DON'T LOOK PLEASED TO SHARE.",
+    "FRESH WRECK, NO BODIES, GUNS STILL COOLING SOMEWHERE CLOSE. YOU WERE NEVER HERE.",
+};
+static const Choice e20_ch[] = {
+    { "GRAB AND GO", GATE_CARGO_SPACE, 0, e20_grab },
+    { "BURN AWAY",   0,                0, e20_burn },
+};
+
+/* --- 21 GREY PAINT (post-arc, oneshot) --------------------------------------- */
+static const Op e21_board[] = { {OP_LORE,7,0}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e21_leave[] = { {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e21_tx[] = {
+    "GREY PLATES. NO REGISTRY. SYSTEMS WIPED CLEANER THAN ANY SALVAGER WORKS. THE ADJUSTERS DECOMMISSION THEIR OWN - AND LEAVE NOTHING TO CLAIM.",
+    "YOU KNOW THAT PAINT. YOU KEEP YOUR DISTANCE, AND THE DEAD GREY HULL KEEPS ITS SECRETS.",
+};
+static const Choice e21_ch[] = {
+    { "BOARD HER",     0, 0, e21_board },
+    { "KEEP CLEAR",    0, 0, e21_leave },
+};
+
+/* ======================= arrival hails ====================================== */
+
+/* --- 22 PATROL CHALLENGE (lawful, carrying contraband) ----------------------- */
+static const Op e22_comply[] = { {OP_CONTRA,0,0}, {OP_CR,-6,0},
+                                 {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e22_run[]    = { {OP_BRANCH,50,3}, {OP_LEGAL,1,0},
+                                 {OP_RESULT,2,0}, {OP_END,0,0},
+                                 {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e22_tx[] = {
+    "THE PATROL TAKES THE CARGO AND 150 CR IN FINES. 'WISE CHOICE. SAFE LANES.'",
+    "YOU CUT THRUST, DRIFT DARK, AND THE PATROL'S SWEEP SLIDES PAST. THIS TIME.",
+    "THE SWEEP PINS YOUR TRANSPONDER MID-BURN. YOUR NAME GOES ON THE WIRE.",
+};
+static const Choice e22_ch[] = {
+    { "HEAVE TO",   0, 0, e22_comply },
+    { "RUN FOR IT", 0, 0, e22_run },
+};
+
+/* --- 23 ROUTINE SWEEP (lawful, clean) ----------------------------------------- */
+static const Op e23_tx_ops[] = { {OP_REP,-1,1}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e23_ig[]     = { {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e23_tx[] = {
+    "'MANIFEST CLEAN. APPRECIATED, PILOT.' THE PATROL LOGS YOU AS A FRIENDLY AND PEELS AWAY.",
+    "YOU LET THE REQUEST EXPIRE. THE PATROL SHADOWS YOU A WHILE LONGER THAN FEELS POLITE.",
+};
+static const Choice e23_ch[] = {
+    { "TRANSMIT MANIFEST", 0, 0, e23_tx_ops },
+    { "IGNORE THEM",       0, 0, e23_ig },
+};
+
+/* --- 24 WAYLAID (dangerous space) ----------------------------------------------*/
+static const Op e24_pay[]    = { {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e24_refuse[] = { {OP_BRANCH,50,4}, {OP_AMBUSH,2,1},
+                                 {OP_RESULT,2,0}, {OP_END,0,0},
+                                 {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e24_tx[] = {
+    "THE ESCORT FEE CLEARS AND THE CONTACTS FADE OFF YOUR SCOPE. CHEAPER THAN A HULL.",
+    "A LONG SILENCE, THEN THE CONTACTS BREAK OFF. SOMEBODY ELSE'S SCOPE LOOKED SOFTER.",
+    "'YOUR FUNERAL.' THE CONTACTS TURN IN, BURNING HARD.",
+};
+static const Choice e24_ch[] = {
+    { "PAY THE ESCORT FEE", 0, 150, e24_pay },
+    { "REFUSE",             0, 0,   e24_refuse },
+};
+
+/* --- 25 DRIFTING TRADER ----------------------------------------------------------*/
+static const Op e25_buy[]  = { {OP_CARGO,-1,2}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e25_pass[] = { {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e25_tx[] = {
+    "TWO CRATES OF $G CROSS ON A TETHER LINE, NO PAPERWORK, NO QUESTIONS. EVERYONE WAVES.",
+    "THE TRADER SHRUGS ACROSS THE VOID AND DRIFTS BACK INTO THE DARK LANE TRAFFIC NEVER USES.",
+};
+static const Choice e25_ch[] = {
+    { "TAKE THE DEAL", GATE_CARGO_SPACE, 120, e25_buy },
+    { "FLY ON",        0,                0,   e25_pass },
+};
+
+/* ======================= continuity ============================================ */
+
+/* --- 26 A FAMILIAR FACE (stowaway repaid, bar, oneshot) -------------------------- */
+static const Op e26_take[] = { {OP_CR,6,0}, {OP_FLAG,13,0},
+                               {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e26_wave[] = { {OP_REP,-1,3}, {OP_FLAG,13,0},
+                               {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e26_tx[] = {
+    "'FIRST WAGES.' THE KID FROM YOUR CARGO RACKS - TALLER NOW, CREW PATCHES ON THE SLEEVE - COUNTS OUT 150 CR AND WON'T TAKE NO.",
+    "YOU WAVE THE CREDITS OFF. THE KID GRINS AND BUYS THE WHOLE BAR A ROUND IN YOUR NAME INSTEAD.",
+};
+static const Choice e26_ch[] = {
+    { "TAKE THE WAGES", 0, 0, e26_take },
+    { "KEEP THEM",      0, 0, e26_wave },
+};
+
 /* --- pool ----------------------------------------------------------------*/
 const Event k_events[] = {
     { .id = 1, .weight = 12, .npc_kind = NK_CIVILIAN, .trig = TRIG_DOCK,
@@ -367,6 +509,55 @@ const Event k_events[] = {
       .title = "THE FIXER",
       .body = "A QUIET BOOTH, A QUIETER VOICE. 'I HEAR THE LAW HAS YOUR NAME SPELLED RIGHT FOR ONCE. FOUR HUNDRED MAKES IT A TYPO.'",
       .texts = e17_tx, .choices = e17_ch, .n_choices = 2 },
+
+    /* in-space: derelict boarding */
+    { .id = 18, .weight = 14, .npc_kind = NK_NONE, .trig = TRIG_SPACE,
+      .title = "COLD HULL",
+      .body = "THE AIRLOCK GIVES. INSIDE: VACUUM-FROZEN CORRIDORS, A HOLD HALF-SPILLED, AND A FLIGHT DECK NOBODY WALKED OUT OF.",
+      .texts = e18_tx, .choices = e18_ch, .n_choices = 3 },
+    { .id = 19, .weight = 7, .flags = EV_ONESHOT, .npc_kind = NK_NONE,
+      .trig = TRIG_SPACE,
+      .title = "THE LAST POD",
+      .body = "EVERY SYSTEM ABOARD IS DEAD EXCEPT ONE: A SINGLE CRYOPOD, STILL CYCLING, ITS STATUS LIGHT PATIENT AS A HEARTBEAT.",
+      .texts = e19_tx, .choices = e19_ch, .n_choices = 3 },
+    { .id = 20, .weight = 11, .npc_kind = NK_NONE, .trig = TRIG_SPACE,
+      .gate = GATE_THREAT,
+      .title = "STILL WARM",
+      .body = "SCORCH PATTERNS STILL GLOWING, ATMOSPHERE STILL VENTING. THIS WRECK ISN'T A RUIN - IT'S A CRIME SCENE, AND IT'S FRESH.",
+      .texts = e20_tx, .choices = e20_ch, .n_choices = 2 },
+    { .id = 21, .weight = 12, .flags = EV_ONESHOT, .npc_kind = NK_NONE,
+      .trig = TRIG_SPACE, .need_flag = 1 + 11,
+      .title = "GREY PAINT",
+      .body = "NO DISTRESS CODE. NO REGISTRY. THE HULL IS PAINTED A PLAIN, PATIENT GREY YOU'VE SEEN BERTHED TWO PADS DOWN.",
+      .texts = e21_tx, .choices = e21_ch, .n_choices = 2 },
+
+    /* arrival hails */
+    { .id = 22, .weight = 12, .npc_kind = NK_OFFICIAL, .trig = TRIG_ARRIVAL,
+      .gate = GATE_LAWFUL | GATE_ILLEGAL,
+      .title = "PATROL CHALLENGE",
+      .body = "A $F PATROL WING SLIDES ONTO YOUR SCOPE BEFORE THE DROP-WAKE FADES. 'CUT THRUST. CARGO SCAN. THIS IS NOT A REQUEST.'",
+      .texts = e22_tx, .choices = e22_ch, .n_choices = 2 },
+    { .id = 23, .weight = 8, .npc_kind = NK_OFFICIAL, .trig = TRIG_ARRIVAL,
+      .gate = GATE_LAWFUL | GATE_NO_ILLEGAL,
+      .title = "ROUTINE SWEEP",
+      .body = "'$F TRAFFIC CONTROL. ROUTINE SWEEP. TRANSMIT YOUR MANIFEST AND ENJOY THE LANES, PILOT.'",
+      .texts = e23_tx, .choices = e23_ch, .n_choices = 2 },
+    { .id = 24, .weight = 12, .npc_kind = NK_PIRATE, .trig = TRIG_ARRIVAL,
+      .gate = GATE_THREAT,
+      .title = "WAYLAID",
+      .body = "THREE CONTACTS BRACKET YOUR DROP POINT. '$N'S LANE, FRIEND. ESCORT FEE IS 150 - AND OUT HERE, EVERYONE WANTS AN ESCORT.'",
+      .texts = e24_tx, .choices = e24_ch, .n_choices = 2 },
+    { .id = 25, .weight = 9, .npc_kind = NK_CIVILIAN, .trig = TRIG_ARRIVAL,
+      .title = "DRIFTING TRADER",
+      .body = "A FREIGHTER RUNNING DARK FLASHES ITS BAY LIGHTS. '$G, TWO CRATES, 120 FLAT. NO DOCKS, NO DUTIES, NO NAMES.'",
+      .texts = e25_tx, .choices = e25_ch, .n_choices = 2 },
+
+    /* continuity */
+    { .id = 26, .weight = 12, .flags = EV_ONESHOT, .npc_kind = NK_CIVILIAN,
+      .trig = TRIG_BAR, .need_flag = 1 + 1,
+      .title = "A FAMILIAR FACE",
+      .body = "SOMEONE PUSHES THROUGH THE CROWD TOWARD YOUR TABLE - AND YOU KNOW THE FACE, THOUGH IT LAST LOOKED OUT FROM BEHIND YOUR CARGO RACKS.",
+      .texts = e26_tx, .choices = e26_ch, .n_choices = 2 },
 };
 const int k_n_events = (int)(sizeof k_events / sizeof k_events[0]);
 
@@ -384,5 +575,9 @@ const Lore k_lore[] = {
       "AN UNCLAIMED-VESSEL RECORD: YOUR HULL, LOST WITH ALL HANDS FORTY YEARS AGO. REGISTERED OWNER: YOU. POLICY STATUS: CURRENT." },
     /* 5 */ { "DOCTRINE OF THE COVER",
       "THE DOCTRINE OF THE COVER: NOBODY SIGNED, NOBODY READS THE TERMS. PAYMENT IS TAKEN IN FUEL, IN HULL, IN YEARS. MISS ONE AND IT NOTICES." },
+    /* 6 */ { "THE OTHER POLICYHOLDER",
+      "A CRYOPOD MANIFEST: YOUR NAME, YOUR PRINTS, YOUR BLOOD TYPE - ABOARD A SHIP YOU NEVER CREWED. THE POD WAS WARM, AND RECENTLY VACATED." },
+    /* 7 */ { "RECALLED",
+      "GREY PLATES, NO REGISTRY, SYSTEMS WIPED CLEANER THAN ANY SALVAGER WORKS. THE ADJUSTERS DECOMMISSION THEIR OWN - AND LEAVE NOTHING TO CLAIM." },
 };
 const int k_n_lore = (int)(sizeof k_lore / sizeof k_lore[0]);

@@ -1399,28 +1399,31 @@ static void draw_home(uint16_t *fb) {
              si->stations[s_station].tech);
     craft_font_draw(fb, buf, 2, 13, COL_DIM);
 
+    /* 11 rows since DATABASE: start higher (the old y=23 start pushed
+     * the tail rows into the FUEL/CARGO readouts). */
+    int y0 = 20;
     for (int i = 0; i < HOME_ITEMS; i++) {
         uint16_t c = (i == s_cursor) ? COL_CUR : COL_DIM;
-        if (i == s_cursor) craft_font_draw(fb, ">", 8, 23 + i * 9, COL_CUR);
-        craft_font_draw(fb, k_home[i], 16, 23 + i * 9, c);
+        if (i == s_cursor) craft_font_draw(fb, ">", 8, y0 + i * 9, COL_CUR);
+        craft_font_draw(fb, k_home[i], 16, y0 + i * 9, c);
         /* Live price hints tucked right beside the service rows (the
          * right side belongs to the station render). */
         int hx = 16 + craft_font_width(k_home[i]) + 5;
-        if (i == 6) {
+        if (i == 7) {                              /* REFUEL */
             float need = g_player.fuel_max - g_player.fuel;
             if (need >= 0.1f) {
                 snprintf(buf, sizeof buf, "%d", (int)(need * 12.0f) + 1);
-                craft_font_draw(fb, buf, hx, 23 + i * 9, COL_CRED);
+                craft_font_draw(fb, buf, hx, y0 + i * 9, COL_CRED);
             }
-        } else if (i == 7) {
+        } else if (i == 8) {                       /* SERVICE */
             int rc = player_rearm_cost() + service_hull_cost();
             if (rc > 0) {
                 snprintf(buf, sizeof buf, "%d", rc);
-                craft_font_draw(fb, buf, hx, 23 + i * 9, COL_CRED);
+                craft_font_draw(fb, buf, hx, y0 + i * 9, COL_CRED);
             }
-        } else if (i == 8 && g_player.fine > 0) {
+        } else if (i == 9 && g_player.fine > 0) {  /* PAY FINE */
             snprintf(buf, sizeof buf, "%d", g_player.fine);
-            craft_font_draw(fb, buf, hx, 23 + i * 9,
+            craft_font_draw(fb, buf, hx, y0 + i * 9,
                             RGB565C(255, 120, 70));
         }
     }

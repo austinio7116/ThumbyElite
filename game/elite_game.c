@@ -64,7 +64,11 @@ typedef enum {
 #define SC_DROP_MM 1.2f          /* auto-drop distance to destination */
 
 static GState  s_state;
-static bool    s_event_to_docked;  /* ST_EVENT came from the bar */
+/* Where ST_EVENT hands control back when the modal closes. */
+enum { EVRET_DOCK_FINISH = 0,   /* arrival hail: finish docking after  */
+       EVRET_DOCKED,            /* bar encounter: back to the station  */
+       EVRET_FLIGHT };          /* in-space (derelict/arrival hail)    */
+static uint8_t s_event_return;
 static SysAddr s_addr;           /* current system */
 static Vec3    s_anchor_mm;      /* local-frame origin in system space */
 static Poi     s_anchor_poi;     /* what we're anchored at */
@@ -105,6 +109,8 @@ static uint32_t s_distress_done;  /* per-POI resolved bits, this system
                                      (user bug: re-arriving respawned a
                                      paid rescue — farmable) */
 static bool  s_distress_paid;
+static int   s_derelict_idx = -1; /* live derelict hulk (boardable)   */
+static uint32_t s_derelict_done;  /* per-POI boarded bits, this system */
 static int   s_tgt_class = 0;    /* 0 AUTO, 1 SALVAGE, 2 ROCKS — LB
                                     double-tap demotes the class so you
                                     can mine through floating salvage or
@@ -556,6 +562,42 @@ static void spawn_poi_content(void) {
         }
     }
 
+    /* Derelict hulk: a dead ship drifting off the lane. Fly within
+     * boarding range (hostiles cleared) and a TRIG_SPACE event opens —
+     * salvage, recorders, traps. One boarding per POI per visit. */
+    s_derelict_idx = -1;
+    if (s_anchor_has_poi && s_anchor_poi.kind != POI_STATION &&
+        !(s_derelict_done & (1u << (s_anchor_poi.index & 31)))) {
+        uint32_t dh = (uint32_t)(si->seed >> 18) ^
+                      (uint32_t)(s_anchor_poi.kind * 97u) ^
+                      (uint32_t)(s_anchor_poi.index * 0x68E31DA4u) ^
+                      (s_entry_salt * 0x9E3779B9u);
+        dh *= 2654435761u; dh ^= dh >> 15;
+        if (dh % 100u < 24) {
+            float a = frand(0, 6.2831f);
+            float r = frand(380, 620);
+            Vec3 pos = v3(cosf(a) * r, frand(-160, 160), sinf(a) * r);
+            int cls = 5 + (int)(dh % 3u);     /* mid/heavy hulls wreck big */
+            int idx = ship_spawn(hull_mesh(dh ^ 0xDEADu, cls), pos,
+                                 TEAM_NEUTRAL);
+            if (idx > 0) {
+                ship_set_tier(idx, 0, cls);
+                Ship *d = &g_ships[idx];
+                d->vel = v3(0, 0, 0);
+                d->throttle = 0;
+                d->assist = false;
+                d->turret_type = 0;
+                d->shield = d->shield_max = 0;   /* cold and open */
+                d->hull = d->hull_max * 0.3f;
+                /* not civilian, not police: ai_tick leaves it inert */
+                s_derelict_idx = idx;
+                snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                         "COLD CONTACT ON SCOPE");
+                s_scoop_toast_t = 2.5f;
+            }
+        }
+    }
+
     /* Bounty mark: a flagged pilot at the mission's tier. ACE marks
      * bring an escort. */
     int btier = (s_anchor_has_poi && s_anchor_poi.kind == POI_BEACON)
@@ -603,6 +645,17 @@ static void spawn_poi_content(void) {
     }
 }
 
+/* Arrival comm hail: rare TRIG_ARRIVAL modal right after a real drop —
+ * never over a live fight (the arrival ambush IS the event then). */
+static void try_arrival_hail(void) {
+    if (ships_alive_hostile() > 0) return;
+    const Event *ev = events_roll_arrival(system_info());
+    if (!ev) return;
+    ui_event_open(ev);
+    s_event_return = EVRET_FLIGHT;
+    s_state = ST_EVENT;
+}
+
 /* Re-anchor the local frame at a system-space position. */
 static const Mesh *s_station_mesh;   /* generated for the anchored station */
 
@@ -640,6 +693,7 @@ static void arrive_in_system(SysAddr addr) {
     s_addr = addr;
     s_entry_salt++;
     s_distress_done = 0;       /* fresh system, fresh emergencies */
+    s_derelict_done = 0;
     set_nebula_for_addr(addr);
     loot_set_beacons(true);
     system_enter(addr);
@@ -1300,6 +1354,31 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
                 }
             }
         }
+        /* Derelict boarding: drift up to the cold hull with the sky
+         * clear and the hatch is yours — a TRIG_SPACE event decides
+         * what's inside. One boarding per POI per visit. */
+        if (s_derelict_idx > 0 && s_state == ST_FLIGHT) {
+            Ship *d = &g_ships[s_derelict_idx];
+            if (!d->alive) {
+                s_derelict_idx = -1;          /* shot to pieces — gone */
+            } else if (ships_alive_hostile() == 0) {
+                float dd = v3_len(v3_sub(d->pos, g_ships[PLAYER].pos));
+                if (dd < 180.0f) {
+                    s_derelict_done |= 1u << (s_anchor_poi.index & 31);
+                    s_derelict_idx = -1;      /* hulk stays as scenery */
+                    const Event *ev = events_roll_space(system_info());
+                    if (ev) {
+                        ui_event_open(ev);
+                        s_event_return = EVRET_FLIGHT;
+                        s_state = ST_EVENT;
+                    } else {
+                        snprintf(s_scoop_toast, sizeof s_scoop_toast,
+                                 "HULK ALREADY STRIPPED");
+                        s_scoop_toast_t = 2.5f;
+                    }
+                }
+            }
+        }
         /* Distress rescue: wing dead, victim alive -> hail + reward. */
         if (s_distress_civ > 0 && !s_distress_paid) {
             Ship *cv = &g_ships[s_distress_civ];
@@ -1569,6 +1648,7 @@ static void tick_supercruise(const CraftRawButtons *btn, float dt) {
         pl->throttle = 0.5f;
         s_state = ST_FLIGHT;
         spawn_poi_content();
+        try_arrival_hail();
     }
 }
 
@@ -1582,6 +1662,7 @@ static void tick_hyperjump(float dt) {
         g_player.xp_piloting += 2;
         elite_input_reset();
         s_state = ST_FLIGHT;
+        try_arrival_hail();          /* may flip to ST_EVENT */
     }
 }
 
@@ -1832,6 +1913,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
                 events_roll_dock(system_info(), s_anchor_poi.index);
             if (ev) {
                 ui_event_open(ev);
+                s_event_return = EVRET_DOCK_FINISH;
                 s_state = ST_EVENT;
                 break;
             }
@@ -1843,13 +1925,20 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
     case ST_EVENT:
         audio_engine_set(0, 0);
         if (ui_event_tick(btn, dt)) {
-            if (s_event_to_docked) {
+            switch (s_event_return) {
+            case EVRET_DOCKED:
                 /* Bar encounter: bank the outcome, back to the station
                  * (services stay open — no dock_finish re-run). */
-                s_event_to_docked = false;
                 save_write(s_addr, s_anchor_poi.index, combat_kills());
                 s_state = ST_DOCKED;
-            } else {
+                break;
+            case EVRET_FLIGHT:
+                /* In-space: straight back to the stick. No save out
+                 * here — the next dock banks it, same as combat loot. */
+                elite_input_reset();
+                s_state = ST_FLIGHT;
+                break;
+            default:
                 dock_finish();
             }
         }
@@ -1862,7 +1951,7 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
             const Event *ev = station_pending_event();
             if (ev) {
                 ui_event_open(ev);
-                s_event_to_docked = true;
+                s_event_return = EVRET_DOCKED;
                 s_state = ST_EVENT;
             }
             break;

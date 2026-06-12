@@ -291,9 +291,16 @@ planets life immediately while the narrative side matures.
   30 EVENTTEST asserts green; BARSHOT/CODEXSHOT renders; slot 207,032 B
   (53.7 KB headroom). The `DERELICT`/`DISTRESS`/`ANOMALY` modal bridges moved
   to Phase 3 — they belong with the in-space work.
-- **Phase 3 — in-space hails + arc breadth:**
-  `TRIG_ARRIVAL`, more arcs, individual-NPC rep consequences, lore that gates later
-  events (the slow world reveal).
+- **Phase 3 — in-space: DONE 2026-06-12 (first cut).**
+  Derelict hulks (24% at non-station POIs, inert TEAM_NEUTRAL ship, board by
+  flying within 180 m with hostiles cleared → TRIG_SPACE modal, one per POI
+  per visit); arrival hails (TRIG_ARRIVAL, 14% per drop, never over a live
+  fight); `s_event_return` routing (dock-finish / docked / flight); 9 new
+  events (#18-26: cold hull, last pod, still warm, grey paint post-arc,
+  patrol challenge/routine sweep, waylaid, drifting trader, the stowaway
+  repaid) + lore 6/7. 38 EVENTTEST asserts green. Full table of all events
+  + outcomes: EVENTS_TABLE.md. Deferred: individual-NPC rep; outcome
+  visibility/buffs pending user direction (EVENTS_TABLE.md "thin spots").
 
 ## 11. Backlog (user, 2026-06-12 — after the planned phases)
 
