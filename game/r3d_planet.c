@@ -396,6 +396,44 @@ static void bake_style1(PlanetArt *a, const PlanetInfo *p) {
         break;
     }
     }
+
+    /* Cloud deck (user req): the bright ridged-network pattern from the
+     * old lava bake read beautifully as CLOUDS — so living worlds get a
+     * faint, subtly tinted version. ~45% of earthlike/ocean (white-warm
+     * wisps), ~30% of gas giants (high haze in the palette's own light
+     * tone). Sparse two-level coverage; never near the busy lava look. */
+    int cloudy = (p->type == PT_EARTHLIKE || p->type == PT_OCEAN)
+                     ? (s1_rnd() % 100u) < 45
+                 : (p->type == PT_GAS) ? (s1_rnd() % 100u) < 30 : 0;
+    if (cloudy) {
+        float cf = s1_range(0.16f, 0.26f);         /* wisp scale */
+        float cw = s1_range(1.2f, 2.6f);           /* wisp bend  */
+        float thr = s1_range(0.80f, 0.86f);        /* sparseness */
+        /* tint: warm-white for living worlds, palette-light for gas */
+        uint16_t hi = (p->type == PT_GAS) ? a->pal[PAL_N - 1]
+                                          : RGB565C(236, 234, 226);
+        uint16_t lo;
+        {
+            int r = ((hi >> 11) & 31) * 78 / 100;
+            int g = ((hi >> 5) & 63) * 78 / 100;
+            int b = (hi & 31) * 82 / 100;
+            lo = (uint16_t)((r << 11) | (g << 5) | b);
+        }
+        /* spend the palette's top two slots on the deck — terrain
+         * below keeps indices 0..5 (bake writes rarely reach 6/7 on
+         * these types; where they do, snow becomes cloud, fine) */
+        a->pal[PAL_N - 1] = hi;
+        a->pal[PAL_N - 2] = lo;
+        for (int y = 0; y < TEX_N; y++)
+            for (int x = 0; x < TEX_N; x++) {
+                float c = ridged(fbm_warp(x * cf + 51.0f, y * cf - 13.0f,
+                                          sd ^ 0xC10Du, cw));
+                if (c > thr + 0.06f)
+                    t[y * TEX_N + x] = PAL_N - 1;
+                else if (c > thr)
+                    t[y * TEX_N + x] = PAL_N - 2;
+            }
+    }
 }
 
 void r3d_planet_bake(const SystemInfo *info) {

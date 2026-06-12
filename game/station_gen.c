@@ -422,18 +422,29 @@ static void s1_drum(int n, float r_lo, float r_hi, float z_lo, float z_hi,
 /* Polygonal torus around z (generalised ring_core, n <= 12). Outer
  * wall facets alternate outer0/outer1, back face alternates back0/back1
  * (window bands around the rim and across the wheel face). */
-static void s1_torus(int n, float R, float tr, float tz, float phase,
-                     uint16_t outer0, uint16_t outer1,
-                     uint16_t inner, uint16_t front,
-                     uint16_t back0, uint16_t back1) {
+static void s1_quad(int a, int b, int c, int d, uint16_t col);
+
+/* General torus: centred at z=zc, optionally skipping segment `gap`
+ * (a construction hole — the open ends get capped). */
+static void s1_torus_at(int n, float R, float tr, float tz, float zc,
+                        float phase, int gap,
+                        uint16_t outer0, uint16_t outer1,
+                        uint16_t inner, uint16_t front,
+                        uint16_t back0, uint16_t back1) {
     if (s_nv + 4 * n > MAX_SV || s_nf + 8 * n > MAX_SF) return;
     int fo[12], fi[12], bo[12], bi[12];
-    s1_ngon(n, R + tr, tz, phase, fo);
-    s1_ngon(n, R - tr, tz, phase, fi);
-    s1_ngon(n, R + tr, -tz, phase, bo);
-    s1_ngon(n, R - tr, -tz, phase, bi);
+    s1_ngon(n, R + tr, zc + tz, phase, fo);
+    s1_ngon(n, R - tr, zc + tz, phase, fi);
+    s1_ngon(n, R + tr, zc - tz, phase, bo);
+    s1_ngon(n, R - tr, zc - tz, phase, bi);
     for (int i = 0; i < n; i++) {
         int j = (i + 1) % n;
+        if (i == gap) {
+            /* cap the two exposed ends of the broken arc */
+            s1_quad(fo[i], fi[i], bi[i], bo[i], back0);
+            s1_quad(bo[j], bi[j], fi[j], fo[j], back0);
+            continue;
+        }
         add_face(fo[i], fo[j], fi[j], front);   /* front +z */
         add_face(fo[i], fi[j], fi[i], front);
         uint16_t bc = (i & 1) ? back1 : back0;
@@ -445,6 +456,13 @@ static void s1_torus(int n, float R, float tr, float tz, float phase,
         add_face(bi[j], bi[i], fi[i], inner);   /* inner wall */
         add_face(bi[j], fi[i], fi[j], inner);
     }
+}
+static void s1_torus(int n, float R, float tr, float tz, float phase,
+                     uint16_t outer0, uint16_t outer1,
+                     uint16_t inner, uint16_t front,
+                     uint16_t back0, uint16_t back1) {
+    s1_torus_at(n, R, tr, tz, 0, phase, -1, outer0, outer1, inner,
+                front, back0, back1);
 }
 
 static void s1_quad(int a, int b, int c, int d, uint16_t col) {
@@ -521,15 +539,36 @@ typedef struct {
     uint16_t HULL, HULL2, DARK, GLASS, WIN, PANEL, ACCENT;
 } S1Pal;
 
-/* RING: polygonal torus + hub + spokes; bay collar on the hub +z. */
+/* RING: polygonal torus + hub + spokes; bay collar on the hub +z.
+ * Each wheel also rolls TWO of five add-on kits (user: the bare wheel
+ * is a great shape but window colours alone can't carry variety):
+ * rim blocks / second wheel / hub works / truss spokes / build gap. */
 static void s1_arch_ring(float B, const S1Pal *p) {
     int n = 8 + 2 * rndi(0, 2);              /* 8 / 10 / 12 segments */
     float R  = B;
     float tz = R * rndf(0.09f, 0.16f);       /* axial half-thickness  */
     float tr = R * rndf(0.09f, 0.17f);       /* radial half-thickness */
     float ph = rndf(0, 6.2831853f);
-    s1_torus(n, R, tr, tz, ph, p->HULL, p->WIN, p->HULL2, p->HULL2,
-             p->HULL, p->WIN);
+
+    int kit_a = rndi(0, 4);
+    int kit_b = (kit_a + 1 + rndi(0, 3)) % 5;
+    int has = (1 << kit_a) | (1 << kit_b);
+
+    /* Build gap: one rim segment is bare girders (still being built). */
+    int gap_seg = (has & 16) ? rndi(0, n - 1) : -1;
+    s1_torus_at(n, R, tr, tz, 0, ph, gap_seg, p->HULL, p->WIN,
+                p->HULL2, p->HULL2, p->HULL, p->WIN);
+    if (gap_seg >= 0) {
+        float a0 = ph + (float)gap_seg * (6.2831853f / (float)n);
+        float a1 = ph + (float)(gap_seg + 1) * (6.2831853f / (float)n);
+        float gw = R * 0.018f;
+        s1_bar(cosf(a0) * R, sinf(a0) * R, cosf(a1) * R, sinf(a1) * R,
+               tz * 0.5f, gw, gw, p->DARK, p->DARK, p->DARK);
+        s1_bar(cosf(a0) * R, sinf(a0) * R, cosf(a1) * R, sinf(a1) * R,
+               -tz * 0.5f, gw, gw, p->DARK, p->DARK, p->DARK);
+        float am = (a0 + a1) * 0.5f;
+        s1_light(cosf(am) * R, sinf(am) * R, 0, R * 0.025f, p->ACCENT);
+    }
 
     /* Hub drum; docking collar (flared accent throat, glass cap). */
     float hr = R * rndf(0.22f, 0.34f);
@@ -545,9 +584,80 @@ static void s1_arch_ring(float B, const S1Pal *p) {
     float hw = R * rndf(0.030f, 0.050f);
     for (int k = 0; k < ns; k++) {
         float a = ph2 + (float)k * (6.2831853f / (float)ns);
-        s1_bar(cosf(a) * hr * 0.8f, sinf(a) * hr * 0.8f,
-               cosf(a) * (R - tr * 0.4f), sinf(a) * (R - tr * 0.4f), 0,
-               hw, tz * 0.55f, p->HULL2, p->HULL, p->HULL2);
+        if (has & 8) {
+            /* truss spokes: twin thin rails, open between */
+            float px = -sinf(a) * hw * 1.6f, py = cosf(a) * hw * 1.6f;
+            for (int sgn = -1; sgn <= 1; sgn += 2)
+                s1_bar(cosf(a) * hr * 0.8f + sgn * px,
+                       sinf(a) * hr * 0.8f + sgn * py,
+                       cosf(a) * (R - tr * 0.4f) + sgn * px,
+                       sinf(a) * (R - tr * 0.4f) + sgn * py, 0,
+                       hw * 0.38f, tz * 0.30f,
+                       p->HULL2, p->HULL, p->HULL2);
+        } else {
+            s1_bar(cosf(a) * hr * 0.8f, sinf(a) * hr * 0.8f,
+                   cosf(a) * (R - tr * 0.4f), sinf(a) * (R - tr * 0.4f),
+                   0, hw, tz * 0.55f, p->HULL2, p->HULL, p->HULL2);
+        }
+    }
+
+    /* Rim blocks: modules clamped around the wheel — boxes riding the
+     * rim front alternating with radial tank pods. Breaks the clean
+     * silhouette, which windows alone couldn't. */
+    if (has & 1) {
+        int nb = rndi(3, 5);
+        float ph3 = ph + rndf(0, 6.2831853f);
+        for (int k = 0; k < nb; k++) {
+            float a = ph3 + (float)k * (6.2831853f / (float)nb);
+            if (gap_seg >= 0) {            /* keep clear of the gap */
+                float ag = ph + ((float)gap_seg + 0.5f) *
+                           (6.2831853f / (float)n);
+                float dd = a - ag;
+                while (dd > 3.1416f) dd -= 6.2832f;
+                while (dd < -3.1416f) dd += 6.2832f;
+                if (dd < 0.5f && dd > -0.5f) continue;
+            }
+            float ca = cosf(a), sa = sinf(a);
+            if (k & 1)
+                s1_bar(ca * (R - tr * 0.7f), sa * (R - tr * 0.7f),
+                       ca * (R + tr * 0.7f), sa * (R + tr * 0.7f),
+                       tz * 1.35f, tr * rndf(0.45f, 0.7f), tz * 0.45f,
+                       (k & 2) ? p->PANEL : p->HULL2, p->HULL, p->WIN);
+            else
+                s1_pod(ca * (R + tr * 1.5f), sa * (R + tr * 1.5f), 0,
+                       tr * rndf(0.55f, 0.85f), tr * rndf(0.8f, 1.2f),
+                       p->HULL, p->HULL2);
+        }
+    }
+
+    /* Second wheel: a smaller ring stacked behind on the same hub. */
+    if (has & 2) {
+        float R2 = R * rndf(0.52f, 0.68f);
+        float z2 = -(hl + tz * rndf(1.2f, 2.0f));
+        s1_torus_at(n, R2, tr * 0.7f, tz * 0.6f, z2, ph + 0.3f, -1,
+                    p->HULL2, p->WIN, p->HULL, p->HULL2,
+                    p->HULL2, p->WIN);
+        s1_drum(8, hr * 0.55f, hr * 0.55f, z2, -hl, ph,
+                p->HULL2, p->HULL2, 1, p->HULL2, 0, 0);
+        int ns2 = 2 + (rndi(0, 1) ? 1 : 0);
+        for (int k = 0; k < ns2; k++) {
+            float a = ph + 1.1f + (float)k * (6.2831853f / (float)ns2);
+            s1_bar(cosf(a) * hr * 0.5f, sinf(a) * hr * 0.5f,
+                   cosf(a) * (R2 - tr * 0.3f),
+                   sinf(a) * (R2 - tr * 0.3f),
+                   z2, hw * 0.8f, tz * 0.35f, p->HULL2, p->HULL2,
+                   p->HULL2);
+        }
+    }
+
+    /* Hub works: comms dish + a long antenna spur. */
+    if (has & 4) {
+        float da = ph + rndf(0, 6.2831853f);
+        s1_dish(cosf(da) * hr * 0.7f, sinf(da) * hr * 0.7f,
+                hl + R * 0.10f, R * 0.13f, p->PANEL, p->HULL2);
+        s1_bar(0, 0, -sinf(da) * hr * 1.9f, cosf(da) * hr * 1.9f,
+               -hl * 0.5f, R * 0.012f, R * 0.012f,
+               p->DARK, p->DARK, p->ACCENT);
     }
 
     /* Nav lights around the rim front. */
