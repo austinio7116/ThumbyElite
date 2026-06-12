@@ -97,6 +97,7 @@ static void box(float cx, float cy, float cz, float hx, float hy, float hz,
         s_mods[s_nmods++] = (Module){ cx, cy, cz, hx, hy, hz };
 }
 
+#if 0   /* helpers used only by the old accretion generator */
 /* Octagonal drum along z (the classic station core silhouette). */
 static void drum(float r, float hz, uint16_t mtl, uint16_t face_col) {
     if (s_nv + 16 > MAX_SV || s_nf + 28 > MAX_SF) return;
@@ -219,14 +220,20 @@ static void spindle(float r, float hz, uint16_t mtl, uint16_t mtl2,
     drum(r * 1.04f, hz * 0.14f, mtl2, mtl2);
 }
 
-#ifdef ELITE_STYLE_LAB
+#endif  /* old-generator helpers */
+
 static const Mesh *station_gen_style1(uint32_t seed);
-#endif
 
 const Mesh *station_gen_mesh(uint32_t seed) {
-#ifdef ELITE_STYLE_LAB
-    if (s_style == 1) return station_gen_style1(seed);
-#endif
+    /* ADOPTED 2026-06-12 ('lock them in, replacing the old way
+     * completely'): the archetype generator IS station generation now.
+     * The accretion grower below it was deleted with the adoption. */
+    return station_gen_style1(seed);
+}
+
+#if 0   /* old accretion generator (replaced; kept-out reference) */
+const Mesh *station_gen_mesh_old(uint32_t seed) {
+    s_rng = seed * 2654435761u;
     s_rng = seed * 2654435761u;
     s_rng ^= s_rng >> 15;
     if (!s_rng) s_rng = 1;
@@ -359,10 +366,10 @@ const Mesh *station_gen_mesh(uint32_t seed) {
     s_mesh.lod_lo = 0;
     return &s_mesh;
 }
+#endif  /* old accretion generator */
 
-#ifdef ELITE_STYLE_LAB
 /* ====================================================================
- * STYLE-1 PROPOSAL: real structural variety — four distinct archetypes
+ * Station archetypes (ADOPTED): four distinct structures
  * picked by seed, each with seeded proportions and per-seed scale:
  *
  *   RING     — polygonal torus (8/10/12 segments) + hub + 2-4 spokes
@@ -899,4 +906,3 @@ static const Mesh *station_gen_style1(uint32_t seed) {
     s_mesh.lod_lo = 0;
     return &s_mesh;
 }
-#endif /* ELITE_STYLE_LAB */
