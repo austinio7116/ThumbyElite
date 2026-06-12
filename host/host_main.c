@@ -1467,6 +1467,30 @@ int main(int argc, char **argv) {
     }
 #endif
 
+#ifdef ELITE_STYLE_LAB
+    if (getenv("ELITE_BANDSHEET")) {
+        /* 100 skies, one per seed: band orientation/width/gain/core +
+         * nebula clouds on every third — the variety audit. */
+        const char *path = getenv("ELITE_BANDSHEET");
+        sheet_clear(2 + 10 * 98, 2 + 10 * 98);
+        for (int i = 0; i < 100; i++) {
+            uint32_t sd = 1000003u * (uint32_t)(i + 1) + 17u;
+            r3d_starfield_init(sd);
+            r3d_scene_set_nebula(sd, (i % 3 == 0) ? 0.85f : 0.0f);
+            Mat3 cam = m3_identity();
+            m3_rotate_local(&cam, 1, (float)(i * 37 % 360) * 0.01745f);
+            m3_rotate_local(&cam, 0, ((float)(i % 7) - 3.0f) * 0.12f);
+            r3d_scene_begin(&cam, 60.0f);
+            r3d_scene_raster(g_fb, 0, ELITE_FB_H);
+            sheet_blit(g_fb + 16 * ELITE_FB_W + 16, ELITE_FB_W, 96, 96,
+                       2 + (i % 10) * 98, 2 + (i / 10) * 98, 1);
+        }
+        sheet_save(path);
+        r3d_scene_set_nebula(0, 0);
+        return 0;
+    }
+#endif
+
     if (getenv("ELITE_WARTEST")) {
         /* Faction war: contested detection, offers, grant, quota,
          * rep swing, and the real beacon battle via the debug jump. */

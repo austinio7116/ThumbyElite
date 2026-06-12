@@ -279,17 +279,30 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
     float ox = (float)(s_nebula & 0xFF) * 0.6f;
     const float F = 1.05f;
     const int STEP = 4 * R3D_SS;
-    /* Galactic band: a fixed great circle of unresolved starlight. The
-     * plane is seeded per galaxy (not per system) so it stays put as
-     * you fly; brightness is kept FAR below the stars — a distant
-     * thing you notice, not a feature that competes. */
-    Vec3 gax;
+    /* Galactic band: a great circle of unresolved starlight with REAL
+     * per-system character (user: 'too samey — the same line all the
+     * way round'). The seed picks the plane's full orientation, the
+     * band's width and gain (some skies barely show it), and the
+     * direction of the CORE — a bright wide bulge at one point on the
+     * circle, like the Milky Way toward Sagittarius. */
+    Vec3 gax, gcore;
+    float gwk, ggain;
     {
         uint32_t gh = (s_nebula | 1u) * 0x45D9F3Bu;
-        gh ^= gh >> 13;
-        gax = v3_norm(v3(0.30f + (float)(gh & 15) * 0.02f,
-                         1.0f,
-                         -0.24f + (float)((gh >> 4) & 15) * 0.03f));
+        gh ^= gh >> 13; gh *= 0x2C1B3C6Du; gh ^= gh >> 15;
+        float a1 = (float)(gh & 0x3FF) * (6.2831853f / 1024.0f);
+        float z1 = (float)((gh >> 10) & 0xFF) * (2.0f / 255.0f) - 1.0f;
+        float r1 = sqrtf(1.0f - z1 * z1);
+        gax = v3(r1 * cosf(a1), z1, r1 * sinf(a1));   /* full sphere */
+        gwk = 3.2f + (float)((gh >> 18) & 7) * 0.5f;  /* width 3.2-6.7 */
+        ggain = 0.45f + (float)((gh >> 21) & 7) * 0.13f; /* 0.45-1.36 */
+        /* core: a seeded azimuth on the band plane */
+        Vec3 ref = (gax.y > 0.9f || gax.y < -0.9f) ? v3(1, 0, 0)
+                                                   : v3(0, 1, 0);
+        Vec3 c1 = v3_norm(v3_cross(gax, ref));
+        Vec3 c2 = v3_cross(gax, c1);
+        float az = (float)((gh >> 24) & 0xFF) * (6.2831853f / 256.0f);
+        gcore = v3_add(v3_scale(c1, cosf(az)), v3_scale(c2, sinf(az)));
     }
     /* corner sample of the cloud field (intensity) + hue field */
     #define NB_V3(px, py, out_n, out_w, out_g, out_h) do { \
@@ -304,14 +317,19 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
                            d_.z * 0.7f - 19.0f); \
         float gc_ = d_.x * gax.x + d_.y * gax.y + d_.z * gax.z; \
         float ac_ = gc_ < 0 ? -gc_ : gc_; \
-        float gb_ = 1.0f - ac_ * 4.3f; \
+        /* core bulge: the band widens AND brightens toward gcore */ \
+        float cb_ = d_.x * gcore.x + d_.y * gcore.y + d_.z * gcore.z; \
+        if (cb_ < 0) cb_ = 0; \
+        cb_ = cb_ * cb_; cb_ *= cb_;                  /* ^4 falloff */ \
+        float gb_ = 1.0f - ac_ * gwk / (1.0f + 1.8f * cb_); \
         if (gb_ > 0) { \
             gb_ *= gb_; \
-            /* raised core: a narrow bright ridge down the centreline */ \
-            float ridge_ = 1.0f - ac_ * 11.0f; \
-            if (ridge_ > 0) gb_ += ridge_ * ridge_ * ridge_ * 0.7f; \
-            gb_ *= 0.55f + 0.45f * nb_noise(d_.x * 2.6f + 5.0f, \
-                                            d_.z * 2.6f - 11.0f); \
+            float ridge_ = 1.0f - ac_ * gwk * 2.6f; \
+            if (ridge_ > 0) gb_ += ridge_ * ridge_ * ridge_ * 0.5f; \
+            gb_ *= 1.0f + 2.6f * cb_;                 /* core glow */ \
+            gb_ *= ggain * (0.55f + 0.45f * \
+                            nb_noise(d_.x * 2.6f + 5.0f, \
+                                     d_.z * 2.6f - 11.0f)); \
         } else gb_ = 0; \
         (out_g) = gb_; \
         /* hue lean: slow field, most of the band stays neutral */ \
