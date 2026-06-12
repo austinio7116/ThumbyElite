@@ -323,6 +323,9 @@ void combat_finalize_kill(int shooter, int victim) {
         loot_on_kill(v->pos, v->vel, v->tier, v);
         if (shooter == PLAYER)
             mission_on_kill(v->tier, v->is_mark != 0, v->is_civilian != 0);
+        /* Warzone: the contract is the ZONE, so allied kills count too. */
+        if (v->war_fac && v->team == TEAM_HOSTILE)
+            mission_warzone_enemy_down();
     }
     if (shooter == PLAYER && victim != PLAYER) {
         s_killmark = 0.7f;

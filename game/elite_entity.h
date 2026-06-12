@@ -81,6 +81,7 @@ typedef struct {
     float   civ_wp_t;      /* time on current waypoint */
     Vec3    civ_wp_pos;    /* hauler destination */
     uint8_t is_mark;      /* bounty-mission target */
+    uint8_t war_fac;      /* warzone combatant: faction id + 1, else 0 */
     uint8_t ai_state;
     float   ai_timer;
     int8_t  target;       /* entity index, -1 none */

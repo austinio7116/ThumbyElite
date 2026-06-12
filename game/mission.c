@@ -290,15 +290,21 @@ void mission_on_kill(int victim_tier, bool was_bounty_mark,
         } else if (m->type == MIS_ASSASSINATE && was_bounty_mark &&
                    was_civilian) {
             m->done = true;
-        } else if (m->type == MIS_WARZONE && s_war_active &&
-                   !was_civilian && m->count > 0) {
-            /* only kills INSIDE the zone count (set while anchored at
-             * the contested beacon) */
-            m->count--;
-            if (m->count == 0) m->done = true;
         }
     }
     (void)victim_tier;
+}
+
+void mission_warzone_enemy_down(void) {
+    if (!s_war_active) return;
+    for (int i = 0; i < MAX_MISSIONS; i++) {
+        Mission *m = &g_missions[i];
+        if (m->type == MIS_WARZONE && !m->done && m->count > 0) {
+            m->count--;
+            if (m->count == 0) m->done = true;
+            return;
+        }
+    }
 }
 
 int mission_bounty_tier_here(SysAddr a) {

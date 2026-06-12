@@ -97,7 +97,7 @@ static int   s_prev_rock = -1;   /* last cycled rock (stepping state) */
 static int   s_prev_loot = -1;
 static struct {
     int valid, env;
-    uint8_t tier, cls, nw, wpn[3], shv, arv, chaff, turret, police;
+    uint8_t tier, cls, nw, wpn[3], shv, arv, chaff, turret, police, wfac;
     float spd, trn, hull, shd;
 } s_kr;                          /* the kill report (death screen) */
 static bool  s_dead_latch;
@@ -387,30 +387,35 @@ void elite_game_poi_intel(const Poi *poi, PoiIntel *out) {
  * hostile in the zone) — and friendly fire carries police consequences,
  * which is exactly what shooting your own side should do. */
 static void war_spawn_ship(bool ally, int tier) {
-    const SystemInfo *si = system_info();
     Faction enemy = (Faction)0;
     faction_contested(s_addr, &enemy);
+    Faction own = system_faction(s_addr);
     float a = frand(0, 6.2831f);
     float r = frand(450, 850);
     Vec3 pos = v3(cosf(a) * r, frand(-200, 200), sinf(a) * r);
     int cls = ally ? 3 : 2 + (int)(xorshift32() % 3u);
     uint32_t livery = ally
-        ? galaxy_get_seed() ^ (uint32_t)(system_faction(s_addr) * 0x51u)
+        ? galaxy_get_seed() ^ (uint32_t)(own * 0x51u)
         : galaxy_get_seed() ^ (uint32_t)((int)enemy * 0x77u);
     int idx = ship_spawn(hull_mesh(livery, cls), pos,
                          ally ? TEAM_NEUTRAL : TEAM_HOSTILE);
     if (idx > 0) {
         ship_set_tier(idx, tier, cls);
         if (ally) g_ships[idx].is_police = 1;
+        /* faction tag: the HUD names combatants by side, not 'PIRATE',
+         * and war kills count whoever scores them (user req) */
+        g_ships[idx].war_fac = (uint8_t)((ally ? own : enemy) + 1);
     }
-    (void)si;
 }
 
-static void war_spawn_battle(void) {
-    for (int i = 0; i < 3; i++) war_spawn_ship(true, 2 + (i == 0));
-    for (int i = 0; i < 4; i++) war_spawn_ship(false, 2);
+static void war_spawn_battle(int quota) {
+    /* The WHOLE enemy force spawns up front — no reinforcements; the
+     * zone is won when they're all dead (user req). Allies scale a
+     * little with the job. */
+    int allies = 3 + (quota > 5);
+    for (int i = 0; i < allies; i++) war_spawn_ship(true, 2 + (i == 0));
+    for (int i = 0; i < quota - 1; i++) war_spawn_ship(false, 2);
     war_spawn_ship(false, 3);                  /* the wing leader */
-    s_war_wave_t = 0;
     s_war_won_toast = false;
     snprintf(s_scoop_toast, sizeof s_scoop_toast, "WARZONE - ENGAGE");
     s_scoop_toast_t = 3.0f;
@@ -426,7 +431,7 @@ static void spawn_poi_content(void) {
         int left;
         if (mission_warzone_here(s_addr, &left)) {
             mission_warzone_set_active(true);
-            war_spawn_battle();
+            war_spawn_battle(left);
             return;
         }
     }
@@ -1408,28 +1413,10 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
         if (s_anchor_has_poi && s_anchor_poi.kind == POI_BEACON) {
             int left;
             if (mission_warzone_here(s_addr, &left)) {
-                s_war_wave_t += dt;
-                int hostiles = ships_alive_hostile();
-                int allies = 0;
-                for (int i = 1; i < MAX_SHIPS; i++)
-                    if (g_ships[i].alive &&
-                        g_ships[i].team == TEAM_NEUTRAL &&
-                        g_ships[i].is_police) allies++;
-                if (hostiles == 0 && left > 0 && s_war_wave_t > 6.0f) {
-                    int n = left < 3 ? left : 3;
-                    for (int i = 0; i < n; i++)
-                        war_spawn_ship(false, 2 + (i == 0 && left > 4));
-                    s_war_wave_t = 0;
-                    snprintf(s_scoop_toast, sizeof s_scoop_toast,
-                             "ENEMY REINFORCEMENTS");
-                    s_scoop_toast_t = 2.5f;
-                } else if (allies < 2 && left > 2 && s_war_wave_t > 10.0f) {
-                    war_spawn_ship(true, 2);
-                    s_war_wave_t = 0;
-                    snprintf(s_scoop_toast, sizeof s_scoop_toast,
-                             "ALLIED WING JOINS");
-                    s_scoop_toast_t = 2.5f;
-                }
+                /* No reinforcements (user req): the force you saw on
+                 * arrival is the force you fight. The HUD toast keeps
+                 * the count honest. */
+                (void)left;
             }
             /* Completion: warzone_here goes false the moment the quota
              * fills (mission flips done). Say it once. */
@@ -1532,6 +1519,7 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
                 s_kr.hull = k->hull_max;
                 s_kr.shd = k->shield_max;
                 s_kr.police = k->is_police;
+                s_kr.wfac = k->war_fac;
             }
         }
         s_respawn_t -= dt;
@@ -2970,7 +2958,9 @@ void elite_game_draw_overlay(uint16_t *fb) {
             craft_font_draw(fb, envn[s_kr.env & 3], 12, 50, gd);
         } else if (s_kr.valid) {
             snprintf(b, sizeof b, "KILLED BY %s %s",
-                     s_kr.police ? "POLICE" : "PIRATE",
+                     s_kr.wfac ? k_faction_names[(s_kr.wfac - 1) %
+                                                 N_FACTIONS]
+                     : s_kr.police ? "POLICE" : "PIRATE",
                      k_tier_names[s_kr.tier]);
             craft_font_draw(fb, b, 12, 38, gd);
             snprintf(b, sizeof b, "%s CLASS RAIDER",

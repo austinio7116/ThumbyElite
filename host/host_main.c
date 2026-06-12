@@ -1536,21 +1536,27 @@ int main(int argc, char **argv) {
                 int quota = m->count;
                 elite_game_debug_jump(m->target);
                 elite_game_debug_goto_poi(0);       /* beacon */
-                int allies = 0, hostiles = 0;
+                int allies = 0, hostiles = 0, tagged = 0;
                 for (int i = 1; i < MAX_SHIPS; i++) {
                     if (!g_ships[i].alive) continue;
+                    if (g_ships[i].war_fac) tagged++;
                     if (g_ships[i].team == TEAM_HOSTILE) hostiles++;
                     if (g_ships[i].team == TEAM_NEUTRAL &&
                         g_ships[i].is_police) allies++;
                 }
                 printf("[wartest] battle: %d allies vs %d hostiles, "
-                       "quota %d\n", allies, hostiles, quota);
-                WCHECK(allies == 3 && hostiles == 5,
-                       "beacon battle spawns 3v5");
-                /* fight: player kills count the quota down */
+                       "quota %d, faction-tagged %d\n",
+                       allies, hostiles, quota, tagged);
+                WCHECK(hostiles == quota,
+                       "whole enemy force spawns up front");
+                WCHECK(allies == 3 + (quota > 5), "allied wing scales");
+                WCHECK(tagged == allies + hostiles,
+                       "every combatant carries a faction tag");
+                /* the zone counts ANY war kill (allies too) */
                 for (int k = 0; k < quota; k++)
-                    mission_on_kill(2, false, false);
-                WCHECK(m->done && m->count == 0, "quota fills, zone won");
+                    mission_warzone_enemy_down();
+                WCHECK(m->done && m->count == 0,
+                       "zone won when the force is dead");
                 /* payday: rep swings BOTH ways */
                 int8_t own0 = g_rep[m->faction], en0 = g_rep[m->tier];
                 int32_t cr0 = g_player.credits;

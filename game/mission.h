@@ -80,6 +80,9 @@ bool mission_warzone_here(SysAddr a, int *kills_left);
 /* elite_game marks the battle live while anchored at the target beacon
  * (warzone kills only count inside the zone). */
 void mission_warzone_set_active(bool active);
+/* A war-tagged enemy died (ANY killer — allies count: the contract is
+ * to hold the zone, not to do all the killing yourself). */
+void mission_warzone_enemy_down(void);
 /* The recruiter event path: log a warzone contract directly. */
 bool mission_grant_warzone(const SystemInfo *si);
 

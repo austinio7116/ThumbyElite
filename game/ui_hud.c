@@ -11,6 +11,7 @@
 #include "elite_types.h"
 #include "elite_entity.h"
 #include "elite_combat.h"
+#include "mission.h"
 #include "elite_loot.h"
 #include "elite_rocks.h"
 #include "r3d_scene.h"
@@ -291,14 +292,23 @@ static void target_box(uint16_t *fb, int target) {
     /* Two lines: WHO they are (faction colour), then how GOOD they
      * are (tier). All raiders are pirates by trade (user q). */
     {
-        const char *id = t->is_police ? "POLICE"
+        /* Warzone combatants are SOLDIERS, not pirates (user req):
+         * name them by faction, allies in friendly blue. */
+        const char *id = t->war_fac
+                       ? k_faction_names[(t->war_fac - 1) % N_FACTIONS]
+                       : t->is_police ? "POLICE"
                        : t->is_civilian ? "CIVILIAN"
                        : t->is_mark ? "** MARK **" : "PIRATE";
-        uint16_t idc = t->is_police ? RGB565C(90, 180, 255)
+        uint16_t idc = (t->war_fac && t->team == TEAM_HOSTILE)
+                           ? COL_TARGET
+                     : t->is_police ? RGB565C(90, 180, 255)
                      : (t->is_civilian && t->team == TEAM_NEUTRAL)
                            ? RGB565C(110, 230, 110)
                            : COL_TARGET;
-        craft_font_draw(fb, id, 93, 18, idc);
+        int idx2 = 93;
+        int idw = craft_font_width(id);
+        if (idx2 + idw > 127) idx2 = 127 - idw;   /* COALITION fits */
+        craft_font_draw(fb, id, idx2, 18, idc);
         craft_font_draw(fb, k_tier_names[t->tier > 4 ? 4 : t->tier],
                         93, 26, RGB565C(150, 156, 170));
     }

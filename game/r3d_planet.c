@@ -705,31 +705,38 @@ void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
             }
         }
         if (has_rings && imr >= 4.0f) {
-            /* Ring band (ADOPTED): screen-space ellipse at a fixed tilt.
-             * The half above centre passes behind the disc (skipped where
-             * the sphere covers it); the lower half crosses in front.
-             * Radial noise gives banding and a Cassini-style gap. */
+            /* Ring band (ADOPTED): an ellipse at a fixed tilt in the
+             * WORLD-UP frame — rotated by (s_up_sx, s_up_sy) exactly
+             * like the surface texture, so the rings hold their plane
+             * while the ship rolls (user-caught: the first cut was
+             * screen-axis-aligned and would have rolled WITH you). */
             const float tilt = 0.34f;
             const float r_in = 1.30f, r_out = 2.05f;
-            int ry0 = cy - (int)(imr * r_out * tilt) - 1;
-            int ry1 = cy + (int)(imr * r_out * tilt) + 1;
+            /* world-rotated extent isn't axis-aligned: scan the full
+             * square and reject by ring coords */
+            int rw = (int)(imr * r_out) + 1;
+            int ry0 = cy - rw, ry1 = cy + rw;
             if (ry0 < y0) ry0 = y0;
             if (ry1 >= y1) ry1 = y1 - 1;
-            int xw = (int)(imr * r_out) + 1;
-            int rx0 = cx - xw, rx1 = cx + xw;
+            int rx0 = cx - rw, rx1 = cx + rw;
             if (rx0 < 0) rx0 = 0;
             if (rx1 > R3D_FB_W - 1) rx1 = R3D_FB_W - 1;
+            const float rux = s_up_sx, ruy = s_up_sy;
             float lit = 0.35f + 0.65f * (im->lz > 0 ? im->lz : 0);
             for (int py = ry0; py <= ry1; py++) {
-                float wy = (py - imy) * inv_r;
-                float v = wy / tilt;
+                float dy = (py - imy) * inv_r;
                 uint16_t *fr = fb + py * R3D_FB_W;
                 uint16_t *dr = depth + py * R3D_FB_W;
                 for (int px = rx0; px <= rx1; px++) {
-                    float u = (px - imx) * inv_r;
+                    float dx = (px - imx) * inv_r;
+                    /* into the world-up frame (same rotation as the
+                     * texture sampler) */
+                    float u = dx * (-ruy) + dy * rux;
+                    float wy = dx * rux + dy * ruy;   /* world-vertical */
+                    float v = wy / tilt;
                     float rr = sqrtf(u * u + v * v);
                     if (rr < r_in || rr > r_out) continue;
-                    if (wy < 0 && u * u + wy * wy < 1.0f)
+                    if (wy < 0 && dx * dx + dy * dy < 1.0f)
                         continue;                    /* behind the sphere */
                     if (im->d < dr[px]) continue;    /* ties: painter wins */
                     /* soft inner/outer edges + banding + one gap */
