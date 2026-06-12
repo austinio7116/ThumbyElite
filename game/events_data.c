@@ -17,6 +17,7 @@
 
 /* --- 1 DISTRESS HAIL ---------------------------------------------------- */
 static const Op e1_give[]   = { {OP_FUEL,-10,0}, {OP_REP,-1,4},
+                                {OP_LATER,6,0},     /* they repay you */
                                 {OP_RESULT,0,0}, {OP_END,0,0} };
 static const Op e1_demand[] = { {OP_BRANCH,60,3}, {OP_RESULT,1,0}, {OP_END,0,0},
                                 {OP_FUEL,-10,0}, {OP_CR,8,0},
@@ -133,9 +134,10 @@ static const Choice e7_ch[] = {
 };
 
 /* --- 8 CLINIC SHORTFALL -------------------------------------------------- */
-static const Op e8_meds[] = { {OP_CARGO,5,-1}, {OP_REP,-1,5},
+static const Op e8_meds[] = { {OP_CARGO,5,-1}, {OP_REP,-1,5}, {OP_DMG,-20,0},
                               {OP_RESULT,0,0}, {OP_END,0,0} };
-static const Op e8_fund[] = { {OP_REP,-1,3}, {OP_RESULT,1,0}, {OP_END,0,0} };
+static const Op e8_fund[] = { {OP_REP,-1,3}, {OP_DMG,-15,0},
+                              {OP_RESULT,1,0}, {OP_END,0,0} };
 static const Op e8_walk[] = { {OP_RESULT,2,0}, {OP_END,0,0} };
 static const char *const e8_tx[] = {
     "YOUR CRATE OF MEDICINE DISAPPEARS INTO THE WARD. THE MEDIC GRIPS YOUR ARM. PEOPLE HERE WILL REMEMBER YOUR HULL.",
@@ -211,7 +213,7 @@ static const Choice e12_ch[] = {
 /* --- 13 CLAIM ADJUSTED (step 3, dock, oneshot) ---------------------------- */
 static const Op e13_demand[] = { {OP_LORE,2,0}, {OP_FLAG,11,0},
                                  {OP_RESULT,0,0}, {OP_END,0,0} };
-static const Op e13_report[] = { {OP_REP,-1,3}, {OP_FLAG,11,0},
+static const Op e13_report[] = { {OP_REP,-1,3}, {OP_CR,8,0}, {OP_FLAG,11,0},
                                  {OP_RESULT,1,0}, {OP_END,0,0} };
 static const Op e13_quiet[]  = { {OP_CR,20,0}, {OP_FLAG,11,0},
                                  {OP_RESULT,2,0}, {OP_END,0,0} };
@@ -256,11 +258,12 @@ static const Choice e15_ch[] = {
 
 /* --- 16 OLD WAR STORY ------------------------------------------------------ */
 static const Op e16_listen[] = { {OP_REP,-1,2}, {OP_RESULT,0,0}, {OP_END,0,0} };
-static const Op e16_round[]  = { {OP_REP,-1,4}, {OP_RESULT,1,0}, {OP_END,0,0} };
+static const Op e16_round[]  = { {OP_REP,-1,4}, {OP_CARGO,3,1},
+                                 {OP_RESULT,1,0}, {OP_END,0,0} };
 static const Op e16_leave[]  = { {OP_RESULT,2,0}, {OP_END,0,0} };
 static const char *const e16_tx[] = {
     "BY THE THIRD TELLING THE ODDS WERE WORSE AND THE ESCAPE NARROWER. THE LOCALS APPROVE OF YOUR PATIENCE.",
-    "THE WHOLE CORNER DRINKS TO $F AND, SOMEHOW, TO YOU. WORD GETS AROUND.",
+    "THE WHOLE CORNER DRINKS TO $F AND, SOMEHOW, TO YOU. A BOTTLE FOR THE ROAD FINDS ITS WAY INTO YOUR HOLD.",
     "THE STORY FOLLOWS YOU OUT THE DOOR. IT WAS LOUDER THAN THE MUSIC.",
 };
 static const Choice e16_ch[] = {
@@ -287,9 +290,13 @@ static const Choice e17_ch[] = {
 /* ======================= in-space: boarding a derelict ==================== */
 
 /* --- 18 COLD HULL (repeatable) -------------------------------------------- */
-static const Op e18_strip[] = { {OP_BRANCH,60,5}, {OP_BRANCH,38,8},
+static const Op e18_strip[] = { {OP_BRANCH,60,5}, {OP_BRANCH,38,12},
                                 {OP_RESULT,1,0}, {OP_END,0,0}, {OP_END,0,0},
-                                {OP_CARGO,-1,2}, {OP_RESULT,0,0}, {OP_END,0,0},
+                                /* loot: crates, 35% with hardware too */
+                                {OP_CARGO,-1,2}, {OP_BRANCH,35,9},
+                                {OP_RESULT,0,0}, {OP_END,0,0},
+                                {OP_ITEM,0,0}, {OP_RESULT,0,0}, {OP_END,0,0},
+                                /* the lure */
                                 {OP_AMBUSH,2,1}, {OP_RESULT,2,0}, {OP_END,0,0} };
 static const Op e18_rec[]   = { {OP_BRANCH,55,4}, {OP_CR,4,0}, {OP_RESULT,4,0},
                                 {OP_END,0,0},

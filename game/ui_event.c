@@ -12,6 +12,9 @@
 #include "elite_types.h"
 #include "elite_player.h"
 #include "elite_platform.h"
+#include "elite_weapons.h"
+#include "mission.h"
+#include "econ.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -21,6 +24,8 @@
 #define COL_DIM   RGB565C(96, 102, 122)
 #define COL_CRED  RGB565C(255, 200, 60)
 #define COL_GRID  RGB565C(28, 40, 58)
+#define COL_WARN  RGB565C(255, 120, 70)
+#define COL_DATA  RGB565C(110, 200, 220)
 
 #define PORTRAIT 34
 
@@ -153,6 +158,66 @@ void ui_event_draw(uint16_t *fb) {
     for (int x = 2; x < 126; x++) fb[118 * ELITE_FB_W + x] = COL_GRID;
 
     if (s_phase == 1) {
+        /* The receipt: every mechanical change, spelled out — rep and
+         * fuel moves were invisible before (user req). */
+        const EvReceipt *r = events_receipt();
+        char ln[8][28];
+        uint16_t lc[8];
+        int n = 0;
+        if (r->cr) {
+            snprintf(ln[n], sizeof ln[n], "%+d CR", (int)r->cr);
+            lc[n++] = r->cr > 0 ? COL_CRED : COL_WARN;
+        }
+        if (r->later_cr > 0 && n < 8) {
+            snprintf(ln[n], sizeof ln[n], "+%d CR AT NEXT DOCK",
+                     (int)r->later_cr);
+            lc[n++] = COL_CRED;
+        }
+        if ((r->fuel > 0.05f || r->fuel < -0.05f) && n < 8) {
+            snprintf(ln[n], sizeof ln[n], "%+d.%d LY FUEL",
+                     (int)r->fuel,
+                     (int)((r->fuel < 0 ? -r->fuel : r->fuel) * 10) % 10);
+            lc[n++] = r->fuel > 0 ? COL_TXT : COL_WARN;
+        }
+        if (r->hull_pct && n < 8) {
+            snprintf(ln[n], sizeof ln[n], "%+d%% HULL", r->hull_pct);
+            lc[n++] = r->hull_pct > 0 ? COL_TXT : COL_WARN;
+        }
+        for (int i = 0; i < r->n_goods && n < 8; i++) {
+            snprintf(ln[n], sizeof ln[n], "%+d %s", r->goods_d[i],
+                     k_goods[r->goods_id[i]].name);
+            lc[n++] = r->goods_d[i] > 0 ? COL_TXT : COL_WARN;
+        }
+        for (int f = 0; f < N_FACTIONS && n < 8; f++)
+            if (r->rep[f]) {
+                snprintf(ln[n], sizeof ln[n], "%+d REP %s", r->rep[f],
+                         k_faction_names[f]);
+                lc[n++] = r->rep[f] > 0 ? COL_TXT : COL_WARN;
+            }
+        if (r->legal && n < 8) {
+            snprintf(ln[n], sizeof ln[n], "RECORD: %s",
+                     r->legal > 0 ? "FLAGGED" : "CLEANED");
+            lc[n++] = r->legal > 0 ? COL_WARN : COL_TXT;
+        }
+        if (r->item_type >= 0 && n < 8) {
+            snprintf(ln[n], sizeof ln[n], "SALVAGED: %s",
+                     item_name(r->item_type));
+            lc[n++] = COL_DATA;
+        }
+        if (r->lore_id >= 0 && n < 8) {
+            snprintf(ln[n], sizeof ln[n], "DATABASE UPDATED");
+            lc[n++] = COL_DATA;
+        }
+        if (r->ambush_n && n < 8) {
+            snprintf(ln[n], sizeof ln[n], "%d HOSTILES INBOUND",
+                     r->ambush_n);
+            lc[n++] = COL_WARN;
+        }
+        if (n > 6) n = 6;
+        int ry = 116 - 7 * n;
+        for (int i = 0; i < n; i++)
+            craft_font_draw(fb, ln[i], 6, ry + 7 * i, lc[i]);
+
         char h[20];
         snprintf(h, sizeof h, "%s:CONTINUE", plat_menu_btn(MB_A));
         craft_font_draw(fb, h, 4, 121, COL_DIM);

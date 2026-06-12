@@ -30,6 +30,9 @@ enum {
     OP_RESULT,    /* aftermath text = event->texts[a] (last one wins)      */
     OP_LEGAL,     /* legal status += a (0 clean / 1 offender / 2 fugitive) */
     OP_CONTRA,    /* confiscate all illegal cargo                          */
+    OP_ITEM,      /* salvaged hardware into the rack (a = quality floor;
+                     rack full -> 100 CR scrap value instead)              */
+    OP_LATER,     /* a*25 CR arrives at the NEXT dock (deferred transfer)  */
 };
 
 typedef struct { uint8_t op; int8_t a; int8_t b; } Op;
@@ -109,6 +112,28 @@ bool events_choice_enabled(const Event *ev, int choice);
  * or -1 (generic). Outcome is deterministic per visit (branch rng is
  * seeded by the pick) — choosing, reloading and rechoosing can't reroll. */
 int events_run_choice(const Event *ev, int choice);
+
+/* What the last choice actually changed — the aftermath panel prints
+ * these so no outcome is ever invisible (user req). */
+typedef struct {
+    int32_t cr;               /* credits delta (cost included)         */
+    int32_t later_cr;         /* arrives at next dock                  */
+    float   fuel;             /* LY delta                              */
+    int     hull_pct;         /* hull delta, % of max                  */
+    int8_t  rep[3];           /* per-faction rep delta                 */
+    int     legal;            /* legal-status delta                    */
+    int8_t  goods_d[3];       /* up to 3 changed goods...              */
+    uint8_t goods_id[3];
+    uint8_t n_goods;
+    int     lore_id;          /* revealed fragment, -1 none            */
+    int     item_type;        /* salvaged hardware type, -1 none       */
+    uint8_t ambush_n;         /* hostiles now inbound                  */
+} EvReceipt;
+const EvReceipt *events_receipt(void);
+
+/* Deferred transfers (OP_LATER): the dock pays them out. */
+int32_t events_pending_take(void);            /* returns + clears      */
+int32_t *events_save_pending(void);           /* save bridge           */
 
 /* Expand $-tokens of this event's pick (NPC name etc.) into out. */
 void events_expand(const char *tmpl, char *out, int cap);

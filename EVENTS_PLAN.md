@@ -311,3 +311,8 @@ planets life immediately while the narrative side matures.
    examples of the proposed improved models and approved a direction.
 3. **Face variety** — more helmet/hair variety, more species/races.
    Same rule: 100-example contact sheets before changing the live look.
+4. **Planets even more varied and beautiful** (user, 2026-06-12) — more
+   planet types/palettes/features. Contact-sheet rule applies
+   (`ELITE_PLANETSHEET` harness already exists for grids).
+5. **Space more beautiful generally** (user, 2026-06-12) — skybox/nebula/
+   starfield/lighting polish. Show comparisons before changing the look.

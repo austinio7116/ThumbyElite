@@ -16,7 +16,7 @@
 #include <string.h>
 
 #define SAVE_MAGIC   0x454C4954u   /* 'ELIT' */
-#define SAVE_VERSION 5   /* v5: event/lore bits appended (v3/v4 migrate) */
+#define SAVE_VERSION 6   /* v6: pending event transfer (v3/v4/v5 migrate) */
 
 typedef struct {
     uint32_t magic, version, len, crc;
@@ -32,9 +32,10 @@ typedef struct {
     int8_t   rep[N_FACTIONS];
     uint8_t  pad2;
     Mission  missions[MAX_MISSIONS];
-    /* v5: appended at the END so older saves migrate by zero-fill. */
+    /* v5+: appended at the END so older saves migrate by zero-fill. */
     uint8_t  event_bits[EVENTS_BITS_LEN];      /* lore/flags/oneshots */
     uint8_t  event_recent[EVENTS_RECENT_LEN];  /* anti-repeat ring    */
+    int32_t  event_pending;                    /* v6: OP_LATER credits */
 } SavePayload;
 
 typedef struct {
@@ -66,19 +67,24 @@ static bool read_blob(SaveBlob *blob) {
     if (blob->h.crc != crc32_simple((const uint8_t *)&blob->p,
                                     (int)blob->h.len))
         return false;
+    /* Additive tails by version: v5 lacks the pending transfer, v4
+     * also lacks the event bits. Zero-fill what each is missing. */
+    size_t v5_len = sizeof(SavePayload) - sizeof(int32_t);
+    size_t v4_len = v5_len - EV_TAIL;
     if (blob->h.version == SAVE_VERSION) {
         if (blob->h.len != sizeof(SavePayload)) return false;
+    } else if (blob->h.version == 5) {
+        if (blob->h.len != v5_len) return false;
+        memset((uint8_t *)&blob->p + v5_len, 0, sizeof(int32_t));
     } else if (blob->h.version == 4) {
-        /* v4 -> v5: event bits appended at the end — arrive zeroed. */
-        if (blob->h.len != sizeof(SavePayload) - EV_TAIL) return false;
-        memset((uint8_t *)&blob->p + blob->h.len, 0, EV_TAIL);
+        if (blob->h.len != v4_len) return false;
+        memset((uint8_t *)&blob->p + v4_len, 0,
+               sizeof(SavePayload) - v4_len);
     } else if (blob->h.version == 3) {
         /* v3 -> v4: PlayerState grew util_eq[2] -> [4]. The payload on
          * disk is 16 bytes shorter and everything after util_eq sits
          * earlier. Migrate by splitting at the insertion point. */
-        if (blob->h.len + 2 * sizeof(WeaponInst) !=
-            sizeof(SavePayload) - EV_TAIL)
-            return false;
+        if (blob->h.len + 2 * sizeof(WeaponInst) != v4_len) return false;
         uint8_t *p = (uint8_t *)&blob->p;
         size_t cut = offsetof(SavePayload, player) +
                      offsetof(PlayerState, util_eq) +
@@ -87,7 +93,7 @@ static bool read_blob(SaveBlob *blob) {
         size_t tail = blob->h.len - cut;
         memmove(p + cut + grow, p + cut, tail);
         memset(p + cut, 0, grow);          /* new bays arrive empty */
-        memset(p + blob->h.len + grow, 0, EV_TAIL);   /* then v4 -> v5 */
+        memset(p + v4_len, 0, sizeof(SavePayload) - v4_len);
     } else {
         return false;
     }
@@ -111,6 +117,7 @@ bool save_write(SysAddr addr, int station, int kills) {
     memcpy(b.p.missions, g_missions, sizeof b.p.missions);
     memcpy(b.p.event_bits, events_save_bits(), EVENTS_BITS_LEN);
     memcpy(b.p.event_recent, events_save_recent(), EVENTS_RECENT_LEN);
+    b.p.event_pending = *events_save_pending();
     b.h.magic = SAVE_MAGIC;
     b.h.version = SAVE_VERSION;
     b.h.len = sizeof(SavePayload);
@@ -135,6 +142,7 @@ bool save_load(SaveMeta *out) {
     memcpy(g_missions, b.p.missions, sizeof b.p.missions);
     memcpy(events_save_bits(), b.p.event_bits, EVENTS_BITS_LEN);
     memcpy(events_save_recent(), b.p.event_recent, EVENTS_RECENT_LEN);
+    *events_save_pending() = b.p.event_pending;
     out->addr = b.p.addr;
     out->station = b.p.station;
     out->kills = b.p.kills;

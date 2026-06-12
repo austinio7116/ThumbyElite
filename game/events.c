@@ -7,6 +7,7 @@
 #include "econ.h"
 #include "elite_player.h"
 #include "elite_entity.h"
+#include "elite_weapons.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -35,6 +36,7 @@ static uint8_t  s_bits[EVENTS_BITS_LEN];
 static uint8_t  s_recent[EVENTS_RECENT_LEN];   /* last picks, anti-repeat */
 static uint8_t  s_recent_at;
 static uint32_t s_salt;
+static int32_t  s_pending_cr;    /* OP_LATER transfers, paid at dock */
 
 /* Current pick (the modal + run_choice operate on this). */
 static const SystemInfo *s_si;
@@ -63,6 +65,7 @@ void events_init(void) {
     memset(s_recent, 0xFF, sizeof s_recent);
     s_recent_at = 0;
     s_salt = 0;
+    s_pending_cr = 0;
 }
 
 /* --- gates -------------------------------------------------------------- */
@@ -194,10 +197,64 @@ void events_expand(const char *tmpl, char *out, int cap) {
 }
 
 /* --- outcome interpreter -------------------------------------------------*/
+static EvReceipt s_rcpt;
+const EvReceipt *events_receipt(void) { return &s_rcpt; }
+int32_t *events_save_pending(void) { return &s_pending_cr; }
+int32_t events_pending_take(void) {
+    int32_t p = s_pending_cr;
+    s_pending_cr = 0;
+    return p;
+}
+
+/* Snapshot -> diff: the receipt reports what REALLY changed (clamps,
+ * confiscations and cargo-space limits included). */
+typedef struct {
+    int32_t cr; float fuel, hull; int legal;
+    int8_t rep[N_FACTIONS]; uint8_t cargo[N_GOODS];
+    int32_t pending;
+} EvSnap;
+
+static void ev_snap(EvSnap *s) {
+    s->cr = g_player.credits;
+    s->fuel = g_player.fuel;
+    s->hull = g_ships[PLAYER].hull;
+    s->legal = g_player.legal;
+    memcpy(s->rep, g_rep, sizeof s->rep);
+    memcpy(s->cargo, g_player.cargo, sizeof s->cargo);
+    s->pending = s_pending_cr;
+}
+
+static void ev_diff(const EvSnap *a) {
+    s_rcpt.cr = g_player.credits - a->cr;
+    s_rcpt.later_cr = s_pending_cr - a->pending;
+    s_rcpt.fuel = g_player.fuel - a->fuel;
+    float hm = g_ships[PLAYER].hull_max;
+    s_rcpt.hull_pct = hm > 0
+        ? (int)((g_ships[PLAYER].hull - a->hull) * 100.0f / hm + 0.5f) : 0;
+    s_rcpt.legal = (int)g_player.legal - a->legal;
+    for (int f = 0; f < N_FACTIONS; f++)
+        s_rcpt.rep[f] = (int8_t)(g_rep[f] - a->rep[f]);
+    s_rcpt.n_goods = 0;
+    for (int g = 0; g < N_GOODS && s_rcpt.n_goods < 3; g++)
+        if (g_player.cargo[g] != a->cargo[g]) {
+            s_rcpt.goods_id[s_rcpt.n_goods] = (uint8_t)g;
+            s_rcpt.goods_d[s_rcpt.n_goods] =
+                (int8_t)(g_player.cargo[g] - a->cargo[g]);
+            s_rcpt.n_goods++;
+        }
+}
+
 int events_run_choice(const Event *ev, int choice) {
     if (!events_choice_enabled(ev, choice)) return -1;
     const Choice *c = &ev->choices[choice];
     if (c->cost > 0) g_player.credits -= c->cost;
+
+    memset(&s_rcpt, 0, sizeof s_rcpt);
+    s_rcpt.lore_id = -1;
+    s_rcpt.item_type = -1;
+    EvSnap snap;
+    ev_snap(&snap);
+    snap.cr += c->cost;            /* receipt includes the price paid */
 
     /* Branch rng: seeded at pick time + choice — same visit, same fate. */
     uint32_t rng = mix32(s_outcome_seed ^ (uint32_t)(choice * 0x9E3779B9u));
@@ -206,7 +263,7 @@ int events_run_choice(const Event *ev, int choice) {
     for (int pc = 0; ops && pc < 32; pc++) {
         const Op *op = &ops[pc];
         switch (op->op) {
-        case OP_END: return result;
+        case OP_END: ev_diff(&snap); return result;
         case OP_CR: {
             g_player.credits += (int32_t)op->a * 25;
             if (g_player.credits < 0) g_player.credits = 0;
@@ -243,12 +300,15 @@ int events_run_choice(const Event *ev, int choice) {
             Ship *p = &g_ships[PLAYER];
             p->hull -= p->hull_max * (float)op->a * 0.01f;
             if (p->hull < 1.0f) p->hull = 1.0f;   /* events never kill */
+            if (p->hull > p->hull_max) p->hull = p->hull_max;
             break;
         }
         case OP_AMBUSH:
             elite_game_event_ambush(op->a, op->b);
+            s_rcpt.ambush_n = (uint8_t)(s_rcpt.ambush_n + op->a);
             break;
         case OP_LORE:
+            if (!bit(op->a & 127)) s_rcpt.lore_id = op->a & 127;
             bit_set(op->a & 127);
             break;
         case OP_FLAG:
@@ -272,9 +332,40 @@ int events_run_choice(const Event *ev, int choice) {
             for (int g = 0; g < N_GOODS; g++)
                 if (k_goods[g].flags & GOOD_ILLEGAL) g_player.cargo[g] = 0;
             break;
+        case OP_ITEM: {
+            /* Salvaged hardware, rolled like a combat drop. Rack full
+             * pays scrap value instead — never a dead reward. */
+            int slot = player_free_rack_slot();
+            if (slot < 0) { g_player.credits += 100; break; }
+            WeaponInst w;
+            memset(&w, 0, sizeof w);
+            rng = mix32(rng);
+            w.type = (uint8_t)(rng % WPN_COUNT);
+            rng = mix32(rng);
+            int q = (int)(rng % 100u);
+            int rolled = (q < 50) ? Q_SALVAGED
+                       : (q < 80) ? Q_STANDARD
+                       : (q < 93) ? Q_REINFORCED
+                       : (q < 99) ? Q_MILITARY : Q_PROTOTYPE;
+            if (rolled < op->a) rolled = op->a;
+            w.quality = (uint8_t)rolled;
+            rng = mix32(rng);
+            w.integrity = (uint8_t)(20 + rng % 55);
+            w.ammo_flag = 1;
+            w.ammo_lo = (uint8_t)(k_weapons[w.type].ammo_max * 2 / 5);
+            w.in_use = 1;
+            g_player.salvage[slot] = w;
+            s_rcpt.item_type = w.type;
+            break;
+        }
+        case OP_LATER:
+            s_pending_cr += (int32_t)op->a * 25;
+            break;
         default:
+            ev_diff(&snap);
             return result;
         }
     }
+    ev_diff(&snap);
     return result;
 }

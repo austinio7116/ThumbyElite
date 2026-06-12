@@ -1762,6 +1762,14 @@ static void dock_finish(void) {
         snprintf(buf, sizeof buf, "MISSION PAY %dCR", paid);
         station_toast(buf);
     }
+    /* Deferred event transfers land here (OP_LATER — favours repaid). */
+    int32_t owed = events_pending_take();
+    if (owed > 0) {
+        g_player.credits += owed;
+        char buf[24];
+        snprintf(buf, sizeof buf, "TRANSFER +%dCR", (int)owed);
+        station_toast(buf);
+    }
     save_write(s_addr, s_anchor_poi.index, combat_kills());
     s_state = ST_DOCKED;
 }

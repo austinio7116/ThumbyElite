@@ -768,8 +768,9 @@ int main(int argc, char **argv) {
         if (chdir("/tmp/elite_evtest") != 0) { perror("chdir"); return 1; }
         int fails = 0;
 #define EVCHECK(cond, name) do { \
-        printf("[evtest] %-34s %s\n", name, (cond) ? "PASS" : "FAIL"); \
-        if (!(cond)) fails++; } while (0)
+        int ev_ok_ = !!(cond);   /* evaluate ONCE — conds have side effects */ \
+        printf("[evtest] %-34s %s\n", name, ev_ok_ ? "PASS" : "FAIL"); \
+        if (!ev_ok_) fails++; } while (0)
 
         galaxy_set_seed(42);
         player_init();
@@ -1047,6 +1048,62 @@ int main(int argc, char **argv) {
                 }
                 EVCHECK(ff != NULL, "familiar face returns");
             }
+        }
+
+        /* receipt + tangible outcomes (A+B) */
+        {
+            events_init();
+            g_player.credits = 1000;
+            g_player.fuel = 5.0f;
+            g_ships[PLAYER].hull_max = 100.0f;
+            g_ships[PLAYER].hull = 50.0f;
+            /* clinic: rep AND a hull patch now, and the receipt says so */
+            const Event *ev;
+            FIND_EV(si_any, 8, ev);
+            EVCHECK(ev != NULL, "clinic reachable");
+            if (ev) {
+                int8_t rep0 = g_rep[system_faction(si_any.addr)];
+                events_run_choice(ev, 1);        /* FUND THE WARD */
+                const EvReceipt *r = events_receipt();
+                EVCHECK(r->cr == -100 && r->hull_pct == 15 &&
+                        g_ships[PLAYER].hull > 50.0f &&
+                        g_rep[system_faction(si_any.addr)] == rep0 + 3,
+                        "fund ward: -100cr +15% hull +3 rep");
+            }
+            /* distress GIVE: fuel out now, credits at next dock */
+            FIND_EV(si_any, 1, ev);
+            if (ev) {
+                events_run_choice(ev, 0);        /* GIVE THEM FUEL */
+                const EvReceipt *r = events_receipt();
+                EVCHECK(r->fuel < -0.9f && r->later_cr == 150 &&
+                        *events_save_pending() == 150,
+                        "give fuel: -1.0ly +150cr deferred");
+                EVCHECK(events_pending_take() == 150 &&
+                        *events_save_pending() == 0,
+                        "pending transfer pays out once");
+            }
+            /* cold hull: hardware salvage lands in the rack eventually */
+            int item_runs = 0, item_hits = 0;
+            for (uint32_t s2 = 0; s2 < 400000u && item_runs < 40; s2++) {
+                events_init(); events_set_salt(s2);
+                const Event *e2 = events_roll_space(&si_any);
+                if (!e2 || e2->id != 18) continue;
+                item_runs++;
+                memset(g_player.salvage, 0, sizeof g_player.salvage);
+                for (int g = 0; g < N_GOODS; g++) g_player.cargo[g] = 0;
+                events_run_choice(e2, 0);        /* STRIP THE HOLD */
+                if (events_receipt()->item_type >= 0) {
+                    item_hits++;
+                    bool racked = false;
+                    for (int sl = 0; sl < MAX_SALVAGE; sl++)
+                        if (g_player.salvage[sl].in_use) racked = true;
+                    if (!racked) item_hits = -999;   /* receipt lied */
+                }
+            }
+            printf("[evtest] item runs=%d hardware=%d\n",
+                   item_runs, item_hits);
+            EVCHECK(item_runs == 40 && item_hits > 0,
+                    "derelict strips can pay in hardware");
         }
 
         /* save round-trip carries lore bits (v5) */

@@ -19,7 +19,7 @@ roll). Same-visit outcomes are fixed (no save-scum rerolls).
 
 | # | Event | Offered when | Choice | Outcome |
 |---|-------|--------------|--------|---------|
-| 1 | DISTRESS HAIL | always | GIVE THEM FUEL *(needs ≥2.0 LY)* | −1.0 LY fuel, +4 REP local |
+| 1 | DISTRESS HAIL | always | GIVE THEM FUEL *(needs ≥2.0 LY)* | −1.0 LY fuel, +4 REP local, **+150 CR wired to your next dock** |
 | | | | DEMAND PAYMENT *(needs ≥2.0 LY)* | 60%: −1.0 LY, **+200 CR** · 40%: nothing ("can't pay") |
 | | | | TURN AWAY | −2 REP local |
 | 2 | CUSTOMS SWEEP | lawful gov + carrying illegal | SUBMIT TO SEARCH | lose all illegal cargo, −150 CR |
@@ -38,15 +38,15 @@ roll). Same-visit outcomes are fixed (no save-scum rerolls).
 | 7 | THE PREACHER *(oneshot)* | always | LISTEN | **LORE 5** |
 | | | | DONATE (25 CR) | LORE 5 + FLAG 2 (future hook) |
 | | | | MOVE ALONG | nothing |
-| 8 | CLINIC SHORTFALL | always | DONATE MEDICINE *(needs MEDICINE)* | −1 MEDICINE, +5 REP local |
-| | | | FUND THE WARD (100 CR) | +3 REP local |
+| 8 | CLINIC SHORTFALL | always | DONATE MEDICINE *(needs MEDICINE)* | −1 MEDICINE, +5 REP local, **+20% hull patched** |
+| | | | FUND THE WARD (100 CR) | +3 REP local, **+15% hull patched** |
 | | | | NOT YOUR PROBLEM | nothing |
 | 9 | REGISTRY ERROR *(oneshot)* | always | READ THE FILE | **LORE 4** |
 | | | | DELETE IT | FLAG 3 (future hook) |
 | 10 | DOCKSIDE WAGER | always | TAKE THE BET (150 CR) | 50%: +300 CR back (net **+150**) · 50%: net −150 |
 | | | | DECLINE | nothing |
 | 13 | CLAIM ADJUSTED *(arc finale, oneshot)* | took the retainer (FLAG 10) | DEMAND ANSWERS | **LORE 2**, FLAG 11 → unlocks #21 |
-| | | | REPORT THE SHIP | +3 REP local, FLAG 11 |
+| | | | REPORT THE SHIP | +3 REP local, **+200 CR bounty voucher**, FLAG 11 |
 | | | | SAY NOTHING | **+500 CR** hush money, FLAG 11 |
 
 ## Bar encounters (TRIG_BAR)
@@ -63,7 +63,7 @@ roll). Same-visit outcomes are fixed (no save-scum rerolls).
 | 15 | THE NAVIGATOR | always | BUY HER A ROUND (50 CR) | **+1.5 LY fuel** |
 | | | | NOT TONIGHT | nothing |
 | 16 | OLD WAR STORY | always | LISTEN | +2 REP local |
-| | | | BUY THE ROUND (25 CR) | +4 REP local |
+| | | | BUY THE ROUND (25 CR) | +4 REP local, **+1 LIQUOR** ("for the road") |
 | | | | SLIP AWAY | nothing |
 | 17 | THE FIXER | rough gov + wanted | PAY THE FIXER (400 CR) | 80%: **record wiped clean** · 20%: scammed |
 | | | | WALK ON | nothing |
@@ -74,7 +74,7 @@ roll). Same-visit outcomes are fixed (no save-scum rerolls).
 
 | # | Event | Offered when | Choice | Outcome |
 |---|-------|--------------|--------|---------|
-| 18 | COLD HULL | always | STRIP THE HOLD *(needs cargo space)* | 60%: **+2 random good** · 25%: nothing · 15%: **lure — 2-ship ambush** |
+| 18 | COLD HULL | always | STRIP THE HOLD *(needs cargo space)* | 60%: **+2 random good**, 35% of those **+ salvaged hardware into the rack** · 25%: nothing · 15%: **lure — 2-ship ambush** |
 | | | | PULL THE RECORDER | 55%: LORE 1 · 45%: +100 CR (sold logs) |
 | | | | LEAVE IT BE | nothing |
 | 19 | THE LAST POD *(oneshot)* | always | OPEN IT | **LORE 6**, FLAG 12 (future hook) |
@@ -113,25 +113,16 @@ yet) · 13 stowaway repaid
 
 ---
 
-## Known thin spots (user feedback 2026-06-12: "a lot appear to have no
-real outcome — funding the hospital never does anything")
+## Outcome visibility & tangible rewards — IMPLEMENTED 2026-06-12 (A+B)
 
-Rep-only outcomes are real but **invisible** — nothing tells the player
-rep moved or what rep buys. Candidates and proposed fixes, pending
-approval:
-
-| Event/choice | Today | Proposal |
-|---|---|---|
-| #8 FUND THE WARD | +3 rep | + the clinic patches your ship: **free hull repair (+15%)**; meds donation also earns a **crate of MEDICINE-grade supplies back later** or a fee waiver |
-| #16 OLD WAR STORY | rep only | the veteran's tip: **+1 LIQUOR** ("for the road") or a bounty-mark intel hint |
-| #23 ROUTINE SWEEP | +1 rep | patrol escort: **shield tops up free** on next dock, or simply drop the event |
-| #1 GIVE THEM FUEL | rep for real fuel | they remember you: small **deferred CR transfer** at next dock ("the $S run paid its debt") |
-| #13 REPORT THE SHIP | rep only | + **bounty voucher CR** for the report |
-
-Two engine-level options (can do both):
-- **A. Show the deltas.** The aftermath panel lists what actually changed:
-  `+4 REP COALITION`, `-1.0 LY`, `+2 FOOD`, `RECORD CLEAN`. One UI change
-  makes every existing outcome legible — likely the highest-value fix.
-- **B. Item rewards (new op `OP_ITEM`).** Events can drop a salvaged
-  weapon/equipment instance into the rack (like combat loot canisters):
-  derelict strips and big favours can pay in hardware, not just credits.
+- **A. The receipt.** The aftermath panel now lists every mechanical
+  change: `+150 CR AT NEXT DOCK`, `-1.0 LY FUEL`, `+15% HULL`,
+  `+3 REP DOMINION`, `+2 FOOD`, `RECORD: CLEANED`, `SALVAGED: AUTOCANNON`,
+  `DATABASE UPDATED`, `2 HOSTILES INBOUND`. Diffed from real state, so
+  clamps and confiscations report what actually happened.
+- **B. New ops.** `OP_ITEM` drops salvaged hardware into the rack
+  (combat-loot quality rolls; rack full → 100 CR scrap). `OP_LATER`
+  defers credits to the next dock ("TRANSFER +150CR" toast), persisted
+  in the save (v6). Buffs applied: #1, #8, #13, #16, #18 (bold above).
+- #23 ROUTINE SWEEP stays rep-only — the receipt makes +1 REP visible,
+  which was the actual complaint.
