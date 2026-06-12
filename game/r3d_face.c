@@ -82,12 +82,25 @@ static const uint16_t k_skin_saur[4] = {
 static const uint16_t k_hair_punk[3] = {
     RGB565C(60, 200, 190), RGB565C(220, 80, 160), RGB565C(235, 235, 235),
 };
+
+/* ellipse half-width at normalised row ny (clamped) — hair masses reuse
+ * the skull's profile so they follow it instead of boxing it */
+static int ell_w(int rx, float ny) {
+    if (ny < -1.0f) ny = -1.0f;
+    if (ny > 1.0f) ny = 1.0f;
+    return (int)((float)rx * sqrtf(1.0f - ny * ny));
+}
 #endif
 
 void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
                int kind) {
     FCtx c = { fb, bx, by, size };
     FRng r = { seed ? seed : 1u };
+#ifdef ELITE_STYLE_LAB
+    /* style-1 extras draw from their own stream so the style-0 fr_n/fr_pct
+     * sequence is never disturbed (style-0 must stay byte-identical) */
+    FRng r2 = { (seed ? seed : 1u) * 2654435761u };
+#endif
     float S = (float)size;
 
     int synth = (kind != NK_MYSTIC) && fr_pct(&r, 10);
@@ -114,7 +127,8 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
         if (species == 3) { skin = k_skin_saur[fr_n(&r, 4)];
                             iris = RGB565C(230, 190, 60); }
         if (species == 4) skin = shade(k_skin[fr_n(&r, 6)], 95);
-        if (species <= 1 && fr_pct(&r, 14))
+        if ((species <= 1 || species == 4) && kind != NK_MYSTIC &&
+            fr_pct(&r, 14))                  /* not under mystic hoods */
             hair = k_hair_punk[fr_n(&r, 3)];
         skin_d = shade(skin, 72);
         skin_l = shade(skin, 116);
@@ -152,6 +166,12 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
     if (kind == NK_OFFICIAL)                       /* rank stripe */
         fspan(&c, cx - (int)(S * 0.2f), cx + (int)(S * 0.2f),
               sh_y + 2, RGB565C(200, 170, 60));
+#ifdef ELITE_STYLE_LAB
+    if (s_style == 1 && species == 4)            /* heavyworlder: bull neck */
+        frect(&c, cx - (int)(S * 0.16f), cy + ry - (int)(S * 0.10f),
+              (int)(S * 0.32f) + 1, (int)(S * 0.14f), skin_d);
+    else
+#endif
     frect(&c, cx - (int)(S * 0.09f), cy + ry - (int)(S * 0.10f),
           (int)(S * 0.18f) + 1, (int)(S * 0.14f), skin_d);   /* neck */
 
@@ -160,6 +180,10 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
         float ny = (float)(y - cy) / (float)ry;
         float w = (float)rx * sqrtf(1.0f - ny * ny);
         if (ny > 0.15f) w *= 1.0f - jaw * (ny - 0.15f) / 0.85f;
+#ifdef ELITE_STYLE_LAB
+        if (s_style == 1 && species == 4 && ny > 0.0f)
+            w *= 1.0f + 0.22f * 4.0f * ny * (1.0f - ny);     /* jowls */
+#endif
         int wi = (int)w;
         if (wi < 1) continue;
         fspan(&c, cx - wi, cx + wi, y, skin);
@@ -178,13 +202,10 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
     int hood = (kind == NK_MYSTIC) ? fr_pct(&r, 80) : fr_pct(&r, 6);
     int helmet = 0, breather = 0;
 #ifdef ELITE_STYLE_LAB
-    int mohawk = 0, longhair = 0;
     if (s_style == 1 && !hood && (species <= 1 || species == 4)) {
         int g = fr_n(&r, 100);
         helmet   = g < 14;
         breather = g >= 14 && g < 24;
-        mohawk   = g >= 24 && g < 33;
-        longhair = g >= 33 && g < 46;
     }
 #endif
     if (!hood && !synth && !helmet && species < 2) {
@@ -198,7 +219,8 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
     int bald = synth || fr_pct(&r, 18);
     int hl = (int)(S * (0.08f + 0.07f * (float)fr_n(&r, 3) / 2.0f));
 #ifdef ELITE_STYLE_LAB
-    if (s_style == 1 && (helmet || mohawk || longhair || species >= 2)) {
+    if (s_style == 1 && (helmet || species >= 2 ||
+                         (!hood && !bandana && !cap && !bald))) {
         if (helmet) {
             /* full helm: dome to below the ears + bright rim; the visor
              * band lands at the eye stage. */
@@ -214,36 +236,192 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
                       y > hb - 2 ? shade(hm, 140) : hm);
             }
             fpx(&c, cx + rx - 1, cy - ry + 2, RGB565C(255, 90, 60));
-        } else if (mohawk) {
-            int mh = (int)(S * 0.12f);
-            for (int y = cy - ry - mh; y < cy - ry + (int)(S * 0.10f); y++)
-                fspan(&c, cx - 1, cx + 1, y, hair);
-        } else if (longhair) {
-            for (int y = cy - ry - 1; y < cy - ry + hl; y++) {
-                float nyh = (float)(y - cy) / (float)ry;
-                if (nyh < -1.0f) nyh = -1.0f;
-                int wi = (int)((float)rx * sqrtf(1.0f - nyh * nyh)) + 1;
-                fspan(&c, cx - wi, cx + wi, y, hair);
-            }
-            int hb2 = cy + (int)(ry * 0.7f);
-            for (int y = cy - ry + hl; y <= hb2; y++) {
-                float nyh = (float)(y - cy) / (float)ry;
-                if (nyh > 0.99f) nyh = 0.99f;
-                int wi = (int)((float)rx * sqrtf(1.0f - nyh * nyh));
-                frect(&c, cx - wi - 3, y, 3, 1, hair);
-                frect(&c, cx + wi, y, 3, 1, hair);
-            }
         } else if (species == 2) {
-            /* feather crest: spikes off the crown */
-            uint16_t fc = shade(skin, 120);
-            for (int k = -2; k <= 2; k++) {
-                int hgt = 3 + ((k & 1) ? 1 : 3);
-                frect(&c, cx + k * 3 - 1, cy - ry - hgt, 2, hgt + 2, fc);
+            /* feather crest: plumes ROOTED ON THE SKULL ARC (not floated
+             * over it), swept backwards — back plumes drawn first and
+             * darker so the overlap between neighbours reads */
+            uint16_t fc = shade(skin, 124), fd = shade(skin, 84);
+            int dir = fr_pct(&r2, 50) ? 1 : -1;
+            for (int k = 3; k >= 0; k--) {
+                int bxo = 2 * k - 5;                 /* front → back */
+                if (bxo > rx - 2) bxo = rx - 2;
+                if (bxo < 2 - rx) bxo = 2 - rx;
+                float fx = (float)bxo / (float)rx;
+                int ys = cy - (int)((float)ry *
+                                    sqrtf(1.0f - fx * fx));
+                int sx = cx + dir * bxo;
+                int len = 6 - k;                     /* front plumes taller */
+                uint16_t col = (k & 1) ? fd : fc;
+                for (int t = 0; t <= len; t++) {
+                    float f = (float)t / (float)len;
+                    int x = sx + dir * (int)(f * f * (float)(2 + k));
+                    int y = ys + 1 - t;
+                    fpx(&c, x, y, col);
+                    fpx(&c, x + dir, y, col);        /* 2px-thick plume */
+                    if (t == len) fpx(&c, x + dir, y - 1, col); /* tip */
+                }
             }
         } else if (species == 3) {
-            /* saurian crown ridges */
-            for (int k = -2; k <= 2; k++)
-                frect(&c, cx + k * 3 - 1, cy - ry - 1, 2, 3, skin_d);
+            /* crown ridge: serrated fin — wide-based teeth rooted on the
+             * skull arc, fusing into one mass, tall in the centre */
+            static const int hgt[5] = { 2, 4, 5, 4, 2 };
+            for (int k = -2; k <= 2; k++) {
+                int h = hgt[k + 2], sx = cx + k * 3;
+                float fx = (float)(k * 3) / (float)rx;
+                if (fx > 0.95f) fx = 0.95f;
+                if (fx < -0.95f) fx = -0.95f;
+                int ys = cy - (int)((float)ry *
+                                    sqrtf(1.0f - fx * fx));
+                for (int i = 0; i <= h; i++) {
+                    int half = i / 2;                /* fuses at the base */
+                    fspan(&c, sx - half, sx + half, ys - h + i, skin_d);
+                    fpx(&c, sx - half, ys - h + i, shade(skin, 108));
+                }
+            }
+        } else {
+            /* hair proper: every style starts from a crown mass that
+             * follows the skull profile and overhangs it 1-2px; a darker
+             * underside / parting row keeps it from reading as flat fill.
+             * 0 crop, 1 swept parting, 2 curly, 3 bob+bangs, 4 long,
+             * 5 ponytail, 6 bun, 7 mohawk */
+            uint16_t hd = shade(hair, 60), hg = shade(hair, 128);
+            int hs = fr_n(&r2, 8);
+            int dir = fr_pct(&r2, 50) ? 1 : -1;
+            int m = (hs == 2) ? 2 : 1;               /* overhang margin */
+            int rxm = rx + m, rym = ry + m;
+            int ytop = cy - rym;
+            int depth = hl + m;
+            if (hs == 2) depth = hl + 2;
+            if (hs == 3) depth = (ey - 3) - ytop;    /* bangs to brow line */
+            if (hs == 7) {
+                /* mohawk: solid tapered fin — 1px tip, 3px body — kept
+                 * inside the box; sides stay shaved */
+                int mh = (int)(S * 0.20f);
+                if (mh > cy - ry - 2) mh = cy - ry - 2;
+                for (int i = 0; i <= mh; i++) {
+                    /* tall fins get a 1px tip; stubby ones stay solid */
+                    int half = (mh >= 5) ? (i >= 2) : 1;
+                    int y = cy - ry - mh + i;
+                    fspan(&c, cx - half, cx + half, y, hair);
+                    if (half)                        /* shaded flank */
+                        fpx(&c, cx + half, y, hd);
+                }
+                for (int y = cy - ry; y < cy - ry + hl; y++) {
+                    fspan(&c, cx - 1, cx + 1, y, hair);
+                    fpx(&c, cx + 1, y, hd);
+                }
+            } else {
+                /* crown cap */
+                for (int y = ytop; y < ytop + depth; y++) {
+                    float nyh = (float)(y - cy) / (float)rym;
+                    int wi = ell_w(rxm, nyh);
+                    if (hs == 2) wi += fr_n(&r2, 2); /* curly: bumpy edge */
+                    uint16_t col =
+                        (hs != 3 && y == ytop + depth - 1) ? hd : hair;
+                    fspan(&c, cx - wi, cx + wi, y, col);
+                    if (hs == 2)                     /* curl texture dots */
+                        for (int x = cx - wi + 1; x < cx + wi; x++)
+                            if (((x * 7 + y * 13) % 9) == 0)
+                                fpx(&c, x, y, hd);
+                }
+                if (hs != 2)                         /* top sheen */
+                    fspan(&c, cx - rxm / 2, cx - rxm / 4, ytop + 1, hg);
+                if (hs == 0) {
+                    /* short crop: sideburns hug the head a few rows on */
+                    for (int y = ytop + depth; y < ytop + depth + 3; y++) {
+                        int wi = ell_w(rx, (float)(y - cy) / (float)ry);
+                        fpx(&c, cx - wi, y, hair);
+                        fpx(&c, cx + wi, y, hd);
+                    }
+                } else if (hs == 1) {
+                    /* swept parting: diagonal fringe descends toward dir,
+                     * dark parting line on the other side */
+                    int ext = 3 + fr_n(&r2, 2);
+                    for (int e = 0; e < ext; e++) {
+                        int y = ytop + depth + e;
+                        int wi = ell_w(rx, (float)(y - cy) / (float)ry);
+                        int cut = -wi + (2 * wi * (e + 1)) / (ext + 1);
+                        uint16_t col = (e == ext - 1) ? hd : hair;
+                        if (dir > 0) fspan(&c, cx + cut, cx + wi, y, col);
+                        else         fspan(&c, cx - wi, cx - cut, y, col);
+                    }
+                    for (int y = ytop + 1; y < ytop + 4; y++)
+                        fpx(&c, cx - dir * (rx / 2), y, hd);  /* parting */
+                } else if (hs == 2) {
+                    /* curly: two rounding rows close the bottom edge */
+                    for (int e = 0; e < 2; e++) {
+                        int y = ytop + depth + e;
+                        int wi = ell_w(rx, (float)(y - cy) / (float)ry) - e;
+                        fspan(&c, cx - wi + fr_n(&r2, 2), cx - wi / 3, y,
+                              hair);
+                        fspan(&c, cx + wi / 3, cx + wi - fr_n(&r2, 2), y,
+                              hair);
+                    }
+                } else if (hs == 3) {
+                    /* bob: scalloped fringe over the forehead + curtains
+                     * down past the ears, curling inwards at the jaw */
+                    int yb = ytop + depth - 1;
+                    for (int x = cx - rx + 2; x <= cx + rx - 2; x += 3)
+                        fpx(&c, x, yb + 1, hair);    /* scallop teeth */
+                    int yj = cy + (int)(ry * 0.45f);
+                    for (int y = yb; y <= yj; y++) {
+                        int wi = ell_w(rxm, (float)(y - cy) / (float)rym);
+                        frect(&c, cx - wi, y, 2, 1, hair);
+                        frect(&c, cx + wi - 1, y, 2, 1, hd);
+                    }
+                    int wj = ell_w(rxm, (float)(yj - cy) / (float)rym);
+                    fspan(&c, cx - wj, cx - wj + 2, yj + 1, hd);  /* curl */
+                    fspan(&c, cx + wj - 2, cx + wj, yj + 1, hd);
+                } else if (hs == 4) {
+                    /* long flowing: falls straight past the cheeks and
+                     * behind the shoulders, ends ragged */
+                    int yend = sh_y + (int)(S * 0.08f);
+                    for (int y = ytop + depth - 1; y <= yend; y++) {
+                        float nyh = (float)(y - cy) / (float)ry;
+                        if (nyh > 0.55f) nyh = 0.55f;
+                        int wi = ell_w(rx, nyh);
+                        int out = 2 + (y - ytop - depth) / 4;
+                        if (out > 4) out = 4;
+                        int rag = (y > yend - 2) ? fr_n(&r2, 3) : 0;
+                        fspan(&c, cx - wi - out + rag, cx - wi, y, hair);
+                        fpx(&c, cx - wi - out + rag, y, hg);  /* rim */
+                        rag = (y > yend - 2) ? fr_n(&r2, 3) : 0;
+                        fspan(&c, cx + wi, cx + wi + out - rag, y, hair);
+                        fpx(&c, cx + wi, y, hd);     /* inner shadow */
+                    }
+                } else if (hs == 5) {
+                    /* ponytail: knot gathered high on one side, the tail
+                     * swings clear of the head (and any jowls) and hangs
+                     * to the shoulder with a tapered tip */
+                    int rxw = (species == 4) ? (int)((float)rx * 1.25f)
+                                             : rx;
+                    int px2 = cx + dir * (rxw + 2);
+                    int kx = cx + dir * (rx - 2);    /* knot on the crown */
+                    for (int yy = -1; yy <= 1; yy++)
+                        fspan(&c, kx - 1, kx + 1, ytop - 1 + yy, hair);
+                    fpx(&c, kx + dir, ytop, hd);     /* tie */
+                    int yend = cy + (int)(ry * 0.8f);
+                    int reach = (px2 - kx) * dir;    /* px from knot out */
+                    for (int y = ytop + 1; y <= yend; y++) {
+                        /* swing out from the knot, then hang straight */
+                        int off = y - ytop;
+                        if (off > reach) off = reach;
+                        int x0 = kx + dir * off;
+                        int wpt = (y > yend - 2) ? 0 : 1; /* taper */
+                        fspan(&c, x0 - wpt, x0 + wpt, y, hair);
+                        fpx(&c, x0 + dir * wpt, y, hd);
+                    }
+                } else if (hs == 6) {
+                    /* bun: round knot riding above the crown */
+                    int bx2 = cx + dir * 2, by2 = ytop - 2;
+                    for (int yy = -2; yy <= 2; yy++)
+                        for (int xx = -2; xx <= 2; xx++)
+                            if (xx * xx + yy * yy <= 5)
+                                fpx(&c, bx2 + xx, by2 + yy, hair);
+                    fpx(&c, bx2 - 1, by2 - 1, hg);   /* sheen */
+                    fspan(&c, bx2 - 1, bx2 + 1, ytop, hd);  /* tie */
+                }
+            }
         }
     } else
 #endif
@@ -295,7 +473,12 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
 #ifdef ELITE_STYLE_LAB
     if (s_style == 1) {
         slit = (species == 3);
-        if (species == 2) { eh = ew * 2 / 3; edx = (int)(edx * 1.25f); }
+        if (species == 2) {                  /* round, side-set */
+            ew = (int)(S * 0.10f); if (ew < 3) ew = 3;
+            eh = ew - 1;
+            edx = rx - ew / 2 - 2;           /* hug the narrowed head */
+            if (edx < 2) edx = 2;
+        }
     }
 #endif
     if (!visor) {
@@ -312,19 +495,36 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
                     RGB565C(8, 8, 10));
             }
         }
+#ifdef ELITE_STYLE_LAB
+        if (s_style == 1 && species == 2)    /* knock corners off → round */
+            for (int sgn = -1; sgn <= 1; sgn += 2) {
+                int ex = cx + sgn * edx - ew / 2;
+                fpx(&c, ex, ey, skin); fpx(&c, ex + ew - 1, ey, skin);
+                fpx(&c, ex, ey + eh, skin);
+                fpx(&c, ex + ew - 1, ey + eh, skin);
+            }
+#endif
         /* brows: tilt 0 neutral, 1 angry-in, 2 raised */
         int tilt = (kind == NK_PIRATE) ? 1 : fr_n(&r, 3);
         uint16_t bcol = synth ? shade(COL_SYNTH, 55) : shade(hair, 70);
 #ifdef ELITE_STYLE_LAB
         if (s_style == 1 && species == 4) {
-            /* heavyworlder: one continuous brow shelf */
-            frect(&c, cx - edx - ew / 2, ey - eh - 2, edx * 2 + ew, 2,
-                  skin_d);
+            /* heavyworlder: one continuous brow shelf — lit top edge,
+             * cast shadow right over the eyes */
+            int bx0 = cx - edx - ew / 2 - 1, bw = edx * 2 + ew + 2;
+            frect(&c, bx0, ey - eh - 3, bw, 1, skin_l);
+            frect(&c, bx0, ey - eh - 2, bw, 2, skin_d);
+            frect(&c, bx0 + 1, ey - eh, bw - 2, 1, shade(skin, 52));
         } else if (s_style == 1 && species == 3) {
-            /* saurian: bony ridge over each eye */
-            for (int sgn = -1; sgn <= 1; sgn += 2)
-                frect(&c, cx + sgn * edx - ew / 2, ey - eh - 2, ew, 1,
-                      skin_d);
+            /* saurian: bony ridge over each eye, dropping at the outer
+             * corner */
+            for (int sgn = -1; sgn <= 1; sgn += 2) {
+                int ex = cx + sgn * edx - ew / 2;
+                frect(&c, ex, ey - eh - 2, ew, 1, skin_d);
+                fpx(&c, ex + (sgn > 0 ? ew - 1 : 0), ey - eh - 1, skin_d);
+            }
+        } else if (s_style == 1 && species == 2) {
+            /* avian: no brows — the crest and beak carry the face */
         } else
 #endif
         for (int sgn = -1; sgn <= 1; sgn += 2) {
@@ -352,27 +552,57 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
     uint16_t mcol = shade(skin, 48);
 #ifdef ELITE_STYLE_LAB
     if (s_style == 1 && species == 2) {
-        /* beak: a tapering amber wedge owns the lower face */
-        uint16_t bk = RGB565C(212, 156, 58), bkd = shade(bk, 70);
-        for (int y = ey + 1; y <= my + 2; y++) {
-            float f = (float)(y - ey) / (float)(my + 2 - ey);
-            int wi = (int)((1.0f - f * 0.8f) * S * 0.10f);
-            if (wi < 1) wi = 1;
-            fspan(&c, cx - wi, cx + wi, y, bk);
+        /* hooked beak: rounded two-tone wedge — upper mandible lighter,
+         * the gape sags at the ends, the tip hooks down to a point */
+        uint16_t bk = RGB565C(226, 148, 36);     /* hot horn-orange */
+        uint16_t bkl = shade(bk, 118), bkd = shade(bk, 68);
+        uint16_t bko = shade(bk, 42);            /* outline vs gold skin */
+        int b0 = ey + 1, b1 = my + 3;
+        int gp = b0 + (b1 - b0) * 3 / 5;     /* gape row */
+        for (int y = b0; y <= b1; y++) {
+            float f = (float)(y - b0) / (float)(b1 - b0);
+            int half = (int)(S * 0.095f * (1.0f - 0.72f * f * f));
+            if (half < 1) half = 1;
+            fspan(&c, cx - half, cx + half, y, y <= gp ? bkl : bkd);
+            fpx(&c, cx + half, y, bko);      /* dark edges both sides — */
+            fpx(&c, cx - half, y, bko);      /* keeps it off gold skin */
         }
-        fspan(&c, cx - (int)(S * 0.05f), cx + (int)(S * 0.05f),
-              nly + 1, bkd);                /* the bill split */
+        fpx(&c, cx - 1, b0 + 1, bkd);        /* cere nostrils */
+        fpx(&c, cx + 1, b0 + 1, bkd);
+        {
+            int hg2 = (int)(S * 0.095f *
+                            (1.0f - 0.72f * 0.36f));    /* width at gape */
+            fspan(&c, cx - hg2, cx + hg2, gp, bko);     /* full gape split */
+            fpx(&c, cx - hg2 - 1, gp + 1, bko);  /* sagging gape ends */
+            fpx(&c, cx + hg2 + 1, gp + 1, bko);
+        }
+        fspan(&c, cx - 1, cx + 1, b1 + 1, bkd);  /* hooked tip curls under */
+        fpx(&c, cx, b1 + 2, bko);
+    } else if (s_style == 1 && species == 3) {
+        /* muzzle: a lit snout mass protrudes below the eyes — end-on
+         * nostrils up top, the gape runs back wider than the snout */
+        int mz0 = nly - 2, mz1 = my + 3;
+        uint16_t snt = shade(skin, 128);     /* catches the light */
+        for (int y = mz0; y <= mz1; y++) {
+            float f = (float)(y - mz0) / (float)(mz1 - mz0);
+            int half = (int)(S * 0.125f * (1.0f - 0.30f * f));
+            fspan(&c, cx - half, cx + half, y,
+                  y == mz1 ? shade(skin, 55) : snt);
+            fpx(&c, cx + half, y, skin_d);   /* right shade */
+            fpx(&c, cx - half, y, shade(skin, 145));
+        }
+        fpx(&c, cx - 2, mz0 + 1, RGB565C(8, 8, 10));  /* end-on nostrils */
+        fpx(&c, cx + 2, mz0 + 1, RGB565C(8, 8, 10));
+        fpx(&c, cx - 2, mz0 + 2, skin_d);    /* nostril underlip */
+        fpx(&c, cx + 2, mz0 + 2, skin_d);
+        int gw = (int)(S * 0.16f);
+        fspan(&c, cx - gw, cx + gw, my + 1, shade(skin, 42));
+        fpx(&c, cx - gw, my, shade(skin, 42));        /* gape upturn */
+        fpx(&c, cx + gw, my, shade(skin, 42));
     } else
 #endif
     {
         frect(&c, cx - 1, ey + 2, 1, nly - ey - 2, skin_d);
-#ifdef ELITE_STYLE_LAB
-        if (s_style == 1 && species == 3) {
-            fpx(&c, cx - 1, nly, RGB565C(8, 8, 10));   /* nostril pits */
-            fpx(&c, cx + 1, nly, RGB565C(8, 8, 10));
-            mw += 2;                                    /* wide thin mouth */
-        } else
-#endif
         fspan(&c, cx - 1, cx + 1, nly, skin_d);
         fspan(&c, cx - mw, cx + mw, my, mcol);
         if (mood == 1) { fpx(&c, cx - mw, my - 1, mcol); fpx(&c, cx + mw, my - 1, mcol); }

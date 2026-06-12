@@ -106,6 +106,13 @@ void r3d_emit_tri(float ax, float ay, uint16_t az,
 #define STAR_COUNT 120
 typedef struct { Vec3 dir; uint16_t color; uint8_t big; } Star;
 static Star s_stars[STAR_COUNT];
+#ifdef ELITE_STYLE_LAB
+/* PROPOSAL: a second, dimmer tier so the sky reads dense without
+ * touching the live array. Filled only when s_style == 1. */
+#define XSTAR_COUNT 170
+static Star s_xstars[XSTAR_COUNT];
+static int  s_nxstars;
+#endif
 
 static uint32_t s_star_rng;
 static uint32_t star_rand(void) {
@@ -177,6 +184,28 @@ void r3d_starfield_init(uint32_t seed) {
             s_stars[i].big = 0;
         }
     }
+#ifdef ELITE_STYLE_LAB
+    s_nxstars = 0;
+    if (s_style == 1) {
+        /* PROPOSAL: the faint background population — single pixels just
+         * above black, slight temperature tint, no structure. */
+        for (int i = 0; i < XSTAR_COUNT; i++) {
+            Vec3 d = v3(star_frand() * 2 - 1, star_frand() * 2 - 1,
+                        star_frand() * 2 - 1);
+            if (v3_len2(d) < 1e-4f) d = v3(0, 0, 1);
+            s_xstars[i].dir = v3_norm(d);
+            int lum = 4 + (int)(star_rand() % 6u);     /* 4..9 of 31 */
+            int warm = (int)(star_rand() % 3u);        /* 0 cool..2 warm */
+            int r = lum + (warm == 2 ? 1 : 0);
+            int b = lum + (warm == 0 ? 2 : 0);
+            if (r > 31) r = 31;
+            if (b > 31) b = 31;
+            s_xstars[i].color = (uint16_t)((r << 11) | ((lum * 2) << 5) | b);
+            s_xstars[i].big = 0;
+        }
+        s_nxstars = XSTAR_COUNT;
+    }
+#endif
 }
 
 /* Physical-space band (y0p..y1p in R3D pixels). Stars keep their device
@@ -184,6 +213,55 @@ void r3d_starfield_init(uint32_t seed) {
 static void starfield_raster(uint16_t *fb, int y0p, int y1p) {
     const Mat3 *cam = r3d_pipe_camera();
     const float focal = r3d_pipe_focal();
+#ifdef ELITE_STYLE_LAB
+    /* PROPOSAL: faint tier first (single blocks) so the named stars and
+     * heroes draw over them; then a soft halo around each hero star. */
+    for (int i = 0; i < s_nxstars; i++) {
+        Vec3 v = m3_mul_v3_t(cam, s_xstars[i].dir);
+        if (v.z < 0.05f) continue;
+        float inv_z = 1.0f / v.z;
+        int sx = (int)((64.0f + focal * v.x * inv_z) * R3D_SS);
+        int sy = (int)((64.0f - focal * v.y * inv_z) * R3D_SS);
+        for (int dy = 0; dy < R3D_SS; dy++) {
+            int py = sy + dy;
+            if (py < y0p || py >= y1p) continue;
+            for (int dx = 0; dx < R3D_SS; dx++) {
+                int px = sx + dx;
+                if ((unsigned)px >= R3D_FB_W) continue;
+                fb[py * R3D_FB_W + px] = s_xstars[i].color;
+            }
+        }
+    }
+    if (s_style == 1)
+        for (int i = 0; i < STAR_COUNT; i++) {
+            if (!s_stars[i].big) continue;
+            Vec3 v = m3_mul_v3_t(cam, s_stars[i].dir);
+            if (v.z < 0.05f) continue;
+            float inv_z = 1.0f / v.z;
+            int sx = (int)((64.0f + focal * v.x * inv_z) * R3D_SS);
+            int sy = (int)((64.0f - focal * v.y * inv_z) * R3D_SS);
+            uint16_t c = s_stars[i].color;
+            uint16_t halo = (uint16_t)(
+                ((((c >> 11) & 31) * 5 / 16) << 11) |
+                ((((c >> 5) & 63) * 5 / 16) << 5) |
+                ((c & 31) * 5 / 16));
+            static const int hx[8] = { -1, 1, 2, -1, 2, 0, 1, 0 };
+            static const int hy[8] = { 0, -1, 0, 1, 1, -1, 2, 2 };
+            for (int k = 0; k < 8; k++) {
+                int px = sx + hx[k] * R3D_SS;
+                int py = sy + hy[k] * R3D_SS;
+                for (int dy = 0; dy < R3D_SS; dy++) {
+                    int yy = py + dy;
+                    if (yy < y0p || yy >= y1p) continue;
+                    for (int dx = 0; dx < R3D_SS; dx++) {
+                        int xx = px + dx;
+                        if ((unsigned)xx >= R3D_FB_W) continue;
+                        fb[yy * R3D_FB_W + xx] = halo;
+                    }
+                }
+            }
+        }
+#endif
     for (int i = 0; i < STAR_COUNT; i++) {
         Vec3 v = m3_mul_v3_t(cam, s_stars[i].dir);
         if (v.z < 0.05f) continue;
@@ -234,6 +312,14 @@ static float nb_noise(float x, float y) {
     float a = v00 + (v10 - v00) * sx, b = v01 + (v11 - v01) * sx;
     return a + (b - a) * sy;
 }
+#ifdef ELITE_STYLE_LAB
+/* Ridged remap: noise creases become bright filament lines. */
+static float nb_ridge(float n) {
+    n = 2.0f * n - 1.0f;
+    if (n < 0) n = -n;
+    return 1.0f - n;
+}
+#endif
 /* Direction-based so the wash is fixed in space and rotates with the view
  * (sampled along each pixel's world ray), in coarse blocks to stay cheap. */
 static void nebula_fill(uint16_t *fb, int y0p, int y1p) {
@@ -254,30 +340,64 @@ static void nebula_fill(uint16_t *fb, int y0p, int y1p) {
             uint16_t c = 0;
 #ifdef ELITE_STYLE_LAB
             if (s_style == 1) {
-                /* PROPOSAL: two-layer nebula (broad wash + bright cores
-                 * in a second hue) over a faint galactic band. */
+                /* PROPOSAL v2: ridged-fbm filament nebula — the broad n
+                 * field masks WHERE clouds live (most sky stays dark);
+                 * inside, two ridged octaves make wispy filaments, a slow
+                 * hue field mixes rose against blue, and the cores reach
+                 * real brightness. Plus a granular galactic band. */
                 int r = 0, g = 0, b = 0;
-                float band = 1.0f - (d.y < 0 ? -d.y : d.y) * 2.6f;
-                if (band > 0) {            /* the milky stripe */
-                    float bb = band * band * 0.9f;
-                    float gr = nb_noise(d.x * 5.0f + 3.0f, d.z * 5.0f);
-                    bb *= 0.55f + 0.45f * gr;
-                    r += (int)(bb * 5); g += (int)(bb * 9); b += (int)(bb * 6);
+                float oy = (float)((s_nebula >> 8) & 0xFF) * 0.11f;
+                float band = 1.0f - (d.y < 0 ? -d.y : d.y) * 3.4f;
+                if (band > 0) {            /* unresolved-star grain */
+                    float g1 = nb_noise(d.x * 16.0f + d.y * 9.0f + 3.0f,
+                                        d.z * 16.0f - d.y * 7.0f);
+                    float g2 = nb_noise(d.x * 37.0f + d.y * 21.0f + 11.0f,
+                                        d.z * 37.0f + d.y * 17.0f - 7.0f);
+                    float g3 = nb_noise(d.z * 23.0f - d.x * 15.0f + 29.0f,
+                                        d.x * 23.0f + d.y * 19.0f);
+                    float bb = band * band *
+                               (0.15f + 0.85f * g1 * g2 *
+                                (0.6f + 0.8f * g3) * 1.7f);
+                    r += (int)(bb * 10);
+                    g += (int)(bb * 19);   /* warm white */
+                    b += (int)(bb * 9);
+                    if (g2 > 0.88f) {      /* the odd resolved speck */
+                        r += (int)(band * 6);
+                        g += (int)(band * 12);
+                        b += (int)(band * 6);
+                    }
                 }
-                if (n > 0.50f) {
-                    float k = (n - 0.50f) * 2.6f * s_neb_str;
-                    if (k > 1.0f) k = 1.0f;
-                    float w = nb_noise(d.x * F + 77.0f, d.z * F - 19.0f);
-                    float core = nb_noise(d.x * F * 2.3f - 9.0f,
-                                          d.y * F * 2.3f + 31.0f);
-                    if (w > 0.55f) { r += (int)(k * 13); g += (int)(k * 4);
-                                     b += (int)(k * 8); }
-                    else           { r += (int)(k * 4);  g += (int)(k * 6);
-                                     b += (int)(k * 16); }
-                    if (core > 0.62f) {    /* bright knots inside clouds */
-                        float kk = k * (core - 0.62f) * 2.6f;
-                        r += (int)(kk * 10); g += (int)(kk * 9);
-                        b += (int)(kk * 12);
+                /* re-seed the broad mask so different systems get
+                 * different skies (the shared n barely moves with seed) */
+                float nn = nb_noise(d.x * F + 40.0f + ox,
+                                    d.y * F + 40.0f + oy) * 0.5f +
+                           nb_noise(d.z * F + 17.0f + oy,
+                                    d.x * F + ox) * 0.3f +
+                           nb_noise(d.y * F + 7.0f + ox * 0.5f,
+                                    d.z * F + 23.0f + oy) * 0.2f;
+                float m = (nn - 0.45f) * 4.2f * s_neb_str;
+                if (m > 1.0f) m = 1.0f;
+                if (m > 0.0f) {
+                    float r1 = nb_ridge(nb_noise(d.x * 2.7f + ox + 5.0f,
+                                                 d.y * 2.7f + oy - 11.0f));
+                    float r2 = nb_ridge(nb_noise(d.y * 5.6f + oy + 19.0f,
+                                                 d.z * 5.6f + ox + 3.0f));
+                    float fil = r1 * 0.62f + r2 * 0.38f;
+                    fil = fil * fil * fil; /* sharpen into wisps */
+                    float I = m * (0.13f + 1.85f * fil);
+                    if (I > 1.0f) I = 1.0f;
+                    float hue = nb_noise(d.x * 1.1f + oy - 31.0f,
+                                         d.z * 1.1f + ox + 9.0f);
+                    /* rose <-> blue along the hue field */
+                    r += (int)(I * (7.0f + 14.0f * hue));
+                    g += (int)(I * (13.0f + 8.0f * hue));
+                    b += (int)(I * (24.0f - 14.0f * hue));
+                    if (fil > 0.50f && m > 0.55f) {
+                        /* core glow climbs toward warm white */
+                        float kk = (fil - 0.50f) * 2.4f * m;
+                        r += (int)(kk * 10);
+                        g += (int)(kk * 18);
+                        b += (int)(kk * 8);
                     }
                 }
                 if (r > 31) r = 31;

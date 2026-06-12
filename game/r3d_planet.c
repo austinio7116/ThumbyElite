@@ -165,18 +165,80 @@ static void make_palette(PlanetType t, uint32_t seed, uint16_t pal[PAL_N]) {
 }
 
 #ifdef ELITE_STYLE_LAB
-/* PROPOSAL feature pass: craters, ice cracks, lava veins, atolls,
- * polar caps, gas-giant storms — stamped onto the baked index tile. */
-static void tex_enrich(PlanetArt *a, const PlanetInfo *p) {
-    uint32_t h = p->tex_seed * 2654435761u ^ 0xE17Au;
-#define EN_RND() (h ^= h << 13, h ^= h >> 17, h ^= h << 5, h)
+/* PROPOSAL bake: full from-scratch style-1 tile generator. The complaint
+ * with the stamp pass was sameness — every world of a type shared one
+ * structure. Here the STRUCTURE itself is seeded: domain-warped fbm for
+ * coherent continents/landmasses, sea level / band count / warp strength
+ * drawn from wide per-seed ranges, palettes hue-jittered per world, and
+ * type features that read at disc sizes (caps with wavy edges, ridged
+ * lava vein networks, curved ice fractures, soft-edged gas storms). */
+static uint32_t s1_rng;
+static uint32_t s1_rnd(void) {
+    s1_rng ^= s1_rng << 13; s1_rng ^= s1_rng >> 17; s1_rng ^= s1_rng << 5;
+    return s1_rng;
+}
+static float s1_frnd(void) {
+    return (float)(s1_rnd() & 0xFFFF) * (1.0f / 65535.0f);
+}
+static float s1_range(float lo, float hi) {
+    return lo + (hi - lo) * s1_frnd();
+}
+
+/* Domain-warped fbm: sample fbm through a second fbm vector field —
+ * isolines bend into coherent continents instead of uniform speckle. */
+static float fbm_warp(float x, float y, uint32_t seed, float warp) {
+    float qx = fbm(x + 13.7f, y + 4.1f, seed ^ 0xA341u) - 0.5f;
+    float qy = fbm(x - 7.3f, y + 21.9f, seed ^ 0x5C1Du) - 0.5f;
+    return fbm(x + warp * qx * 2.0f, y + warp * qy * 2.0f, seed);
+}
+/* Ridged remap: noise creases become bright connected veins/fractures. */
+static float ridged(float n) {
+    n = 2.0f * n - 1.0f;
+    if (n < 0) n = -n;
+    return 1.0f - n;
+}
+
+/* Per-world palette jitter so two same-type planets rarely match. Hue
+ * scale per channel + overall brightness; entries below `from` are kept
+ * (water hues stay water, only the land half drifts on living worlds). */
+static void s1_pal_jitter(uint16_t pal[PAL_N], int from, float hue_amp) {
+    float rs = 1.0f + (s1_frnd() - 0.5f) * 2.0f * hue_amp;
+    float gs = 1.0f + (s1_frnd() - 0.5f) * 2.0f * hue_amp;
+    float bs = 1.0f + (s1_frnd() - 0.5f) * 2.0f * hue_amp;
+    float br = s1_range(0.86f, 1.14f);
+    for (int i = from; i < PAL_N; i++) {
+        int r = (int)(((pal[i] >> 11) & 31) * rs * br + 0.5f);
+        int g = (int)(((pal[i] >> 5) & 63) * gs * br + 0.5f);
+        int b = (int)((pal[i] & 31) * bs * br + 0.5f);
+        if (r > 31) r = 31;
+        if (g > 63) g = 63;
+        if (b > 31) b = 31;
+        pal[i] = (uint16_t)((r << 11) | (g << 5) | b);
+    }
+}
+
+static void bake_style1(PlanetArt *a, const PlanetInfo *p) {
     uint8_t *t = a->tex;
+    uint32_t sd = p->tex_seed;
+    s1_rng = sd * 2654435761u ^ 0xE17Au;
+    s1_rnd();
     switch (p->type) {
     case PT_ROCK: {
-        int nc = 3 + (int)(EN_RND() % 4u);
+        s1_pal_jitter(a->pal, 0, 0.16f);
+        float f = s1_range(0.10f, 0.30f);          /* mottle scale */
+        float warp = s1_range(0.8f, 3.0f);
+        for (int y = 0; y < TEX_N; y++)
+            for (int x = 0; x < TEX_N; x++) {
+                float v = fbm_warp(x * f, y * f, sd, warp);
+                int idx = (int)(v * 8.5f - 0.7f);
+                if (idx < 0) idx = 0;
+                if (idx > 6) idx = 6;
+                t[y * TEX_N + x] = (uint8_t)idx;
+            }
+        int nc = (int)(s1_rnd() % 7u);             /* craters: 0..6 */
         for (int c = 0; c < nc; c++) {
-            int cx = (int)(EN_RND() % 32u), cy = 4 + (int)(EN_RND() % 24u);
-            int cr = 2 + (int)(EN_RND() % 3u);
+            int cx = (int)(s1_rnd() % 32u), cy = 4 + (int)(s1_rnd() % 24u);
+            int cr = 2 + (int)(s1_rnd() % 3u);
             for (int dy = -cr; dy <= cr; dy++)
                 for (int dx = -cr; dx <= cr; dx++) {
                     int x = (cx + dx) & 31, y = cy + dy;
@@ -184,87 +246,157 @@ static void tex_enrich(PlanetArt *a, const PlanetInfo *p) {
                     int d2 = dx * dx + dy * dy;
                     uint8_t *px = &t[y * TEX_N + x];
                     if (d2 <= (cr - 1) * (cr - 1)) {
-                        if (*px >= 2) *px -= 2;       /* dark floor */
+                        if (*px >= 2) *px -= 2;        /* dark floor */
                     } else if (d2 <= cr * cr) {
                         if (*px < PAL_N - 2) *px += 2; /* bright rim */
                     }
                 }
         }
-        if (EN_RND() & 1)                              /* polar caps */
-            for (int y = 0; y < 32; y++) {
-                int e = (y < 3) ? 3 - y : (y > 28) ? y - 28 : 0;
-                if (!e) continue;
-                for (int x = 0; x < 32; x++)
-                    if (((EN_RND() >> 8) % 4u) < (uint32_t)e + 1)
+        if (s1_frnd() < 0.35f) {                   /* wavy polar caps */
+            float cap = s1_range(2.0f, 5.0f);
+            for (int x = 0; x < 32; x++) {
+                float e = cap + 2.2f * pnoise(x * 0.33f, 3.7f, sd ^ 0xCA9Eu);
+                for (int y = 0; y < 32; y++)
+                    if (y < e - 1.0f || y > 31.0f - (e - 1.0f))
                         t[y * TEX_N + x] = PAL_N - 1;
             }
+        }
         break;
     }
     case PT_ICE: {
-        for (int w = 0; w < 5; w++) {                  /* crack walks */
-            float x = (float)(EN_RND() % 32u), y = (float)(EN_RND() % 32u);
-            float dx = ((int)(EN_RND() % 5u) - 2) * 0.5f;
-            float dy = ((int)(EN_RND() % 5u) - 2) * 0.5f;
-            if (dx == 0 && dy == 0) dx = 0.7f;
-            for (int s = 0; s < 22; s++) {
-                t[(((int)y) & 31) * TEX_N + (((int)x) & 31)] = 1;
-                x += dx; y += dy;
-                if ((EN_RND() & 7u) == 0) { dx = -dy; dy = dx * 0.6f; }
+        s1_pal_jitter(a->pal, 0, 0.06f);
+        float f = s1_range(0.05f, 0.11f);          /* broad smooth sheets */
+        float warp = s1_range(1.0f, 2.6f);
+        float fc = s1_range(0.10f, 0.17f);         /* fracture scale */
+        float ft = s1_range(0.84f, 0.92f);         /* fracture density */
+        for (int y = 0; y < TEX_N; y++)
+            for (int x = 0; x < TEX_N; x++) {
+                float v = fbm(x * f, y * f, sd);
+                int idx = 4 + (int)(v * 3.6f);     /* bright, low contrast */
+                if (idx > 7) idx = 7;
+                /* long curved fractures: ridge lines of warped noise */
+                float rg = ridged(fbm_warp(x * fc, y * fc, sd ^ 0x1CEDu,
+                                           warp * 0.8f));
+                if (rg > ft + 0.045f)      idx = 1;    /* crack core */
+                else if (rg > ft)          idx = 3;    /* crack shoulder */
+                t[y * TEX_N + x] = (uint8_t)idx;
             }
-        }
         break;
     }
-    case PT_LAVA:
-        for (int y = 0; y < 32; y++)
-            for (int x = 0; x < 32; x++)
-                if (fbm(x * 0.45f, y * 0.45f, p->tex_seed ^ 0x33u) > 0.66f)
-                    t[y * TEX_N + x] = PAL_N - 1;      /* glow veins */
-        a->pal[PAL_N - 1] = RGB565C(255, 190, 90);     /* hotter pop */
+    case PT_LAVA: {
+        s1_pal_jitter(a->pal, 0, 0.14f);
+        float f = s1_range(0.16f, 0.28f);          /* crust mottle */
+        float fv = s1_range(0.09f, 0.16f);         /* vein scale */
+        float warp = s1_range(1.2f, 3.2f);
+        float vt = s1_range(0.84f, 0.94f);         /* vein density: molten..crusted */
+        for (int y = 0; y < TEX_N; y++)
+            for (int x = 0; x < TEX_N; x++) {
+                float v = fbm(x * f * 0.6f, y * f * 0.6f, sd);
+                int idx = (int)(v * 3.6f - 0.4f);  /* dark crust 0..2 */
+                if (idx < 0) idx = 0;
+                if (idx > 2) idx = 2;
+                /* branching glow veins: ridged warped noise, two-step
+                 * threshold = hot core with a dimmer halo */
+                float rg = ridged(fbm_warp(x * fv, y * fv, sd ^ 0x33u, warp));
+                if (rg > vt + 0.035f)     idx = 7;     /* white-hot core */
+                else if (rg > vt)         idx = 5;     /* glowing margin */
+                t[y * TEX_N + x] = (uint8_t)idx;
+            }
+        a->pal[PAL_N - 1] = RGB565C(255, 190, 90); /* hotter pop */
         break;
-    case PT_OCEAN:
-        for (int y = 0; y < 32; y++)
-            for (int x = 0; x < 32; x++) {
-                float rg = fbm(x * 0.3f, y * 0.3f, p->tex_seed ^ 0x77u);
-                rg = rg * 2.0f - 1.0f;
-                if (rg < 0) rg = -rg;
-                if (rg < 0.06f && t[y * TEX_N + x] < 4)
-                    t[y * TEX_N + x] = 6;              /* atoll chains */
+    }
+    case PT_OCEAN: {
+        s1_pal_jitter(a->pal, 4, 0.12f);           /* drift the highlights */
+        float f = s1_range(0.12f, 0.26f);
+        float warp = s1_range(1.0f, 3.2f);
+        float sea = s1_range(0.58f, 0.80f);        /* near-total .. island chains */
+        for (int y = 0; y < TEX_N; y++)
+            for (int x = 0; x < TEX_N; x++) {
+                float v = fbm_warp(x * f, y * f, sd, warp);
+                int idx;
+                if (v < sea) {                     /* smooth open water */
+                    float w = fbm(x * f * 0.45f, y * f * 0.45f, sd ^ 0xBEEFu);
+                    idx = 1 + (int)(w * 2.6f);
+                    if (v > sea - 0.025f) idx = 4; /* shelf fringe */
+                } else {                           /* coherent island arcs */
+                    float hh = (v - sea) / (1.0f - sea);
+                    idx = (hh < 0.35f) ? 5 : (hh < 0.75f) ? 6 : 7;
+                }
+                t[y * TEX_N + x] = (uint8_t)idx;
             }
         break;
-    case PT_EARTHLIKE:
-        for (int y = 0; y < 32; y++) {                 /* polar caps */
-            int e = (y < 4) ? 4 - y : (y > 27) ? y - 27 : 0;
-            for (int x = 0; x < 32; x++) {
-                if (e && ((EN_RND() >> 6) % 5u) < (uint32_t)e + 1)
-                    t[y * TEX_N + x] = PAL_N - 1;
-                else if (pnoise(x * 0.32f + 9.0f, y * 0.13f,
-                                p->tex_seed ^ 0x5Cu) > 0.74f)
-                    t[y * TEX_N + x] = PAL_N - 1;      /* cloud streaks */
+    }
+    case PT_EARTHLIKE: {
+        uint16_t snow = a->pal[PAL_N - 1];
+        s1_pal_jitter(a->pal, 3, 0.18f);           /* land drifts, seas stay blue */
+        a->pal[PAL_N - 1] = snow;                  /* ...and snow stays white */
+        float f = s1_range(0.12f, 0.26f);
+        float warp = s1_range(1.2f, 3.5f);
+        float sea = s1_range(0.34f, 0.62f);        /* supercontinent .. archipelago */
+        float cap = s1_range(1.5f, 5.5f);          /* polar cap reach */
+        int clouds = s1_frnd() < 0.55f;
+        uint32_t csd = s1_rnd();
+        for (int y = 0; y < TEX_N; y++)
+            for (int x = 0; x < TEX_N; x++) {
+                float v = fbm_warp(x * f, y * f, sd, warp);
+                int idx;
+                if (v < sea) {                     /* ocean by depth */
+                    float dpt = v / sea;
+                    idx = (dpt < 0.55f) ? 0 : (dpt < 0.85f) ? 1 : 2;
+                } else {                           /* land by height */
+                    float hh = (v - sea) / (1.0f - sea);
+                    idx = 3 + (int)(hh * 4.0f);
+                    if (idx > 6) idx = 6;
+                }
+                /* wavy polar caps */
+                float e = cap + 2.4f * pnoise(x * 0.31f, 5.1f, sd ^ 0xCA9Eu);
+                if (y < e - 1.2f || y > 31.0f - (e - 1.2f))
+                    idx = PAL_N - 1;
+                else if (clouds &&                 /* zonal cloud streaks */
+                         pnoise(x * 0.30f + 9.0f, y * 0.62f, csd) > 0.78f)
+                    idx = PAL_N - 1;
+                t[y * TEX_N + x] = (uint8_t)idx;
             }
-        }
         break;
+    }
+    default:
     case PT_GAS: {
-        int gx = (int)(EN_RND() % 32u), gy = 8 + (int)(EN_RND() % 16u);
-        int rx2 = 4 + (int)(EN_RND() % 3u), ry2 = 2 + (int)(EN_RND() % 2u);
-        for (int dy = -ry2; dy <= ry2; dy++)           /* the great spot */
-            for (int dx = -rx2; dx <= rx2; dx++) {
-                float e = (float)(dx * dx) / (float)(rx2 * rx2) +
-                          (float)(dy * dy) / (float)(ry2 * ry2);
-                if (e > 1.0f) continue;
-                int x = (gx + dx) & 31, y = gy + dy;
-                if (y < 0 || y > 31) continue;
-                t[y * TEX_N + x] = (e > 0.55f) ? PAL_N - 1
-                                  : (t[y * TEX_N + x] >= 4 ? 1 : PAL_N - 2);
+        s1_pal_jitter(a->pal, 0, 0.14f);
+        float bf = s1_range(0.45f, 1.6f);          /* band count: ~2..8 */
+        float ph = s1_range(0.0f, 6.28f);
+        float amp = s1_range(0.9f, 5.0f);          /* edge turbulence */
+        float wf = s1_range(0.14f, 0.30f);
+        float con = s1_range(0.28f, 1.15f);        /* some giants near-calm */
+        int storm = s1_frnd() < 0.42f;
+        int gx = (int)(s1_rnd() % 32u), gy = 9 + (int)(s1_rnd() % 14u);
+        int srx = 3 + (int)(s1_rnd() % 3u), sry = 2 + (int)(s1_rnd() % 2u);
+        int spole = (int)(s1_rnd() & 1u);          /* pale or dark oval */
+        for (int y = 0; y < TEX_N; y++)
+            for (int x = 0; x < TEX_N; x++) {
+                /* latitude warped by noise: soft turbulent band edges */
+                float yw = (float)y +
+                           amp * (fbm(x * wf, y * wf, sd) - 0.5f) * 2.0f;
+                float v = 0.5f + 0.46f * con * sinf(yw * bf + ph) +
+                          0.04f * (pnoise(x * 0.5f, y * 0.5f, sd ^ 7u) - 0.5f);
+                int idx = (int)(v * 8.0f);
+                if (idx < 0) idx = 0;
+                if (idx > 7) idx = 7;
+                if (storm) {                       /* one coherent oval */
+                    float du = (float)(((x - gx) & 31) < 16
+                                       ? ((x - gx) & 31)
+                                       : ((x - gx) & 31) - 32) / (float)srx;
+                    float dv = (yw - (float)gy) / (float)sry;
+                    float e = du * du + dv * dv;
+                    if (e < 0.55f)                 /* pale/dark eye */
+                        idx = spole ? 7 : 0;
+                    else if (e < 1.0f)             /* contrasting rim */
+                        idx = spole ? 2 : 6;
+                }
+                t[y * TEX_N + x] = (uint8_t)idx;
             }
-        for (int k = 0; k < 4; k++) {                  /* small eddies */
-            int x = (int)(EN_RND() % 32u), y = (int)(EN_RND() % 32u);
-            t[y * TEX_N + x] = PAL_N - 1;
-            t[y * TEX_N + ((x + 1) & 31)] = 0;
-        }
         break;
     }
     }
-#undef EN_RND
 }
 #endif
 
@@ -274,6 +406,9 @@ void r3d_planet_bake(const SystemInfo *info) {
         const PlanetInfo *p = &info->planets[i];
         PlanetArt *a = &s_art[i];
         make_palette(p->type, p->tex_seed, a->pal);
+#ifdef ELITE_STYLE_LAB
+        if (s_style == 1) { bake_style1(a, p); continue; }
+#endif
         for (int y = 0; y < TEX_N; y++) {
             for (int x = 0; x < TEX_N; x++) {
                 float v;
@@ -297,9 +432,6 @@ void r3d_planet_bake(const SystemInfo *info) {
                 a->tex[y * TEX_N + x] = (uint8_t)idx;
             }
         }
-#ifdef ELITE_STYLE_LAB
-        if (s_style == 1) tex_enrich(a, p);
-#endif
     }
 }
 
@@ -488,6 +620,29 @@ void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
 
         const PlanetArt *art = &s_art[(int)im->planet];
         const float ux = s_up_sx, uy = s_up_sy;        /* world-up on screen */
+#ifdef ELITE_STYLE_LAB
+        /* PROPOSAL: per-type sky colour for the atmosphere limb (565
+         * channel scale) and ring flag — resolved once per impostor. */
+        int sky_r = 0, sky_g = 0, sky_b = 0, has_atmo = 0, has_rings = 0;
+        uint32_t ring_sd = 0;
+        if (s_style == 1 && s_info) {
+            const PlanetInfo *pi = &s_info->planets[(int)im->planet];
+            has_rings = pi->rings;
+            ring_sd = pi->tex_seed;
+            switch (pi->type) {
+            case PT_EARTHLIKE:
+            case PT_OCEAN: sky_r = 10; sky_g = 38; sky_b = 31; has_atmo = 1;
+                break;                                 /* blue air */
+            case PT_ICE:   sky_r = 22; sky_g = 52; sky_b = 31; has_atmo = 1;
+                break;                                 /* white-blue */
+            case PT_LAVA:  sky_r = 31; sky_g = 28; sky_b = 5;  has_atmo = 1;
+                break;                                 /* ember haze */
+            case PT_GAS:   sky_r = 28; sky_g = 50; sky_b = 19; has_atmo = 1;
+                break;                                 /* tan haze */
+            default: break;                            /* airless rock */
+            }
+        }
+#endif
         for (int py = ylo; py <= yhi; py++) {
             float ny = (py - imy) * inv_r;
             float w2 = 1.0f - ny * ny;
@@ -521,9 +676,76 @@ void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
                 int cr = (int)(((c >> 11) & 31) * shade);
                 int cg = (int)(((c >> 5) & 63) * shade);
                 int cb = (int)((c & 31) * shade);
+#ifdef ELITE_STYLE_LAB
+                if (has_atmo) {
+                    /* Atmosphere rim: pixels near the limb (low nz) blend
+                     * toward the sky colour on the lit side — a 2-3px
+                     * haze that sells "planet with air". */
+                    float am = 1.0f - nz * 2.2f;
+                    if (am > 0.0f) {
+                        am *= (0.55f + 0.45f * am) *
+                              (0.30f + 0.70f * light);
+                        if (am > 0.80f) am = 0.80f;
+                        cr += (int)((sky_r - cr) * am);
+                        cg += (int)((sky_g - cg) * am);
+                        cb += (int)((sky_b - cb) * am);
+                    }
+                }
+#endif
                 dr[px] = im->d;
                 fr[px] = (uint16_t)((cr << 11) | (cg << 5) | cb);
             }
         }
+#ifdef ELITE_STYLE_LAB
+        if (has_rings && imr >= 4.0f) {
+            /* PROPOSAL ring band: screen-space ellipse at a fixed tilt.
+             * The half above centre passes behind the disc (skipped where
+             * the sphere covers it); the lower half crosses in front.
+             * Radial noise gives banding and a Cassini-style gap. */
+            const float tilt = 0.34f;
+            const float r_in = 1.30f, r_out = 2.05f;
+            int ry0 = cy - (int)(imr * r_out * tilt) - 1;
+            int ry1 = cy + (int)(imr * r_out * tilt) + 1;
+            if (ry0 < y0) ry0 = y0;
+            if (ry1 >= y1) ry1 = y1 - 1;
+            int xw = (int)(imr * r_out) + 1;
+            int rx0 = cx - xw, rx1 = cx + xw;
+            if (rx0 < 0) rx0 = 0;
+            if (rx1 > R3D_FB_W - 1) rx1 = R3D_FB_W - 1;
+            float lit = 0.35f + 0.65f * (im->lz > 0 ? im->lz : 0);
+            for (int py = ry0; py <= ry1; py++) {
+                float wy = (py - imy) * inv_r;
+                float v = wy / tilt;
+                uint16_t *fr = fb + py * R3D_FB_W;
+                uint16_t *dr = depth + py * R3D_FB_W;
+                for (int px = rx0; px <= rx1; px++) {
+                    float u = (px - imx) * inv_r;
+                    float rr = sqrtf(u * u + v * v);
+                    if (rr < r_in || rr > r_out) continue;
+                    if (wy < 0 && u * u + wy * wy < 1.0f)
+                        continue;                    /* behind the sphere */
+                    if (im->d < dr[px]) continue;    /* ties: painter wins */
+                    /* soft inner/outer edges + banding + one gap */
+                    float ein = (rr - r_in) * 9.0f;
+                    float eout = (r_out - rr) * 6.0f;
+                    float edge = ein < eout ? ein : eout;
+                    if (edge > 1.0f) edge = 1.0f;
+                    float bandn = pnoise(rr * 6.5f, 0.5f, ring_sd ^ 0x51ABu);
+                    float alpha = (0.30f + 0.50f * bandn) * edge;
+                    if (rr > 1.66f && rr < 1.74f) alpha *= 0.15f;
+                    /* dusty tan, dimmed when the star is behind */
+                    int tr = (int)(24 * lit), tg = (int)(42 * lit),
+                        tb = (int)(16 * lit);
+                    int pr = (fr[px] >> 11) & 31, pg = (fr[px] >> 5) & 63,
+                        pb = fr[px] & 31;
+                    pr += (int)((tr - pr) * alpha);
+                    pg += (int)((tg - pg) * alpha);
+                    pb += (int)((tb - pb) * alpha);
+                    dr[px] = im->d;
+                    fr[px] = (uint16_t)((pr << 11) | (pg << 5) | pb);
+                }
+            }
+        }
+#endif
     }
 }

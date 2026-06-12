@@ -1,0 +1,13 @@
+# Target labels
+ thumbyelite_baker
+# Source files and their labels
+/home/maustin/thumby-color/ThumbyElite/build_lab_faces/CMakeFiles/thumbyelite_baker
+/home/maustin/thumby-color/ThumbyElite/build_lab_faces/CMakeFiles/thumbyelite_baker.rule
+/home/maustin/thumby-color/ThumbyElite/build_lab_faces/CMakeFiles/thumbyelite_baker-complete.rule
+/home/maustin/thumby-color/ThumbyElite/build_lab_faces/thumbyelite_baker-prefix/src/thumbyelite_baker-stamp/thumbyelite_baker-build.rule
+/home/maustin/thumby-color/ThumbyElite/build_lab_faces/thumbyelite_baker-prefix/src/thumbyelite_baker-stamp/thumbyelite_baker-configure.rule
+/home/maustin/thumby-color/ThumbyElite/build_lab_faces/thumbyelite_baker-prefix/src/thumbyelite_baker-stamp/thumbyelite_baker-download.rule
+/home/maustin/thumby-color/ThumbyElite/build_lab_faces/thumbyelite_baker-prefix/src/thumbyelite_baker-stamp/thumbyelite_baker-install.rule
+/home/maustin/thumby-color/ThumbyElite/build_lab_faces/thumbyelite_baker-prefix/src/thumbyelite_baker-stamp/thumbyelite_baker-mkdir.rule
+/home/maustin/thumby-color/ThumbyElite/build_lab_faces/thumbyelite_baker-prefix/src/thumbyelite_baker-stamp/thumbyelite_baker-patch.rule
+/home/maustin/thumby-color/ThumbyElite/build_lab_faces/thumbyelite_baker-prefix/src/thumbyelite_baker-stamp/thumbyelite_baker-update.rule

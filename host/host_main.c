@@ -660,7 +660,7 @@ static void host_settings_save(void) {
 
 #ifdef ELITE_STYLE_LAB
 /* --- contact-sheet canvas (style lab — proposal renders only) ----------- */
-#define SHEET_MAX 720
+#define SHEET_MAX 1000
 static uint16_t s_sheet[SHEET_MAX * SHEET_MAX];
 static int s_sheet_w, s_sheet_h;
 static void sheet_clear(int w, int h) {
@@ -740,7 +740,7 @@ static void sheet_render_mesh(const Mesh *mesh, float yaw, float pitch) {
     obj.basis = m3_identity();
     m3_rotate_local(&obj.basis, 1, yaw);
     m3_rotate_local(&obj.basis, 0, pitch);
-    obj.pos = v3(0, 0, mesh->bound_r * 2.25f);
+    obj.pos = v3(0, 0, mesh->bound_r * 1.85f);
     r3d_scene_add_object(&obj);
     r3d_scene_raster(g_fb, 0, ELITE_FB_H);
 }
@@ -1323,19 +1323,19 @@ int main(int argc, char **argv) {
         r3d_scene_set_style(0);
         r3d_scene_set_nebula(0, 0);
 
-        /* D) ships: 10 classes x 10 seeds */
+        /* D) ships: 10 classes x 10 seeds, 96px cells (center crop) */
         r3d_scene_set_icon_bg(RGB565C(7, 9, 15));
         for (int st = 0; st <= 1; st++) {
             ship_gen_set_style(st);
-            sheet_clear(2 + 10 * 66, 2 + 10 * 66);
+            sheet_clear(2 + 10 * 98, 2 + 10 * 98);
             for (int cls = 0; cls < 10; cls++)
                 for (int col = 0; col < 10; col++) {
                     const Mesh *m = ship_gen_mesh_class(
                         base + (uint32_t)col * 2654435761u +
                         (uint32_t)cls * 97u, cls);
                     sheet_render_mesh(m, 0.75f, 0.28f);
-                    sheet_blit(g_fb, ELITE_FB_W, 128, 128,
-                               2 + col * 66, 2 + cls * 66, 2);
+                    sheet_blit(g_fb + 16 * ELITE_FB_W + 16, ELITE_FB_W,
+                               96, 96, 2 + col * 98, 2 + cls * 98, 1);
                 }
             snprintf(path, sizeof path, "%s_ships_%s.ppm", pre,
                      st ? "new" : "cur");

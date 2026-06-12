@@ -1,0 +1,3 @@
+/home/maustin/thumby-color/ThumbyElite/build_lab_space/baker/CMakeFiles/obj2mesh.dir
+/home/maustin/thumby-color/ThumbyElite/build_lab_space/baker/CMakeFiles/edit_cache.dir
+/home/maustin/thumby-color/ThumbyElite/build_lab_space/baker/CMakeFiles/rebuild_cache.dir

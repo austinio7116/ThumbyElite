@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/maustin/thumby-color/ThumbyElite/build_lab_faces/CMakeFiles/thumbyelite_baker"
+		},
+		{
+			"file" : "/home/maustin/thumby-color/ThumbyElite/build_lab_faces/CMakeFiles/thumbyelite_baker.rule"
+		},
+		{
+			"file" : "/home/maustin/thumby-color/ThumbyElite/build_lab_faces/CMakeFiles/thumbyelite_baker-complete.rule"
+		},
+		{
+			"file" : "/home/maustin/thumby-color/ThumbyElite/build_lab_faces/thumbyelite_baker-prefix/src/thumbyelite_baker-stamp/thumbyelite_baker-build.rule"
+		},
+		{
+			"file" : "/home/maustin/thumby-color/ThumbyElite/build_lab_faces/thumbyelite_baker-prefix/src/thumbyelite_baker-stamp/thumbyelite_baker-configure.rule"
+		},
+		{
+			"file" : "/home/maustin/thumby-color/ThumbyElite/build_lab_faces/thumbyelite_baker-prefix/src/thumbyelite_baker-stamp/thumbyelite_baker-download.rule"
+		},
+		{
+			"file" : "/home/maustin/thumby-color/ThumbyElite/build_lab_faces/thumbyelite_baker-prefix/src/thumbyelite_baker-stamp/thumbyelite_baker-install.rule"
+		},
+		{
+			"file" : "/home/maustin/thumby-color/ThumbyElite/build_lab_faces/thumbyelite_baker-prefix/src/thumbyelite_baker-stamp/thumbyelite_baker-mkdir.rule"
+		},
+		{
+			"file" : "/home/maustin/thumby-color/ThumbyElite/build_lab_faces/thumbyelite_baker-prefix/src/thumbyelite_baker-stamp/thumbyelite_baker-patch.rule"
+		},
+		{
+			"file" : "/home/maustin/thumby-color/ThumbyElite/build_lab_faces/thumbyelite_baker-prefix/src/thumbyelite_baker-stamp/thumbyelite_baker-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"thumbyelite_baker"
+		],
+		"name" : "thumbyelite_baker"
+	}
+}
