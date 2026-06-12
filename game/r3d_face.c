@@ -65,11 +65,11 @@ static const uint16_t COL_SCLERA = RGB565C(225, 222, 205);
 static const uint16_t COL_SYNTH  = RGB565C(120, 130, 145);
 static const uint16_t COL_GLOW   = RGB565C(120, 230, 255);
 
-/* Proposal-look switch (style lab — sheets only). */
-static int s_style;
+/* ADOPTED 2026-06-12: the v2 proposal faces are the live look (species,
+ * volumed hair, helmets). Style 0 kept selectable for sheet comparisons. */
+static int s_style = 1;
 void face_set_style(int s) { s_style = s; }
 
-#ifdef ELITE_STYLE_LAB
 /* PROPOSAL palettes: species skins + louder hair. */
 static const uint16_t k_skin_avian[4] = {
     RGB565C(205, 170, 110), RGB565C(150, 170, 180), RGB565C(225, 215, 200),
@@ -90,37 +90,31 @@ static int ell_w(int rx, float ny) {
     if (ny > 1.0f) ny = 1.0f;
     return (int)((float)rx * sqrtf(1.0f - ny * ny));
 }
-#endif
 
 void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
                int kind) {
     FCtx c = { fb, bx, by, size };
     FRng r = { seed ? seed : 1u };
-#ifdef ELITE_STYLE_LAB
     /* style-1 extras draw from their own stream so the style-0 fr_n/fr_pct
      * sequence is never disturbed (style-0 must stay byte-identical) */
     FRng r2 = { (seed ? seed : 1u) * 2654435761u };
-#endif
     float S = (float)size;
 
     int synth = (kind != NK_MYSTIC) && fr_pct(&r, 10);
     /* species: 0 human, 1 synth, 2 avian, 3 saurian, 4 heavyworlder */
     int species = synth ? 1 : 0;
-#ifdef ELITE_STYLE_LAB
     if (s_style == 1 && kind != NK_MYSTIC) {
         int sr = fr_n(&r, 100);
         species = (sr < 54) ? 0 : (sr < 64) ? 1 : (sr < 77) ? 2
                 : (sr < 89) ? 3 : 4;
         synth = (species == 1);
     }
-#endif
     uint16_t skin = synth ? COL_SYNTH : k_skin[fr_n(&r, 6)];
     if (kind == NK_MYSTIC) skin = shade(skin, 88);          /* pallid */
     if (kind == NK_PIRATE) skin = shade(skin, 92);
     uint16_t skin_d = shade(skin, 72), skin_l = shade(skin, 116);
     uint16_t hair = k_hair[fr_n(&r, 6)];
     uint16_t iris = synth ? COL_GLOW : k_iris[fr_n(&r, 6)];
-#ifdef ELITE_STYLE_LAB
     if (s_style == 1) {
         if (species == 2) { skin = k_skin_avian[fr_n(&r, 4)];
                             iris = RGB565C(20, 16, 12); }
@@ -133,7 +127,6 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
         skin_d = shade(skin, 72);
         skin_l = shade(skin, 116);
     }
-#endif
     uint16_t suit = k_suit[kind == NK_OFFICIAL ? 0 : fr_n(&r, 5)];
 
     /* panel backdrop: deep blue-grey, faint floor glow */
@@ -148,13 +141,11 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
     int rx = (int)(S * (0.24f + 0.05f * (float)fr_n(&r, 4) / 3.0f));
     int ry = (int)(S * (0.30f + 0.05f * (float)fr_n(&r, 4) / 3.0f));
     float jaw = 0.10f + 0.35f * (float)fr_n(&r, 4) / 3.0f;
-#ifdef ELITE_STYLE_LAB
     if (s_style == 1) {
         if (species == 2) { rx = (int)(rx * 0.85f); jaw = 0.45f; }
         if (species == 4) { rx = (int)(rx * 1.22f); jaw = 0.05f;
                             ry = (int)(ry * 0.95f); }
     }
-#endif
 
     /* shoulders + neck under the head */
     int sh_y = cy + ry - (int)(S * 0.04f);
@@ -166,12 +157,10 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
     if (kind == NK_OFFICIAL)                       /* rank stripe */
         fspan(&c, cx - (int)(S * 0.2f), cx + (int)(S * 0.2f),
               sh_y + 2, RGB565C(200, 170, 60));
-#ifdef ELITE_STYLE_LAB
     if (s_style == 1 && species == 4)            /* heavyworlder: bull neck */
         frect(&c, cx - (int)(S * 0.16f), cy + ry - (int)(S * 0.10f),
               (int)(S * 0.32f) + 1, (int)(S * 0.14f), skin_d);
     else
-#endif
     frect(&c, cx - (int)(S * 0.09f), cy + ry - (int)(S * 0.10f),
           (int)(S * 0.18f) + 1, (int)(S * 0.14f), skin_d);   /* neck */
 
@@ -180,10 +169,8 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
         float ny = (float)(y - cy) / (float)ry;
         float w = (float)rx * sqrtf(1.0f - ny * ny);
         if (ny > 0.15f) w *= 1.0f - jaw * (ny - 0.15f) / 0.85f;
-#ifdef ELITE_STYLE_LAB
         if (s_style == 1 && species == 4 && ny > 0.0f)
             w *= 1.0f + 0.22f * 4.0f * ny * (1.0f - ny);     /* jowls */
-#endif
         int wi = (int)w;
         if (wi < 1) continue;
         fspan(&c, cx - wi, cx + wi, y, skin);
@@ -201,13 +188,11 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
     int ey = cy - (int)(S * 0.02f);
     int hood = (kind == NK_MYSTIC) ? fr_pct(&r, 80) : fr_pct(&r, 6);
     int helmet = 0, breather = 0;
-#ifdef ELITE_STYLE_LAB
     if (s_style == 1 && !hood && (species <= 1 || species == 4)) {
         int g = fr_n(&r, 100);
         helmet   = g < 14;
         breather = g >= 14 && g < 24;
     }
-#endif
     if (!hood && !synth && !helmet && species < 2) {
         frect(&c, cx - rx - 1, ey - 1, 2, (int)(S * 0.10f) + 1, skin_d);
         frect(&c, cx + rx - 1, ey - 1, 2, (int)(S * 0.10f) + 1, skin_d);
@@ -218,7 +203,6 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
     int cap = (kind == NK_OFFICIAL || kind == NK_DOCKHAND) && fr_pct(&r, 55);
     int bald = synth || fr_pct(&r, 18);
     int hl = (int)(S * (0.08f + 0.07f * (float)fr_n(&r, 3) / 2.0f));
-#ifdef ELITE_STYLE_LAB
     if (s_style == 1 && (helmet || species >= 2 ||
                          (!hood && !bandana && !cap && !bald))) {
         if (helmet) {
@@ -424,7 +408,6 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
             }
         }
     } else
-#endif
     if (bandana) {
         uint16_t bc = RGB565C(140, 40, 40);
         for (int y = cy - ry; y < cy - ry + (int)(S * 0.14f); y++) {
@@ -470,7 +453,6 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
     int eh = (int)(S * 0.05f); if (eh < 1) eh = 1;
     int visor = ((kind == NK_OFFICIAL) && fr_pct(&r, 45)) || helmet;
     int slit = 0;
-#ifdef ELITE_STYLE_LAB
     if (s_style == 1) {
         slit = (species == 3);
         if (species == 2) {                  /* round, side-set */
@@ -480,7 +462,6 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
             if (edx < 2) edx = 2;
         }
     }
-#endif
     if (!visor) {
         uint16_t sclera = hood ? shade(COL_SCLERA, 55) : COL_SCLERA;
         if (slit) sclera = RGB565C(215, 185, 70);
@@ -495,7 +476,6 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
                     RGB565C(8, 8, 10));
             }
         }
-#ifdef ELITE_STYLE_LAB
         if (s_style == 1 && species == 2)    /* knock corners off → round */
             for (int sgn = -1; sgn <= 1; sgn += 2) {
                 int ex = cx + sgn * edx - ew / 2;
@@ -503,11 +483,9 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
                 fpx(&c, ex, ey + eh, skin);
                 fpx(&c, ex + ew - 1, ey + eh, skin);
             }
-#endif
         /* brows: tilt 0 neutral, 1 angry-in, 2 raised */
         int tilt = (kind == NK_PIRATE) ? 1 : fr_n(&r, 3);
         uint16_t bcol = synth ? shade(COL_SYNTH, 55) : shade(hair, 70);
-#ifdef ELITE_STYLE_LAB
         if (s_style == 1 && species == 4) {
             /* heavyworlder: one continuous brow shelf — lit top edge,
              * cast shadow right over the eyes */
@@ -526,7 +504,6 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
         } else if (s_style == 1 && species == 2) {
             /* avian: no brows — the crest and beak carry the face */
         } else
-#endif
         for (int sgn = -1; sgn <= 1; sgn += 2) {
             int ex = cx + sgn * edx - ew / 2;
             int yo = ey - eh - 1;
@@ -550,7 +527,6 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
     int mw = (int)(S * 0.08f) + fr_n(&r, 3);
     int mood = fr_n(&r, 3);                 /* 0 flat 1 frown 2 smile */
     uint16_t mcol = shade(skin, 48);
-#ifdef ELITE_STYLE_LAB
     if (s_style == 1 && species == 2) {
         /* hooked beak: rounded two-tone wedge — upper mandible lighter,
          * the gape sags at the ends, the tip hooks down to a point */
@@ -600,7 +576,6 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
         fpx(&c, cx - gw, my, shade(skin, 42));        /* gape upturn */
         fpx(&c, cx + gw, my, shade(skin, 42));
     } else
-#endif
     {
         frect(&c, cx - 1, ey + 2, 1, nly - ey - 2, skin_d);
         fspan(&c, cx - 1, cx + 1, nly, skin_d);
@@ -608,7 +583,6 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
         if (mood == 1) { fpx(&c, cx - mw, my - 1, mcol); fpx(&c, cx + mw, my - 1, mcol); }
         if (mood == 2) { fpx(&c, cx - mw, my + 1, mcol); fpx(&c, cx + mw, my + 1, mcol); }
     }
-#ifdef ELITE_STYLE_LAB
     if (s_style == 1 && breather) {
         /* sealed breather mask over the mouth, twin feed lines */
         uint16_t mk = RGB565C(58, 66, 80);
@@ -618,7 +592,6 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
         fpx(&c, cx + mw + 2, my + 4, shade(mk, 70));
         fpx(&c, cx, my, RGB565C(120, 230, 255));        /* status led */
     }
-#endif
 
     /* stubble / beard */
     if (!synth && fr_pct(&r, kind == NK_DOCKHAND ? 55 : 30) && species < 2

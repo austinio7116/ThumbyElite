@@ -28,10 +28,9 @@ static uint32_t rnd(void) {
     return s_rng;
 }
 
-/* Proposal-look switch (style lab — sheets only). */
-static int s_style;
-static uint32_t s_style_seed;
-void ship_gen_set_style(int s) { s_style = s; }
+/* Style switch retired: every ship proposal was rejected (2026-06-12).
+ * No-op setter so lab harnesses keep linking. */
+void ship_gen_set_style(int s) { (void)s; }
 static float rndf(float lo, float hi) {
     return lo + (hi - lo) * (float)(rnd() & 0xFFFF) * (1.0f / 65535.0f);
 }
@@ -239,144 +238,8 @@ static void gun_pair(float x, float y, float z, float blen, float br,
 /* class-hint state (set by ship_gen_mesh_class; -1 = free roll) */
 static int s_hint = -1;
 
-#ifdef ELITE_STYLE_LAB
-/* =================== PROPOSAL archetypes (style 1) ====================
- * Real new silhouettes, not paint: an industrial spine-hauler, a flying
- * blade, and a twin-hull catamaran. Built from the proven primitives. */
-
-/* Container train on a thin truss: cab forward, engine block aft. */
-static void gen_spine_hauler(float len, uint16_t HULL, uint16_t HULL2,
-                             uint16_t GLOW, uint16_t ACC, uint16_t GLASS) {
-    float zf = len * 0.5f, zb = -len * 0.5f;
-    float w = len * 0.10f;
-    /* cab: stubby loft + glass face */
-    {
-        int a[8], b[8];
-        ring(zf - len * 0.16f, w * 0.8f, w * 0.7f, 0, 0.5f, a);
-        ring(zf - len * 0.02f, w * 0.55f, w * 0.5f, -w * 0.1f, 0.5f, b);
-        skin(a, b, HULL, HULL, HULL2);
-        cap_back(a, HULL2);
-        cap_front(b, GLASS);
-        fin(0, zf - len * 0.14f, zf - len * 0.08f, w * 0.7f, w * 0.06f,
-            w * rndf(0.9f, 1.6f), zf - len * 0.14f, zf - len * 0.11f,
-            1.0f, ACC);                                  /* comms mast */
-    }
-    /* truss spine */
-    slab(0, 0, (zb + zf) * 0.5f - len * 0.04f,
-         w * 0.18f, w * 0.18f, len * 0.36f, HULL2, HULL2, HULL2);
-    /* container train: boxes alternating above/below the spine */
-    int nc = rndi(3, 5);
-    float cz0 = zb + len * 0.18f, cz1 = zf - len * 0.20f;
-    for (int k = 0; k < nc; k++) {
-        float t = (float)k / (float)(nc - 1 > 0 ? nc - 1 : 1);
-        float cz = cz0 + (cz1 - cz0) * t;
-        float cw = w * rndf(0.85f, 1.15f);
-        float chh = cw * rndf(0.7f, 0.95f);
-        float side = (k & 1) ? -1.0f : 1.0f;
-        uint16_t cc = (k % 3 == 0) ? ACC : (k & 1) ? HULL : HULL2;
-        slab(0, side * (chh * 0.55f), cz, cw, chh,
-             len * 0.075f, cc, cc,
-             (k & 1) ? HULL2 : HULL);
-    }
-    /* engine block: slab + twin recessed nozzles */
-    slab(0, 0, zb + len * 0.07f, w * 1.1f, w * 0.85f, len * 0.075f,
-         HULL2, HULL2, HULL2);
-    for (int sd = 0; sd < 2; sd++) {
-        float sx = sd ? -w * 0.5f : w * 0.5f;
-        int n0[8], n1[8];
-        ring(zb - len * 0.035f, w * 0.32f, w * 0.32f, 0, 0.5f, n0);
-        ring(zb + len * 0.005f, w * 0.42f, w * 0.42f, 0, 0.5f, n1);
-        for (int k = 0; k < 8; k++) { s_fx[n0[k]] += sx; s_fx[n1[k]] += sx; }
-        skin(n0, n1, HULL2, HULL2, HULL2);
-        cap_back(n0, GLOW);
-    }
-}
-
-/* Flying blade: one wide flat wedge, raked tip, dorsal blade fin. */
-static void gen_blade(float len, uint16_t HULL, uint16_t HULL2,
-                      uint16_t GLOW, uint16_t ACC, uint16_t GLASS) {
-    float zf = len * 0.5f, zb = -len * 0.5f, zm = zb + len * 0.30f;
-    float X = len * rndf(0.30f, 0.40f);
-    float hy = len * rndf(0.035f, 0.055f);
-    float xt = X * rndf(0.10f, 0.22f);          /* nose width */
-    /* fore wedge (tip cap = dark muzzle face) */
-    prong(-X, X, -xt, xt, hy, hy * 0.5f, zm, zf,
-          HULL, HULL2, RGB565C(40, 40, 48));
-    /* aft wedge runs BACKWARD: its raked tip is the engine slit */
-    float xr = X * rndf(0.55f, 0.8f);
-    prong(-X, X, -xr, xr, hy, hy * 0.85f, zm, zb, HULL, HULL2, GLOW);
-    /* canopy bump on the centreline */
-    {
-        int e[8], f2[8];
-        ring(zm + len * 0.04f, X * 0.13f, hy * 0.7f, hy * 0.8f, 0.5f, e);
-        ring(zm + len * 0.18f, X * 0.08f, hy * 0.4f, hy * 0.6f, 0.5f, f2);
-        skin(e, f2, GLASS, GLASS, HULL);
-        cap_back(e, HULL);
-        cap_front(f2, HULL2);
-    }
-    /* dorsal blade + wingtip guns + tip accents */
-    fin(0, zm - len * 0.10f, zm + len * 0.02f, hy * 0.9f, X * 0.02f,
-        hy * rndf(3.0f, 5.0f), zm - len * 0.14f, zm - len * 0.08f,
-        1.0f, ACC);
-    if (rnd() & 1) {
-        tip_gun(X * 0.82f, 0, zm + len * 0.05f, len * 0.16f,
-                X * 0.035f, HULL2, RGB565C(40, 40, 48));
-        tip_gun(-X * 0.82f, 0, zm + len * 0.05f, len * 0.16f,
-                X * 0.035f, HULL2, RGB565C(40, 40, 48));
-    }
-}
-
-/* Twin-hull catamaran: two slim lofts bridged by a deck + centre pod. */
-static void gen_catamaran(float len, uint16_t HULL, uint16_t HULL2,
-                          uint16_t GLOW, uint16_t ACC, uint16_t GLASS) {
-    float zf = len * 0.5f, zb = -len * 0.5f;
-    float xh = len * rndf(0.13f, 0.18f);        /* hull separation */
-    float w = len * rndf(0.05f, 0.07f);
-    float h = w * rndf(0.9f, 1.15f);
-    for (int sd = 0; sd < 2; sd++) {
-        float sx = sd ? -xh : xh;
-        int a[8], b[8], c[8], d[8], e[8];
-        ring(zb + len * 0.04f, w * 0.55f, h * 0.55f, 0, 0.45f, a);
-        ring(zb + len * 0.30f, w, h, 0, 0.45f, b);
-        ring(zb + len * 0.62f, w * 0.95f, h, 0, 0.5f, c);
-        ring(zf - len * 0.16f, w * 0.5f, h * 0.55f, 0, 0.45f, d);
-        for (int k = 0; k < 8; k++) {
-            s_fx[a[k]] += sx; s_fx[b[k]] += sx;
-            s_fx[c[k]] += sx; s_fx[d[k]] += sx;
-        }
-        skin(a, b, HULL, HULL, HULL2);
-        skin(b, c, HULL, HULL, HULL2);
-        skin(c, d, HULL, HULL, HULL2);
-        nose_apex(d, sx, 0, zf, HULL2);
-        /* recessed nozzle */
-        ring(zb - len * 0.02f, w * 0.55f, h * 0.55f, 0, 0.45f, e);
-        for (int k = 0; k < 8; k++) s_fx[e[k]] += sx;
-        skin(e, a, HULL2, HULL2, HULL2);
-        cap_back(e, GLOW);
-    }
-    /* bridge deck + centre pod (cockpit) */
-    float dz = zb + len * rndf(0.34f, 0.44f);
-    slab(0, 0, dz + len * 0.08f, xh, h * 0.28f, len * 0.13f,
-         HULL, HULL2, HULL2);
-    {
-        int e2[8], f2[8];
-        ring(dz, w * 0.9f, h * 0.6f, h * 0.5f, 0.5f, e2);
-        ring(dz + len * 0.16f, w * 0.55f, h * 0.35f, h * 0.4f, 0.5f, f2);
-        skin(e2, f2, GLASS, GLASS, HULL);
-        cap_back(e2, HULL);
-        cap_front(f2, HULL2);
-    }
-    /* outboard winglets + chin guns */
-    wings(dz, dz + len * 0.14f, xh + w, 0, h * 0.12f,
-          xh + w + len * rndf(0.10f, 0.18f), dz - len * 0.06f,
-          dz, -h * rndf(0.3f, 0.9f), ACC);
-    gun_pair(xh, -h * 0.6f, zf - len * 0.18f, len * 0.14f, w * 0.14f,
-             HULL2, RGB565C(40, 40, 48));
-}
-#endif /* ELITE_STYLE_LAB */
 
 const Mesh *ship_gen_mesh(uint32_t seed) {
-    s_style_seed = seed;
     /* Proper mix — seed|1 made adjacent even/odd seeds identical. */
     s_rng = seed * 2654435761u;
     s_rng ^= s_rng >> 15;
@@ -484,28 +347,6 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
     float nose_len = len * ((family == 2) ? rndf(0.30f, 0.42f)
                                           : rndf(0.18f, 0.30f));
 
-#ifdef ELITE_STYLE_LAB
-    if (s_style == 1) {
-        /* PROPOSAL: divert a share of seeds into the new silhouettes —
-         * haulers become container trains, couriers fly blades, some
-         * fighters ride twin hulls. Real shape variety, not paint. */
-        uint32_t dv = s_style_seed * 0x9E3779B9u;
-        dv ^= dv >> 16;
-        int divert = (int)(dv % 100u);
-        if (arch == 0 && family == 5 && divert < 50) {
-            gen_spine_hauler(len, HULL, HULL2, GLOW, ACC, GLASS);
-            goto finish;
-        }
-        if (arch == 0 && family == 0 && divert < 38) {
-            gen_blade(len, HULL, HULL2, GLOW, ACC, GLASS);
-            goto finish;
-        }
-        if (arch == 0 && (family == 1 || family == 2) && divert >= 68) {
-            gen_catamaran(len, HULL, HULL2, GLOW, ACC, GLASS);
-            goto finish;
-        }
-    }
-#endif
 
     if (arch == 1) {
         /* --- X-FOIL: slim fuselage + 4 wings in X + tip cannons ------- */
@@ -991,100 +832,8 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
                 w_mid * rndf(0.22f, 0.34f), HULL2, GLOW, 1);
     }
 
-#ifdef ELITE_STYLE_LAB
-    if (s_style == 1) {
-        /* PROPOSAL loft detailing: a recessed engine nozzle (mechanical
-         * tail instead of a flat glow plate), greeble boxes along the
-         * dorsal deck, a comms mast, and cranked outer wing panels. */
-        {
-            int rE[8];
-            ring(z0 - len * rndf(0.04f, 0.07f), w0 * 0.55f, h0 * 0.55f,
-                 y0, ch, rE);
-            skin(rE, rA, HULL2, HULL2, HULL2);
-            cap_back(rE, GLOW);
-        }
-        int ng = rndi(2, 5);
-        for (int k = 0; k < ng; k++) {
-            float gz = z1 + (z3 - z1) * rndf(0.1f, 0.9f);
-            /* deck height: two-segment lerp through the ring stations */
-            float yd;
-            if (gz < z2) {
-                float t = (gz - z1) / (z2 - z1);
-                yd = (y1 + h1) + ((0 + h2) - (y1 + h1)) * t;
-            } else {
-                float t = (gz - z2) / (z3 - z2);
-                yd = (0 + h2) + ((y3 + h3) - (0 + h2)) * t;
-            }
-            float gw = w_mid * rndf(0.10f, 0.22f);
-            float gh = h2 * rndf(0.10f, 0.22f);
-            slab(rndf(-0.45f, 0.45f) * w_mid, yd * 0.92f, gz,
-                 gw, gh, len * rndf(0.025f, 0.06f),
-                 (k == 0) ? ACC : HULL2, HULL2, HULL2);
-        }
-        if (rndi(0, 2) == 0)                       /* comms mast */
-            fin(w_mid * rndf(-0.3f, 0.3f), z3 - len * 0.04f, z3,
-                h3 * 0.8f, w_mid * 0.02f, h3 * rndf(1.8f, 3.0f),
-                z3 - len * 0.05f, z3 - len * 0.03f, 1.0f, HULL2);
-        if (family == 1 || family == 2) {
-            /* cranked outer panels: a second, steeper wing segment off
-             * the existing span — breaks the single-quad silhouette */
-            float ox = w1 + span;
-            wings(z1 + len * 0.06f, z1 + len * 0.16f, ox, h1 * 0.25f,
-                  h1 * 0.08f, ox + span * rndf(0.35f, 0.55f),
-                  z1 - len * rndf(0.04f, 0.10f), z1,
-                  h1 * 0.25f + span * rndf(0.30f, 0.75f), ACC);
-        }
-    }
-#endif
 
 finish:;
-#ifdef ELITE_STYLE_LAB
-    if (s_style == 1) {
-        /* PROPOSAL material pass: faction accent stripe down the spine,
-         * emissive engine ring, shadowed belly, per-panel tone variance.
-         * Geometry untouched — this is a paint job direction. */
-        uint32_t h = s_style_seed * 2654435761u ^ 0x57F1u;
-        h ^= h >> 13;
-        static const uint16_t k_acc[6] = {
-            RGB565C(196, 60, 50),   RGB565C(220, 140, 40),
-            RGB565C(60, 170, 170),  RGB565C(205, 170, 60),
-            RGB565C(225, 225, 230), RGB565C(90, 160, 90),
-        };
-        uint16_t acc = k_acc[h % 6u];
-        uint16_t eng = (h & 8u) ? RGB565C(120, 200, 255)
-                                : RGB565C(255, 160, 70);
-        float wmax = 0.2f;
-        for (int i = 0; i < s_nv; i++)
-            if (fabsf(s_fx[i]) > wmax) wmax = fabsf(s_fx[i]);
-        for (int i = 0; i < s_nf; i++) {
-            MeshFace *f = &s_faces[i];
-            float fcx = (s_fx[f->a] + s_fx[f->b] + s_fx[f->c]) / 3.0f;
-            if (f->nz < -100) {
-                f->color = eng;                     /* engine emissives */
-            } else if (f->ny > 64 && fabsf(fcx) < wmax * 0.22f &&
-                       ((h >> 4) & 3u) != 0) {
-                f->color = acc;                     /* spine stripe */
-            } else {
-                int pc = 100;
-                if (f->ny < -64) pc = 84;           /* shadowed belly */
-                uint32_t ph = (uint32_t)i * 2654435761u ^ h;
-                ph ^= ph >> 13;
-                int pv = (int)(ph % 7u);            /* panel variance */
-                if (pv == 0) pc = pc * 90 / 100;
-                if (pv == 1) pc = pc * 108 / 100;
-                if (pc != 100) {
-                    int r2 = ((f->color >> 11) & 31) * pc / 100;
-                    int g2 = ((f->color >> 5) & 63) * pc / 100;
-                    int b2 = (f->color & 31) * pc / 100;
-                    if (r2 > 31) r2 = 31;
-                    if (g2 > 63) g2 = 63;
-                    if (b2 > 31) b2 = 31;
-                    f->color = (uint16_t)((r2 << 11) | (g2 << 5) | b2);
-                }
-            }
-        }
-    }
-#endif
     /* --- quantise ------------------------------------------------------ */
     float maxc = 1.0f, bound2 = 1.0f;
     for (int i = 0; i < s_nv; i++) {

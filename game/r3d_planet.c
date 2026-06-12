@@ -164,14 +164,13 @@ static void make_palette(PlanetType t, uint32_t seed, uint16_t pal[PAL_N]) {
     }
 }
 
-#ifdef ELITE_STYLE_LAB
-/* PROPOSAL bake: full from-scratch style-1 tile generator. The complaint
- * with the stamp pass was sameness — every world of a type shared one
- * structure. Here the STRUCTURE itself is seeded: domain-warped fbm for
- * coherent continents/landmasses, sea level / band count / warp strength
- * drawn from wide per-seed ranges, palettes hue-jittered per world, and
- * type features that read at disc sizes (caps with wavy edges, ridged
- * lava vein networks, curved ice fractures, soft-edged gas storms). */
+/* Variety bake (ADOPTED 2026-06-12, was the style-lab proposal): the
+ * STRUCTURE itself is seeded — domain-warped fbm for coherent
+ * continents, sea level / band count / warp strength from wide per-seed
+ * ranges, palettes hue-jittered per world, type features that read at
+ * disc sizes. Half of all worlds use it, half keep the classic bake
+ * (user: keep new AND old for variety); lava is always classic (user:
+ * the vein look was bad). */
 static uint32_t s1_rng;
 static uint32_t s1_rnd(void) {
     s1_rng ^= s1_rng << 13; s1_rng ^= s1_rng >> 17; s1_rng ^= s1_rng << 5;
@@ -398,7 +397,6 @@ static void bake_style1(PlanetArt *a, const PlanetInfo *p) {
     }
     }
 }
-#endif
 
 void r3d_planet_bake(const SystemInfo *info) {
     s_info = info;
@@ -406,9 +404,11 @@ void r3d_planet_bake(const SystemInfo *info) {
         const PlanetInfo *p = &info->planets[i];
         PlanetArt *a = &s_art[i];
         make_palette(p->type, p->tex_seed, a->pal);
-#ifdef ELITE_STYLE_LAB
-        if (s_style == 1) { bake_style1(a, p); continue; }
-#endif
+        /* 50/50 classic vs variety bake per world; lava always classic. */
+        if (p->type != PT_LAVA && (p->tex_seed & 0x40u)) {
+            bake_style1(a, p);
+            continue;
+        }
         for (int y = 0; y < TEX_N; y++) {
             for (int x = 0; x < TEX_N; x++) {
                 float v;
@@ -620,29 +620,15 @@ void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
 
         const PlanetArt *art = &s_art[(int)im->planet];
         const float ux = s_up_sx, uy = s_up_sy;        /* world-up on screen */
-#ifdef ELITE_STYLE_LAB
-        /* PROPOSAL: per-type sky colour for the atmosphere limb (565
-         * channel scale) and ring flag — resolved once per impostor. */
-        int sky_r = 0, sky_g = 0, sky_b = 0, has_atmo = 0, has_rings = 0;
+        /* Ring flag — resolved once per impostor (ADOPTED; the rim-glow
+         * proposal that lived here was rejected and removed). */
+        int has_rings = 0;
         uint32_t ring_sd = 0;
-        if (s_style == 1 && s_info) {
+        if (s_info) {
             const PlanetInfo *pi = &s_info->planets[(int)im->planet];
             has_rings = pi->rings;
             ring_sd = pi->tex_seed;
-            switch (pi->type) {
-            case PT_EARTHLIKE:
-            case PT_OCEAN: sky_r = 10; sky_g = 38; sky_b = 31; has_atmo = 1;
-                break;                                 /* blue air */
-            case PT_ICE:   sky_r = 22; sky_g = 52; sky_b = 31; has_atmo = 1;
-                break;                                 /* white-blue */
-            case PT_LAVA:  sky_r = 31; sky_g = 28; sky_b = 5;  has_atmo = 1;
-                break;                                 /* ember haze */
-            case PT_GAS:   sky_r = 28; sky_g = 50; sky_b = 19; has_atmo = 1;
-                break;                                 /* tan haze */
-            default: break;                            /* airless rock */
-            }
         }
-#endif
         for (int py = ylo; py <= yhi; py++) {
             float ny = (py - imy) * inv_r;
             float w2 = 1.0f - ny * ny;
@@ -676,29 +662,12 @@ void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
                 int cr = (int)(((c >> 11) & 31) * shade);
                 int cg = (int)(((c >> 5) & 63) * shade);
                 int cb = (int)((c & 31) * shade);
-#ifdef ELITE_STYLE_LAB
-                if (has_atmo) {
-                    /* Atmosphere rim: pixels near the limb (low nz) blend
-                     * toward the sky colour on the lit side — a 2-3px
-                     * haze that sells "planet with air". */
-                    float am = 1.0f - nz * 2.2f;
-                    if (am > 0.0f) {
-                        am *= (0.55f + 0.45f * am) *
-                              (0.30f + 0.70f * light);
-                        if (am > 0.80f) am = 0.80f;
-                        cr += (int)((sky_r - cr) * am);
-                        cg += (int)((sky_g - cg) * am);
-                        cb += (int)((sky_b - cb) * am);
-                    }
-                }
-#endif
                 dr[px] = im->d;
                 fr[px] = (uint16_t)((cr << 11) | (cg << 5) | cb);
             }
         }
-#ifdef ELITE_STYLE_LAB
         if (has_rings && imr >= 4.0f) {
-            /* PROPOSAL ring band: screen-space ellipse at a fixed tilt.
+            /* Ring band (ADOPTED): screen-space ellipse at a fixed tilt.
              * The half above centre passes behind the disc (skipped where
              * the sphere covers it); the lower half crosses in front.
              * Radial noise gives banding and a Cassini-style gap. */
@@ -746,6 +715,5 @@ void r3d_planet_raster(uint16_t *fb, int y0, int y1) {
                 }
             }
         }
-#endif
     }
 }
