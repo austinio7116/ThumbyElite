@@ -111,6 +111,8 @@ add_executable(thumbyelite
     ${GAME}/elite_rocks.c
     ${GAME}/elite_collide.c
     ${GAME}/mission.c
+    ${GAME}/events.c
+    ${GAME}/events_data.c
     ${GAME}/elite_audio.c
     ${GAME}/elite_save.c
     ${GAME}/elite_ai.c
@@ -120,6 +122,7 @@ add_executable(thumbyelite
     ${GAME}/ui_status.c
     ${GAME}/ui_icons.c
     ${GAME}/ui_detail.c
+    ${GAME}/ui_event.c
     ${GAME}/econ.c
     ${GAME}/elite_player.c
     ${GAME}/galaxy_gen.c
@@ -129,6 +132,7 @@ add_executable(thumbyelite
     ${GAME}/ship_gen.c
     ${GAME}/elite_ships.c
     ${GAME}/r3d_planet.c
+    ${GAME}/r3d_face.c
     ${GAME}/craft_font.c
 
     ${MESHES_GEN_C}

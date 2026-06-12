@@ -31,6 +31,8 @@
 #include "ui_station.h"
 #include "ui_status.h"
 #include "ui_ctrlsetup.h"
+#include "events.h"
+#include "ui_event.h"
 #include "elite_player.h"
 #include "elite_audio.h"
 #include "elite_save.h"
@@ -52,6 +54,7 @@ typedef enum {
     ST_DASH = 12,   /* appended LAST — inserting mid-enum shifted
                        DOCKED & friends and broke every state check */
     ST_CTRLSETUP = 13,   /* controller binding screen (from SETTINGS) */
+    ST_EVENT = 14,       /* dock-arrival hail modal (events.c)        */
 } GState;
 
 #define DOCK_RANGE 600.0f
@@ -790,6 +793,7 @@ void elite_game_init(uint32_t seed) {
     spawn_player();
     player_init();
     missions_init();
+    events_init();
     r3d_starfield_init(seed ^ 0x7117u);
 
     /* Title vista: park the sim on a nearby planet-bearing system so the title
@@ -896,6 +900,7 @@ static void start_new_game(uint32_t seed) {
     }
     spawn_player();    /* AFTER player state is final */
     missions_init();
+    events_init();
     s_state = ST_FLIGHT;
 
     /* Find a starting system: spiral out from the origin for a system
@@ -1664,6 +1669,41 @@ static void title_battle_tick(float dt) {
     }
 }
 
+/* Dock-arrival services: runs straight after the docking glide, or after
+ * the arrival-hail modal closes (its outcome lands in the same save). */
+static void dock_finish(void) {
+    station_open(s_anchor_poi.index);
+    mission_on_docked(system_info(), s_anchor_poi.index);
+    int paid = mission_collect(system_info(), s_anchor_poi.index);
+    if (paid > 0) {
+        char buf[24];
+        snprintf(buf, sizeof buf, "MISSION PAY %dCR", paid);
+        station_toast(buf);
+    }
+    save_write(s_addr, s_anchor_poi.index, combat_kills());
+    s_state = ST_DOCKED;
+}
+
+/* events.c OP_AMBUSH: a wing takes position outside the station — the
+ * world is frozen while docked, so they're waiting at launch. */
+void elite_game_event_ambush(int n, int tier) {
+    const SystemInfo *si = system_info();
+    if (n > 4) n = 4;
+    if (tier < 0) tier = 0;
+    if (tier > 4) tier = 4;
+    static const uint8_t k_cls[5] = { 1, 2, 3, 4, 5 };
+    for (int i = 0; i < n; i++) {
+        float a = frand(0, 6.2831f);
+        float r = frand(700, 1100);
+        Vec3 pos = v3(cosf(a) * r, frand(-150, 150), sinf(a) * r);
+        int cls = k_cls[tier];
+        uint32_t mseed = (uint32_t)(si->seed >> 24) ^
+                         (uint32_t)(cls * 0x9E3779B9u) ^ 0xA3B5u;
+        int idx = ship_spawn(hull_mesh(mseed, cls), pos, TEAM_HOSTILE);
+        if (idx > 0) ship_set_tier(idx, tier, cls);
+    }
+}
+
 void elite_game_tick(const CraftRawButtons *btn, float dt) {
     if (dt > 1e-4f)
         s_fps += (1.0f / dt - s_fps) * 0.08f;     /* smoothed FPS */
@@ -1784,19 +1824,25 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
         if (s_dock_t >= 2.2f) {
             g_player.xp_piloting += 1;
             plat_rumble(0.4f, 0.12f);
-            station_open(s_anchor_poi.index);
-            mission_on_docked(system_info(), s_anchor_poi.index);
-            int paid = mission_collect(system_info(), s_anchor_poi.index);
-            if (paid > 0) {
-                char buf[24];
-                snprintf(buf, sizeof buf, "MISSION PAY %dCR", paid);
-                station_toast(buf);
+            /* Arrival hail: most docks are quiet; when one fires, the
+             * modal runs FIRST and dock_finish() (services + save)
+             * happens after the choice — so the outcome is banked. */
+            const Event *ev =
+                events_roll_dock(system_info(), s_anchor_poi.index);
+            if (ev) {
+                ui_event_open(ev);
+                s_state = ST_EVENT;
+                break;
             }
-            save_write(s_addr, s_anchor_poi.index, combat_kills());
-            s_state = ST_DOCKED;
+            dock_finish();
         }
         break;
     }
+
+    case ST_EVENT:
+        audio_engine_set(0, 0);
+        if (ui_event_tick(btn, dt)) dock_finish();
+        break;
 
     case ST_DOCKED: {
         audio_engine_set(0, 0);
@@ -2076,6 +2122,7 @@ void elite_game_render_begin(void) {
     }
     case ST_GALAXY_MAP:
     case ST_SYSTEM_MAP:
+    case ST_EVENT:
         /* Fullscreen UI: minimal empty scene (UI fills the band). */
         r3d_scene_begin(&p->basis, 60.0f);
         break;
@@ -2623,6 +2670,7 @@ void elite_game_draw_overlay(uint16_t *fb) {
     case ST_SYSTEM_MAP: map_system_draw(fb); return;
     case ST_HYPERJUMP:  draw_hyperjump_overlay(fb); return;
     case ST_DOCKED:     station_draw(fb); return;
+    case ST_EVENT:      ui_event_draw(fb); return;
     case ST_STATUS:     status_draw(fb); return;
 #ifdef ELITE_ANALOG_SETTINGS
     case ST_CTRLSETUP:  ctrlsetup_draw(fb); return;

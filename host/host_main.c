@@ -36,11 +36,22 @@
 #include "r3d_scene.h"
 #include "r3d_pipe.h"
 #include "vec.h"
+#include "events.h"
+#include "ui_event.h"
+#include "r3d_face.h"
 
 #include <SDL2/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#ifdef _WIN32
+#include <direct.h>
+#define EV_MKDIR(p) _mkdir(p)
+#else
+#define EV_MKDIR(p) mkdir(p, 0777)
+#endif
 
 #ifdef ELITE_OVERLAY_SPLIT
 /* Hi-res desktop / Android-preview build: 3D renders physical (R3D_SS x),
@@ -749,6 +760,257 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (getenv("ELITE_EVENTTEST")) {
+        /* Headless event-engine asserts. Sandboxed: plat_save writes
+         * indemnityrun.sav in cwd, so run from a scratch dir. */
+        (void)EV_MKDIR("/tmp/elite_evtest");
+        if (chdir("/tmp/elite_evtest") != 0) { perror("chdir"); return 1; }
+        int fails = 0;
+#define EVCHECK(cond, name) do { \
+        printf("[evtest] %-34s %s\n", name, (cond) ? "PASS" : "FAIL"); \
+        if (!(cond)) fails++; } while (0)
+
+        galaxy_set_seed(42);
+        player_init();
+        SystemInfo si_any, si_law;
+        bool got_any = false, got_law = false;
+        for (int sy = -14; sy <= 14 && !(got_any && got_law); sy++)
+            for (int sx = -14; sx <= 14 && !(got_any && got_law); sx++) {
+                int ns = galaxy_sector_stars(sx, sy);
+                for (int i = 0; i < ns; i++) {
+                    SysAddr a = { sx, sy, (uint8_t)i };
+                    SystemInfo si;
+                    galaxy_generate(a, &si);
+                    if (si.n_stations == 0) continue;
+                    if (!got_any) { si_any = si; got_any = true; }
+                    if (!got_law && si.gov >= GOV_CONFED) {
+                        si_law = si; got_law = true;
+                    }
+                }
+            }
+        EVCHECK(got_any && got_law, "found test systems");
+
+        /* find a specific event id by scanning visit salts */
+#define FIND_EV(SI, IDWANT, EVOUT) do { EVOUT = NULL; \
+        for (uint32_t s2 = 0; s2 < 200000u && !EVOUT; s2++) { \
+            events_init(); events_set_salt(s2); \
+            const Event *e2 = events_roll_dock(&(SI), 0); \
+            if (e2 && e2->id == (IDWANT)) EVOUT = e2; } } while (0)
+
+        /* determinism: same salt -> same pick + same npc */
+        {
+            events_init(); events_set_salt(1234u);
+            const Event *a = NULL;
+            uint32_t na = 0, salt = 0;
+            for (uint32_t s2 = 0; s2 < 9999u && !a; s2++) {
+                events_init(); events_set_salt(s2);
+                a = events_roll_dock(&si_any, 0);
+                salt = s2;
+            }
+            na = events_npc_seed();
+            events_init(); events_set_salt(salt);
+            const Event *b = events_roll_dock(&si_any, 0);
+            EVCHECK(a && b && a->id == b->id && na == events_npc_seed(),
+                    "pick deterministic per salt");
+        }
+
+        /* distress: fuel gate on the GIVE choice */
+        {
+            const Event *ev;
+            FIND_EV(si_any, 1, ev);
+            EVCHECK(ev != NULL, "distress hail reachable");
+            if (ev) {
+                g_player.fuel = 0.5f;
+                bool low = events_choice_enabled(ev, 0);
+                g_player.fuel = 5.0f;
+                bool ok = events_choice_enabled(ev, 0);
+                EVCHECK(!low && ok, "fuel gate on GIVE choice");
+            }
+        }
+
+        /* wager: cost gate + deterministic +-150 outcome */
+        {
+            const Event *ev;
+            FIND_EV(si_any, 10, ev);
+            EVCHECK(ev != NULL, "wager reachable");
+            if (ev) {
+                g_player.credits = 10;
+                bool broke = events_choice_enabled(ev, 0);
+                g_player.credits = 1000;
+                bool rich = events_choice_enabled(ev, 0);
+                EVCHECK(!broke && rich, "cost gates TAKE THE BET");
+                events_run_choice(ev, 0);
+                int after1 = g_player.credits;
+                EVCHECK(after1 == 850 || after1 == 1150,
+                        "wager pays +-150");
+                /* same salt -> same fate (no reroll scumming) */
+                FIND_EV(si_any, 10, ev);
+                g_player.credits = 1000;
+                events_run_choice(ev, 0);
+                /* NB: FIND_EV rescans from salt 0, so this is the same
+                 * pick seed -> the branch must land the same way */
+                EVCHECK(g_player.credits == after1,
+                        "branch outcome visit-stable");
+            }
+        }
+
+        /* preacher: lore bit + oneshot suppression */
+        {
+            const Event *ev;
+            FIND_EV(si_any, 7, ev);
+            EVCHECK(ev != NULL, "preacher reachable");
+            if (ev) {
+                events_run_choice(ev, 0);
+                EVCHECK(events_lore_seen(5), "LISTEN reveals lore 5");
+                int again = 0;
+                for (int k = 0; k < 3000; k++) {
+                    const Event *e2 = events_roll_dock(&si_any, 0);
+                    if (e2 && e2->id == 7) again++;
+                }
+                EVCHECK(again == 0, "oneshot never re-offered");
+            }
+        }
+
+        /* customs: gated on illegal cargo; SUBMIT confiscates + fines */
+        {
+            for (int g = 0; g < N_GOODS; g++) g_player.cargo[g] = 0;
+            int hits = 0;
+            events_init();
+            for (int k = 0; k < 2000; k++) {
+                const Event *e2 = events_roll_dock(&si_law, 0);
+                if (e2 && e2->id == 2) hits++;
+            }
+            EVCHECK(hits == 0, "customs needs illegal cargo");
+            g_player.cargo[16] = 3;          /* narcotics */
+            const Event *ev;
+            FIND_EV(si_law, 2, ev);
+            EVCHECK(ev != NULL, "customs fires when dirty");
+            if (ev) {
+                g_player.credits = 1000;
+                events_run_choice(ev, 0);    /* SUBMIT */
+                EVCHECK(g_player.cargo[16] == 0 && g_player.credits == 850,
+                        "SUBMIT confiscates + 150 fine");
+            }
+        }
+
+        /* bribe branch distribution: 70% +-15 over 60 fresh picks */
+        {
+            int wins = 0, runs = 0;
+            for (uint32_t s2 = 0; s2 < 400000u && runs < 60; s2++) {
+                events_init(); events_set_salt(s2);
+                g_player.cargo[16] = 3;
+                g_player.credits = 1000;
+                g_player.legal = 0;
+                const Event *e2 = events_roll_dock(&si_law, 0);
+                if (!e2 || e2->id != 2) continue;
+                runs++;
+                events_run_choice(e2, 1);    /* BRIBE 300 */
+                if (g_player.legal == 0 && g_player.cargo[16] == 3) wins++;
+            }
+            printf("[evtest] bribe runs=%d wins=%d\n", runs, wins);
+            EVCHECK(runs == 60 && wins > 33 && wins < 51,
+                    "bribe branch ~70%");
+        }
+
+        /* token expansion leaves no $ behind */
+        {
+            const Event *ev;
+            FIND_EV(si_any, 1, ev);
+            char out[300];
+            events_expand(ev->body, out, sizeof out);
+            bool dollar = false;
+            for (const char *p = out; *p; p++) if (*p == '$') dollar = true;
+            EVCHECK(!dollar && out[0], "tokens fully expanded");
+        }
+
+        /* save round-trip carries lore bits (v5) */
+        {
+            events_init();
+            const Event *ev;
+            FIND_EV(si_any, 7, ev);
+            events_run_choice(ev, 0);        /* lore 5 set */
+            g_player.legal = 0;
+            EVCHECK(save_write(si_any.addr, 0, 0), "save_write v5");
+            events_init();                   /* wipe live bits */
+            EVCHECK(!events_lore_seen(5), "bits cleared pre-load");
+            SaveMeta meta;
+            EVCHECK(save_load(&meta) && events_lore_seen(5),
+                    "lore bit survives save/load");
+        }
+
+        printf("[evtest] %s (%d failures)\n",
+               fails ? "FAILED" : "ALL PASS", fails);
+        return fails ? 1 : 0;
+    }
+
+    if (getenv("ELITE_FACEGALLERY")) {
+        /* 4x4 portrait grid, one archetype row each, to eyeball variety
+         * and confirm seed-stability (same seed = same face). */
+        const char *path = getenv("ELITE_FACEGALLERY");
+        uint32_t base = (argc > 1) ? (uint32_t)strtoul(argv[1], NULL, 0)
+                                   : 42u;
+        static const int kinds[4] = { NK_CIVILIAN, NK_OFFICIAL,
+                                      NK_PIRATE, NK_MYSTIC };
+        for (int i = 0; i < OUT_W * OUT_H; i++) g_fb[i] = 0;
+        for (int row = 0; row < 4; row++)
+            for (int col = 0; col < 4; col++)
+                face_draw(g_fb, col * 32, row * 32, 32,
+                          base + (uint32_t)(row * 4 + col) * 2654435761u,
+                          kinds[row]);
+        dump_ppm(path);
+        return 0;
+    }
+
+    if (getenv("ELITE_EVENTSHOT")) {
+        /* Render the modal both phases: <path>_choose.ppm + _result.ppm */
+        const char *path = getenv("ELITE_EVENTSHOT");
+        int want = 1;
+        if (getenv("ELITE_EVENTID")) want = atoi(getenv("ELITE_EVENTID"));
+        galaxy_set_seed(42);
+        player_init();
+        g_player.credits = 1000;
+        g_player.fuel = 5.0f;
+        g_player.cargo[16] = 3;
+        SystemInfo si, si_fall;
+        bool got = false, fall = false;
+        for (int sy = -14; sy <= 14 && !got; sy++)
+            for (int sx = -14; sx <= 14 && !got; sx++) {
+                int ns = galaxy_sector_stars(sx, sy);
+                for (int i = 0; i < ns && !got; i++) {
+                    SysAddr a = { sx, sy, (uint8_t)i };
+                    galaxy_generate(a, &si);
+                    if (si.n_stations == 0) continue;
+                    if (!fall) { si_fall = si; fall = true; }
+                    if (si.gov >= GOV_CONFED && si.threat >= 2)
+                        got = true;
+                }
+            }
+        if (!got && fall) si = si_fall;          /* any station system */
+        if (!got && !fall) { printf("[evshot] no system\n"); return 1; }
+        const Event *ev = NULL;
+        for (uint32_t s2 = 0; s2 < 200000u && !ev; s2++) {
+            events_init(); events_set_salt(s2);
+            const Event *e2 = events_roll_dock(&si, 0);
+            if (e2 && e2->id == want) ev = e2;
+        }
+        if (!ev) { printf("[evshot] event %d not reachable\n", want); return 1; }
+        ui_event_open(ev);
+        CraftRawButtons none = {0}, ba = {0};
+        ba.a = true;
+        ui_event_tick(&none, 1.0f / 30.0f);
+        char p1[256];
+        for (int i = 0; i < OUT_W * OUT_H; i++) g_fb[i] = RGB565C(8, 10, 18);
+        ui_event_draw(g_fb);
+        snprintf(p1, sizeof p1, "%s_choose.ppm", path);
+        dump_ppm(p1);
+        ui_event_tick(&ba, 1.0f / 30.0f);    /* select -> aftermath */
+        for (int i = 0; i < OUT_W * OUT_H; i++) g_fb[i] = RGB565C(8, 10, 18);
+        ui_event_draw(g_fb);
+        snprintf(p1, sizeof p1, "%s_result.ppm", path);
+        dump_ppm(p1);
+        return 0;
+    }
+
     if (getenv("ELITE_DEMO") || getenv("ELITE_FIRETEST") ||
         getenv("ELITE_KILLTEST") || getenv("ELITE_TRAVELTEST") ||
         getenv("ELITE_TRADETEST") || getenv("ELITE_JUMPTEST") ||
@@ -809,7 +1071,9 @@ int main(int argc, char **argv) {
         getenv("ELITE_SWAPTEST") ||
         getenv("ELITE_POPSHOT") ||
         getenv("ELITE_SHOT")) {
-        /* Harnesses start in-game: skip the title via NEW GAME. */
+        /* Harnesses start in-game: skip the title via NEW GAME. Arrival
+         * hails would eat the scripted button streams — disable them. */
+        events_set_chance(0);
         remove("indemnityrun.sav");
         CraftRawButtons tb = {0};
         elite_game_tick(&tb, 1.0f / 30.0f);
@@ -818,6 +1082,11 @@ int main(int argc, char **argv) {
         tb.a = true; elite_game_tick(&tb, 1.0f / 30.0f);
         tb.a = false; elite_game_tick(&tb, 1.0f / 30.0f);
     }
+
+    /* Playtest aid: ELITE_EVENTFORCE=1 -> an arrival hail fires on EVERY
+     * dock (normally 35%). Applied last so it wins over the harness off. */
+    if (getenv("ELITE_EVENTFORCE"))
+        events_set_chance(100);
 
     /* Start-cluster audit: roll N seeds, report each start's
      * starter-range neighbourhood. */
