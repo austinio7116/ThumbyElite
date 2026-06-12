@@ -755,7 +755,7 @@ static void sheet_render_mesh(const Mesh *mesh, float yaw, float pitch) {
     obj.basis = m3_identity();
     m3_rotate_local(&obj.basis, 1, yaw);
     m3_rotate_local(&obj.basis, 0, pitch);
-    obj.pos = v3(0, 0, mesh->bound_r * 1.85f);
+    obj.pos = v3(0, 0, mesh->bound_r * 2.4f);
     r3d_scene_add_object(&obj);
     r3d_scene_raster(g_fb, 0, ELITE_FB_H);
 }

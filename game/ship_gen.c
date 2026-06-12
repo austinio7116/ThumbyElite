@@ -28,9 +28,16 @@ static uint32_t rnd(void) {
     return s_rng;
 }
 
-/* Style switch retired: every ship proposal was rejected (2026-06-12).
- * No-op setter so lab harnesses keep linking. */
+/* Style lab: 0 = shipping look, 1 = proposal. ALL style-1 work draws
+ * its randomness from a SECOND xorshift stream (s_rng2) inside its own
+ * branches, so the style-0 rnd() sequence — and therefore every
+ * shipped mesh — stays byte-identical. */
+#ifdef ELITE_STYLE_LAB
+static int s_style = 0;
+void ship_gen_set_style(int s) { s_style = s; }
+#else
 void ship_gen_set_style(int s) { (void)s; }
+#endif
 static float rndf(float lo, float hi) {
     return lo + (hi - lo) * (float)(rnd() & 0xFFFF) * (1.0f / 65535.0f);
 }
@@ -235,6 +242,120 @@ static void gun_pair(float x, float y, float z, float blen, float br,
     tip_gun(-x, y, z, blen, br, col, muz);
 }
 
+#ifdef ELITE_STYLE_LAB
+/* ===================== STYLE-1 PROPOSAL KIT ========================
+ * Only reachable when s_style == 1. Second rng stream keeps style-0
+ * byte-identical. Hex (6-gon) sections keep gun/nozzle face costs
+ * roughly half of the 8-gon ring equivalents. */
+static uint32_t s_rng2;
+static uint32_t rnd2(void) {
+    s_rng2 ^= s_rng2 << 13; s_rng2 ^= s_rng2 >> 17; s_rng2 ^= s_rng2 << 5;
+    return s_rng2;
+}
+static float rndf2(float lo, float hi) {
+    return lo + (hi - lo) * (float)(rnd2() & 0xFFFF) * (1.0f / 65535.0f);
+}
+
+/* Hexagonal ring in the xy plane at z, CCW from +z. */
+static void hex6(float z, float r, float x, float y, int out[6]) {
+    static const float c6[6] = { 1, .5f, -.5f, -1, -.5f, .5f };
+    static const float s6[6] = { 0, .866f, .866f, 0, -.866f, -.866f };
+    for (int k = 0; k < 6; k++)
+        out[k] = vtx(x + r * c6[k], y + r * s6[k], z);
+}
+static void skin6(const int a[6], const int b[6], uint16_t col) {
+    for (int k = 0; k < 6; k++) {
+        int k2 = (k + 1) % 6;
+        quad(a[k], a[k2], b[k2], b[k], col);
+    }
+}
+static void fan6f(const int r[6], uint16_t col) {      /* faces +z */
+    for (int k = 1; k < 5; k++) face(r[0], r[k], r[k + 1], col);
+}
+static void fan6b(const int r[6], uint16_t col) {      /* faces -z */
+    for (int k = 1; k < 5; k++) face(r[0], r[k + 1], r[k], col);
+}
+
+/* Stepped cannon: housing block, sharp step down to the barrel, then
+ * a muzzle-brake flare. Replaces the weedy single-tube tip_gun. */
+static void gun_v2(float x, float y, float z, float len, float r,
+                   uint16_t col, uint16_t dark) {
+    int g0[6], g1[6], g2[6], g3[6], g4[6];
+    hex6(z, r * 1.5f, x, y, g0);
+    hex6(z + len * 0.30f, r * 1.35f, x, y, g1);
+    hex6(z + len * 0.36f, r * 0.62f, x, y, g2);
+    hex6(z + len * 0.82f, r * 0.55f, x, y, g3);
+    hex6(z + len, r * 0.95f, x, y, g4);
+    skin6(g0, g1, col);
+    skin6(g1, g2, col);
+    skin6(g2, g3, col);
+    skin6(g3, g4, col);
+    fan6b(g0, col);
+    fan6f(g4, dark);
+}
+
+/* Twin-linked cannon: one chamfered housing spanning both barrels,
+ * each barrel stepped with a muzzle flare. */
+static void gun_twin(float x, float y, float z, float len, float r,
+                     uint16_t col, uint16_t dark) {
+    int h0[8], h1[8];
+    ring(z, x + r * 1.4f, r * 1.35f, y, 0.35f, h0);
+    ring(z + len * 0.34f, x + r * 1.25f, r * 1.2f, y, 0.35f, h1);
+    skin(h0, h1, col, col, col);
+    cap_back(h0, col);
+    cap_front(h1, col);
+    for (int sd = 0; sd < 2; sd++) {
+        float bx = sd ? -x : x;
+        int b0[6], b1[6], b2[6];
+        hex6(z + len * 0.30f, r * 0.60f, bx, y, b0);
+        hex6(z + len * 0.84f, r * 0.52f, bx, y, b1);
+        hex6(z + len, r * 0.88f, bx, y, b2);
+        skin6(b0, b1, col);
+        skin6(b1, b2, col);
+        fan6f(b2, dark);
+    }
+}
+
+/* Recessed engine nozzle on an aft (-z) face: short bell protruding
+ * past z, dark interior cone, glow disc tucked INSIDE the bell. */
+static void nozzle6(float x, float y, float z, float r, float depth,
+                    uint16_t body, uint16_t glow) {
+    int b0[6], b1[6], b2[6];
+    hex6(z + depth * 0.7f, r * 0.9f, x, y, b0);     /* buried base */
+    hex6(z - depth, r, x, y, b1);                   /* bell rim */
+    hex6(z - depth * 0.5f, r * 0.66f, x, y, b2);    /* throat */
+    skin6(b1, b0, body);                  /* outer bell wall */
+    skin6(b2, b1, RGB565C(34, 34, 40));   /* interior cone, faces aft */
+    fan6b(b2, glow);                      /* recessed glow disc */
+}
+
+/* Octagon drum along x (panel hub bosses). Cap fan on the xout end;
+ * winding flips automatically for the mirrored (-x) side. */
+static void drum_x(float xin, float xout, float cy, float cz, float ry,
+                   float rz, uint16_t col, uint16_t capc) {
+    int a[8], b[8];
+    for (int k = 0; k < 8; k++) {
+        float th = 0.3927f + (float)k * 0.7854f;
+        float yy = cy + ry * cosf(th), zz = cz + rz * sinf(th);
+        a[k] = vtx(xin, yy, zz);
+        b[k] = vtx(xout, yy, zz);
+    }
+    if (xout > xin) {
+        for (int k = 0; k < 8; k++) {
+            int k2 = (k + 1) & 7;
+            quad(a[k], a[k2], b[k2], b[k], col);
+        }
+        for (int k = 1; k < 7; k++) face(b[0], b[k], b[k + 1], capc);
+    } else {
+        for (int k = 0; k < 8; k++) {
+            int k2 = (k + 1) & 7;
+            quad(a[k2], a[k], b[k], b[k2], col);
+        }
+        for (int k = 1; k < 7; k++) face(b[0], b[k + 1], b[k], capc);
+    }
+}
+#endif /* ELITE_STYLE_LAB */
+
 /* class-hint state (set by ship_gen_mesh_class; -1 = free roll) */
 static int s_hint = -1;
 
@@ -246,6 +367,12 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
     s_rng *= 1274126177u;
     if (s_rng == 0) s_rng = 1;
     s_nv = s_nf = 0;
+#ifdef ELITE_STYLE_LAB
+    int s1 = (s_style == 1);
+    s_rng2 = (seed ^ 0x9E3779B9u) * 747796405u + 2891336453u;
+    s_rng2 ^= s_rng2 >> 13;
+    if (s_rng2 == 0) s_rng2 = 1;
+#endif
 
     /* --- palette ------------------------------------------------------ */
     int tone = rndi(0, 3);
@@ -395,20 +522,40 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             wings(wz0, wz1, w * 0.9f, h * 0.4f, h * 0.14f,
                   w + span, wz0 - sweep, wz0 - sweep + len * 0.1f,
                   h * 0.4f + dihed_u, HULL2);
-            tip_gun(w + span, h * 0.4f + dihed_u, wz0 - sweep, gl,
-                    w * 0.16f, ACC, GMUZ);
-            tip_gun(-(w + span), h * 0.4f + dihed_u, wz0 - sweep, gl,
-                    w * 0.16f, ACC, GMUZ);
+#ifdef ELITE_STYLE_LAB
+            if (s1) {
+                gun_v2(w + span, h * 0.4f + dihed_u, wz0 - sweep, gl,
+                       w * 0.15f, ACC, GMUZ);
+                gun_v2(-(w + span), h * 0.4f + dihed_u, wz0 - sweep, gl,
+                       w * 0.15f, ACC, GMUZ);
+            } else
+#endif
+            {
+                tip_gun(w + span, h * 0.4f + dihed_u, wz0 - sweep, gl,
+                        w * 0.16f, ACC, GMUZ);
+                tip_gun(-(w + span), h * 0.4f + dihed_u, wz0 - sweep, gl,
+                        w * 0.16f, ACC, GMUZ);
+            }
         }
         /* lower pair, possibly scissored aft with its own dihedral */
         wings(wz0 + scissor, wz1 + scissor, w * 0.9f, -h * 0.4f,
               h * 0.14f, w + span, wz0 + scissor - sweep,
               wz0 + scissor - sweep + len * 0.1f,
               -h * 0.4f - dihed_l, HULL2);
-        tip_gun(w + span, -h * 0.4f - dihed_l, wz0 + scissor - sweep, gl,
-                w * 0.16f, ACC, GMUZ);
-        tip_gun(-(w + span), -h * 0.4f - dihed_l, wz0 + scissor - sweep,
-                gl, w * 0.16f, ACC, GMUZ);
+#ifdef ELITE_STYLE_LAB
+        if (s1) {
+            gun_v2(w + span, -h * 0.4f - dihed_l, wz0 + scissor - sweep,
+                   gl, w * 0.15f, ACC, GMUZ);
+            gun_v2(-(w + span), -h * 0.4f - dihed_l,
+                   wz0 + scissor - sweep, gl, w * 0.15f, ACC, GMUZ);
+        } else
+#endif
+        {
+            tip_gun(w + span, -h * 0.4f - dihed_l, wz0 + scissor - sweep,
+                    gl, w * 0.16f, ACC, GMUZ);
+            tip_gun(-(w + span), -h * 0.4f - dihed_l,
+                    wz0 + scissor - sweep, gl, w * 0.16f, ACC, GMUZ);
+        }
         goto finish;
     }
     if (arch == 2) {
@@ -416,6 +563,10 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
         float r = len * rndf(0.30f, 0.40f);
         int body = rndi(0, 3);   /* 0 ball, 1 capsule, 2 twin, 3 angular */
         float px;                /* pylon anchor x */
+#ifdef ELITE_STYLE_LAB
+        /* style-1 hatch-ring band: per-body waist position/size */
+        float bz = 0, bw2 = 0, bh2 = 0, bch = 0.5f;
+#endif
         if (body == 1) {
             /* capsule: stretched 4-ring pod */
             int a[8], b[8], c[8], d[8];
@@ -429,6 +580,10 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             cap_back(a, GLOW);
             cap_front(d, GLASS);
             px = r * 0.95f;
+#ifdef ELITE_STYLE_LAB
+            bz = 0; bw2 = r * 0.95f * 1.07f; bh2 = r * 0.9f * 1.07f;
+            bch = 0.55f;
+#endif
         } else if (body == 2) {
             /* twin: cockpit ball forward + engine block aft */
             int a[8], b[8], c[8];
@@ -445,21 +600,74 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             cap_back(a, HULL2);
             cap_front(c, GLASS);
             px = r * 0.9f;
+#ifdef ELITE_STYLE_LAB
+            bz = r * 0.4f; bw2 = r * 0.9f * 1.07f;
+            bh2 = r * 0.85f * 1.07f; bch = 0.55f;
+#endif
         } else {
             /* ball (chamfer .55) or angular (chamfer .2) */
             float chb = (body == 3) ? rndf(0.15f, 0.3f) : rndf(0.5f, 0.6f);
+            float rh = rndf(0.8f, 1.0f);
             int a[8], b[8], c[8];
             ring(-r, r * 0.55f, r * 0.55f, 0, chb, a);
-            ring(0, r, r * rndf(0.8f, 1.0f), 0, chb, b);
+            ring(0, r, r * rh, 0, chb, b);
             ring(r * 0.85f, r * 0.6f, r * 0.6f, 0, chb, c);
             skin(a, b, HULL, HULL, HULL2);
             skin(b, c, HULL, HULL, HULL2);
             cap_back(a, GLOW);
             cap_front(c, GLASS);
             px = r;
+#ifdef ELITE_STYLE_LAB
+            bz = 0; bw2 = r * 1.06f; bh2 = r * rh * 1.06f; bch = chb;
+#endif
         }
+#ifdef ELITE_STYLE_LAB
+        if (s1) {
+            /* hatch detail ring, slightly proud of the body waist */
+            int e0[8], e1[8];
+            float bt = r * rndf2(0.05f, 0.09f);
+            uint16_t BANDC = (rnd2() & 1) ? ACC : RGB565C(62, 64, 72);
+            ring(bz - bt, bw2, bh2, 0, bch, e0);
+            ring(bz + bt, bw2, bh2, 0, bch, e1);
+            skin(e0, e1, BANDC, BANDC, BANDC);
+        }
+#endif
         /* pylons */
         float pylon = r * rndf(1.4f, 1.8f);
+#ifdef ELITE_STYLE_LAB
+        if (s1) {
+            /* truss pylons: two angled spars per side, converging on
+             * the panel hub — reads as a frame, not a stick */
+            for (int sd = 0; sd < 2; sd++) {
+                float sx = sd ? -1.0f : 1.0f;
+                for (int sp = 0; sp < 2; sp++) {
+                    float oy = sp ? -r * 0.20f : r * 0.20f;
+                    float oz = sp ? -r * 0.12f : r * 0.12f;
+                    float t = r * 0.06f;
+                    int p0 = vtx(sx * px * 0.78f, oy - t, oz - t);
+                    int p1 = vtx(sx * px * 0.78f, oy - t, oz + t);
+                    int p2 = vtx(sx * px * 0.78f, oy + t, oz + t);
+                    int p3 = vtx(sx * px * 0.78f, oy + t, oz - t);
+                    float hy = oy * 0.3f, hz = oz * 0.3f;
+                    int q0 = vtx(sx * pylon, hy - t, hz - t);
+                    int q1 = vtx(sx * pylon, hy - t, hz + t);
+                    int q2 = vtx(sx * pylon, hy + t, hz + t);
+                    int q3 = vtx(sx * pylon, hy + t, hz - t);
+                    if (sd == 0) {
+                        quad(p1, q1, q2, p2, HULL2);
+                        quad(q0, p0, p3, q3, HULL2);
+                        quad(p2, q2, q3, p3, HULL2);
+                        quad(q1, p1, p0, q0, HULL2);
+                    } else {
+                        quad(q1, p1, p2, q2, HULL2);
+                        quad(p0, q0, q3, p3, HULL2);
+                        quad(q2, p2, p3, q3, HULL2);
+                        quad(p1, q1, q0, p0, HULL2);
+                    }
+                }
+            }
+        } else
+#endif
         for (int sd = 0; sd < 2; sd++) {
             float sx = sd ? -1.0f : 1.0f;
             int p0 = vtx(sx * px * 0.8f, -r * 0.12f, -r * 0.18f);
@@ -483,6 +691,15 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             }
         }
         /* Chin guns under the cockpit ball. */
+#ifdef ELITE_STYLE_LAB
+        if (s1) {
+            /* same rnd() count as the else branch keeps the twin's
+             * downstream genes aligned with its style-0 sibling */
+            gun_twin(r * 0.35f, -r * 0.55f, r * 0.5f,
+                     r * rndf(0.5f, 0.9f) * 1.2f, r * 0.09f, HULL2,
+                     RGB565C(40, 40, 48));
+        } else
+#endif
         gun_pair(r * 0.35f, -r * 0.55f, r * 0.5f, r * rndf(0.5f, 0.9f),
                  r * 0.08f, HULL2, RGB565C(40, 40, 48));
 
@@ -528,6 +745,54 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
                 zz[3] = -pz * 0.4f; yy[3] = -ph;
                 break;
             }
+#ifdef ELITE_STYLE_LAB
+            if (s1) {
+                /* TIE-style panel: raised outer frame loop around an
+                 * inset dark panel face, plus a hub boss at the pylon */
+                float cy2 = 0, cz2 = 0;
+                for (int k = 0; k < np; k++) { cy2 += yy[k]; cz2 += zz[k]; }
+                cy2 /= (float)np; cz2 /= (float)np;
+                uint16_t PNL = RGB565C(38, 44, 60);
+                for (int sd = 0; sd < 2; sd++) {
+                    float sxn = sd ? -1.0f : 1.0f;
+                    int rim[6], fro[6], inn[6];
+                    for (int k = 0; k < np; k++) {
+                        float ay = yy[k] < 0 ? -yy[k] : yy[k];
+                        float xo = pylon + cant * (ay / ph);
+                        inn[k] = vtx(sxn * xo, yy[k], zz[k]);
+                        rim[k] = vtx(sxn * (xo + r * 0.14f), yy[k], zz[k]);
+                        fro[k] = vtx(sxn * (xo + r * 0.05f),
+                                     cy2 + (yy[k] - cy2) * 0.70f,
+                                     cz2 + (zz[k] - cz2) * 0.70f);
+                    }
+                    for (int k = 0; k < np; k++) {
+                        int k2 = (k + 1) % np;
+                        if (sd == 0) {
+                            quad(rim[k], rim[k2], fro[k2], fro[k], ACC);
+                            quad(inn[k], inn[k2], rim[k2], rim[k], HULL2);
+                        } else {
+                            quad(rim[k2], rim[k], fro[k], fro[k2], ACC);
+                            quad(inn[k2], inn[k], rim[k], rim[k2], HULL2);
+                        }
+                    }
+                    for (int k = 1; k < np - 1; k++) {
+                        if (sd == 0) {
+                            face(fro[0], fro[k], fro[k + 1], PNL);
+                            face(inn[0], inn[k + 1], inn[k], HULL2);
+                        } else {
+                            face(fro[0], fro[k + 1], fro[k], PNL);
+                            face(inn[0], inn[k], inn[k + 1], HULL2);
+                        }
+                    }
+                    /* hub boss where the truss meets the panel */
+                    drum_x(sxn * (pylon - r * 0.30f),
+                           sxn * (pylon + r * 0.16f), 0, 0,
+                           r * 0.20f, r * 0.20f, HULL2,
+                           RGB565C(50, 52, 60));
+                }
+                goto finish;
+            }
+#endif
             for (int sd = 0; sd < 2; sd++) {
                 float sxn = sd ? -1.0f : 1.0f;
                 int outer[6], inner[6];
@@ -635,9 +900,22 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
         /* Chin gun(s) under the bow — mandible ships gun the notch,
          * pure discs carry a belly turret. */
         if (ml > 0) {
+#ifdef ELITE_STYLE_LAB
+            if (s1) {
+                gun_v2(0, -ry * 0.4f, frontz, ml * rndf(0.35f, 0.6f) * 1.15f,
+                       ry * 0.45f, HULL2, RGB565C(40, 40, 48));
+            } else
+#endif
             tip_gun(0, -ry * 0.4f, frontz, ml * rndf(0.35f, 0.6f),
                     ry * 0.5f, HULL2, RGB565C(40, 40, 48));
         } else {
+#ifdef ELITE_STYLE_LAB
+            if (s1) {
+                gun_twin(ax * 0.25f, -py * 0.8f, az * 0.4f,
+                         az * rndf(0.15f, 0.25f) * 1.4f, ry * 0.4f,
+                         HULL2, RGB565C(40, 40, 48));
+            } else
+#endif
             gun_pair(ax * 0.25f, -py * 0.8f, az * 0.4f,
                      az * rndf(0.15f, 0.25f), ry * 0.45f, HULL2,
                      RGB565C(40, 40, 48));
@@ -657,6 +935,27 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             skin(d0, d1, HULL2, HULL2, HULL2);
             cap_front(d1, (rnd() & 1) ? GLASS : ACC);
         }
+#ifdef ELITE_STYLE_LAB
+        if (s1 && hint >= 6 && hint <= 8) {
+            /* cargo character: lofted cargo drums clamped on the rim
+             * (read from every angle, never bare boxes) */
+            float tr = ax * rndf2(0.18f, 0.24f);
+            float tz0 = -az * rndf2(0.35f, 0.45f);
+            float tz1 = az * rndf2(0.15f, 0.30f);
+            float tx = ax * rndf2(0.95f, 1.05f);
+            nacelle(tx, 0, tz0, tz1, tr, HULL, HULL2, 1);
+            if (rnd2() & 1) {
+                /* belly sensor dome (mirrors the dorsal one) */
+                float dr = ax * rndf2(0.12f, 0.18f);
+                int d0[8], d1[8];
+                ring(-az * 0.05f, dr, dr * 0.8f, -py * 0.85f, 0.55f, d0);
+                ring(-az * 0.05f + dr * 0.8f, dr * 0.55f, dr * 0.45f,
+                     -py * 0.85f - ry, 0.55f, d1);
+                skin(d0, d1, HULL2, HULL2, HULL2);
+                cap_front(d1, HULL2);
+            }
+        }
+#endif
         goto finish;
     }
 
@@ -676,7 +975,33 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
     skin(rA, rB, HULL, HULL, HULL2);
     skin(rB, rC, HULL, HULL, HULL2);
     skin(rC, rD, HULL, HULL, HULL2);
+#ifdef ELITE_STYLE_LAB
+    if (s1 && (family == 4 || family == 5)) {
+        /* engine cluster: dark stern plate + recessed glow nozzles
+         * instead of one flat glow cap */
+        cap_back(rA, HULL2);
+        float er = (h0 < w0 ? h0 : w0);
+        if (family == 5) {
+            float nr = (er * 0.55f < w0 * 0.40f) ? er * 0.55f : w0 * 0.40f;
+            nozzle6(w0 * 0.44f, y0, z0, nr, nr * 0.6f, HULL2, GLOW);
+            nozzle6(-w0 * 0.44f, y0, z0, nr, nr * 0.6f, HULL2, GLOW);
+        } else {
+            float nr = (er * 0.85f < w0 * 0.36f) ? er * 0.85f : w0 * 0.36f;
+            nozzle6(w0 * 0.42f, y0, z0, nr, nr * 1.1f, HULL2, GLOW);
+            nozzle6(-w0 * 0.42f, y0, z0, nr, nr * 1.1f, HULL2, GLOW);
+        }
+    } else
+#endif
     cap_back(rA, GLOW);                       /* integrated engine tail */
+#ifdef ELITE_STYLE_LAB
+    if (s1 && family == 5) {
+        /* blunt tug prow: lofted bow block, clear front face */
+        int rE[8];
+        ring(zf, w3 * 0.45f, h3 * 0.45f, y3 - h3 * 0.15f, ch * 0.8f, rE);
+        skin(rD, rE, HULL, HULL, HULL2);
+        cap_front(rE, HULL2);
+    } else
+#endif
     nose_apex(rD, 0, y3 - h3 * 0.3f, zf, HULL2);
 
     /* --- canopy: small glass loft on the fore-mid deck ----------------- */
@@ -723,6 +1048,40 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
     case 3: { /* gunship: prongs + twin canted fins */
         float px = w_mid * rndf(0.4f, 0.85f);
         int npr = rndi(1, 2) * 2;            /* 2 or 4 prongs */
+#ifdef ELITE_STYLE_LAB
+        if (s1) {
+            /* weapon booms: tapered, vertically staggered on 4-boom
+             * frames (style 0 stacks them on one axis), each tipped
+             * with a stepped muzzle instead of a flat cap */
+            for (int s2 = 0; s2 < npr; s2++) {
+                float sx = (s2 & 1) ? -px : px;
+                float sy2 = (npr == 2) ? 0
+                          : (s2 >= 2) ? -h2 * 0.45f : h2 * 0.45f;
+                int g0[8], g1[8];
+                ring(z3 - len * 0.02f, w_mid * 0.13f, w_mid * 0.13f,
+                     sy2, 0.35f, g0);
+                ring(zf + len * 0.04f, w_mid * 0.085f, w_mid * 0.085f,
+                     sy2, 0.35f, g1);
+                for (int k = 0; k < 8; k++) {
+                    s_fx[g0[k]] += sx; s_fx[g1[k]] += sx;
+                }
+                skin(g0, g1, ACC, ACC, ACC);
+                cap_back(g0, HULL2);
+                cap_front(g1, HULL2);
+                int m0[6], m1[6];
+                hex6(zf + len * 0.04f, w_mid * 0.05f, sx, sy2, m0);
+                hex6(zf + len * 0.115f, w_mid * 0.075f, sx, sy2, m1);
+                skin6(m0, m1, HULL2);
+                fan6f(m1, RGB565C(40, 40, 48));
+            }
+            if (npr == 2) {
+                /* underslung twin gun pod below the nose */
+                gun_twin(w3 * 0.5f, -h3 * 0.95f, z3 - len * 0.02f,
+                         len * rndf2(0.16f, 0.24f), w_mid * 0.055f,
+                         HULL2, RGB565C(40, 40, 48));
+            }
+        } else
+#endif
         for (int s2 = 0; s2 < npr; s2++) {
             float sx = (s2 & 1) ? -px : px;
             float sy2 = (s2 >= 2) ? -h2 * 0.8f : h2 * 0.3f;
@@ -788,6 +1147,17 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
         break;
     }
     default:  /* hauler: side pods (cargo nacelles) */
+#ifdef ELITE_STYLE_LAB
+        if (s1) {
+            /* deliberate cargo massing: shoulder-mounted saddle drums
+             * plus a belly keel tank (lofted, chamfered — no boxes) */
+            float pr = w_mid * rndf(0.35f, 0.5f);  /* shared roll */
+            nacelle(w_mid * 0.95f, h2 * 0.55f, z0 + len * 0.08f,
+                    z2 - len * 0.04f, pr * 0.85f, HULL, HULL2, 1);
+            nacelle(0, -h2 * 0.9f, z0 + len * 0.14f, z2,
+                    w_mid * rndf2(0.30f, 0.40f), HULL, HULL2, 0);
+        } else
+#endif
         nacelle(w_mid * 1.15f, 0, z0 + len * 0.1f, z2,
                 w_mid * rndf(0.35f, 0.5f), HULL2, GLOW, 1);
         break;
@@ -799,24 +1169,72 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
         float gl2 = len * rndf(0.10f, 0.18f);
         switch (family) {
         case 0:   /* dart: single chin gun */
+#ifdef ELITE_STYLE_LAB
+            if (s1) {
+                gun_v2(0, -h3 * 0.8f, z3, gl2 * 1.35f, w_mid * 0.065f,
+                       HULL2, MUZ);
+                break;
+            }
+#endif
             tip_gun(0, -h3 * 0.8f, z3, gl2 * 1.3f, w_mid * 0.07f,
                     HULL2, MUZ);
             break;
         case 1:
         case 2:   /* fighters: twin chin barrels under the nose */
+#ifdef ELITE_STYLE_LAB
+            if (s1) {
+                /* same rnd() count as the else path (gene alignment) */
+                gun_twin(w3 * rndf(0.4f, 0.65f), -h3 * 0.75f, z3,
+                         gl2 * rndf(1.0f, 1.6f) * 1.1f, w_mid * 0.06f,
+                         HULL2, MUZ);
+                break;
+            }
+#endif
             gun_pair(w3 * rndf(0.4f, 0.7f), -h3 * 0.7f, z3,
                      gl2 * rndf(1.0f, 1.6f), w_mid * 0.06f, HULL2, MUZ);
             break;
         case 3:   /* gunship: prongs already; add a top barrel */
+#ifdef ELITE_STYLE_LAB
+            if (s1) {
+                gun_v2(0, h2 * 0.9f, z2, gl2 * 1.2f, w_mid * 0.06f,
+                       ACC, MUZ);
+                break;
+            }
+#endif
             tip_gun(0, h2 * 0.9f, z2, gl2, w_mid * 0.07f, ACC, MUZ);
             break;
         case 4:   /* cruiser: sponson barrels along both flanks */
+#ifdef ELITE_STYLE_LAB
+            if (s1) {
+                /* recessed flank turrets: low mount pad + stepped gun */
+                for (int sd = 0; sd < 2; sd++) {
+                    float sx = sd ? -1.0f : 1.0f;
+                    slab(sx * w_mid * 0.92f, h2 * 0.45f, z2 - len * 0.02f,
+                         w_mid * 0.15f, h2 * 0.16f, len * 0.05f,
+                         HULL2, HULL2, HULL2);
+                    gun_v2(sx * w_mid * 0.92f, h2 * 0.45f,
+                           z2 + len * 0.03f, gl2 * 1.5f, w_mid * 0.055f,
+                           HULL2, MUZ);
+                }
+                break;
+            }
+#endif
             gun_pair(w_mid * 1.0f, 0, z2 + len * 0.05f,
                      gl2 * 1.2f, w_mid * 0.06f, HULL2, MUZ);
             gun_pair(w_mid * 0.9f, h2 * 0.5f, z1 + len * 0.08f,
                      gl2, w_mid * 0.05f, HULL2, MUZ);
             break;
         default:  /* hauler: one defensive top turret nub */
+#ifdef ELITE_STYLE_LAB
+            if (s1) {
+                /* turret moved aft of the canopy: low pad + stepped gun */
+                slab(0, y1 + h1 * 0.92f, z1 + len * 0.10f, w_mid * 0.20f,
+                     h1 * 0.14f, w_mid * 0.22f, HULL2, HULL2, HULL2);
+                gun_v2(0, y1 + h1 * 1.08f, z1 + len * 0.10f, gl2 * 1.1f,
+                       w_mid * 0.05f, HULL2, MUZ);
+                break;
+            }
+#endif
             slab(0, h2 * 0.95f, z2, w_mid * 0.16f, h2 * 0.22f,
                  w_mid * 0.16f, HULL2, HULL2, HULL2);
             tip_gun(0, h2 * 1.05f, z2 + w_mid * 0.1f, gl2,
@@ -827,6 +1245,16 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
 
     /* Engine nacelles for fighters/interceptors/cruisers (50%). */
     if ((family == 1 || family == 2 || family == 4) && rndi(0, 1)) {
+#ifdef ELITE_STYLE_LAB
+        /* s1 cruisers already carry a stern nozzle cluster + turrets;
+         * the pods would also bust the face budget. Burn the shared
+         * rolls so nothing downstream shifts, then skip. */
+        if (s1 && family == 4) {
+            (void)rndf(0.95f, 1.25f);
+            (void)rndf(0.3f, 0.42f);
+            (void)rndf(0.22f, 0.34f);
+        } else
+#endif
         nacelle(w_mid * rndf(0.95f, 1.25f), -h2 * 0.2f,
                 z0, z0 + len * rndf(0.3f, 0.42f),
                 w_mid * rndf(0.22f, 0.34f), HULL2, GLOW, 1);
