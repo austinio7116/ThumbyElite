@@ -113,7 +113,8 @@ static int   s_derelict_idx = -1; /* live derelict hulk (boardable)   */
 static uint32_t s_derelict_done;  /* per-POI boarded bits, this system */
 static float s_war_wave_t;        /* reinforcement cadence            */
 static bool  s_war_won_toast;     /* "zone secure" said once          */
-static int   s_tgt_class = 0;    /* 0 AUTO, 1 SALVAGE, 2 ROCKS — LB
+static int   s_tgt_class = 0;    /* 0 AUTO, 1 SALVAGE, 2 ROCKS,
+                                    3 FRIENDLY — LB
                                     double-tap demotes the class so you
                                     can mine through floating salvage or
                                     loot mid-fight; single-tap still
@@ -789,6 +790,24 @@ static void cycle_target(void) {
             }
             s_loot_target = (next >= 0) ? next : first;
             s_prev_loot = s_loot_target;
+        } else if (s_tgt_class == 3) {
+            /* FRIENDLY (user req): step through neutral ships —
+             * civilians, police/war allies, derelicts. */
+            float cur_d = (s_target > 0 && g_ships[s_target].alive)
+                              ? v3_len(v3_sub(g_ships[s_target].pos, pp))
+                              : -1.0f;
+            int first = -1, next = -1;
+            float fd = 1e30f, nd = 1e30f;
+            for (int i = 1; i < MAX_SHIPS; i++) {
+                const Ship *fs = &g_ships[i];
+                if (!fs->alive || fs->team == TEAM_HOSTILE) continue;
+                if (!fs->is_civilian && !fs->is_police &&
+                    !fs->is_derelict) continue;
+                float d = v3_len(v3_sub(fs->pos, pp));
+                if (d < fd) { fd = d; first = i; }
+                if (cur_d >= 0 && d > cur_d && d < nd) { nd = d; next = i; }
+            }
+            s_target = (next >= 0) ? next : first;
         } else {
             /* same stepping for rocks */
             float cur_d = -1.0f;
@@ -1219,9 +1238,9 @@ static void tick_flight(const CraftRawButtons *btn, float dt) {
         if (in.tgt_class_cycle) {
             /* LB double-tap: demote the lock class (input layer
              * classifies the double; 0.5s window). */
-            s_tgt_class = (s_tgt_class + 1) % 3;
-            static const char *k_tc[3] = { "TGT: AUTO", "TGT: SALVAGE",
-                                           "TGT: ROCKS" };
+            s_tgt_class = (s_tgt_class + 1) % 4;
+            static const char *k_tc[4] = { "TGT: AUTO", "TGT: SALVAGE",
+                                           "TGT: ROCKS", "TGT: FRIENDLY" };
             snprintf(s_scoop_toast, sizeof s_scoop_toast, "%s",
                      k_tc[s_tgt_class]);
             s_scoop_toast_t = 1.4f;
