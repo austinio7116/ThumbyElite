@@ -50,6 +50,11 @@ int r3d_scene_project(Vec3 cam_rel, float *sx, float *sy, uint16_t *d);
 
 /* Starfield: regenerate the fixed direction table (e.g. on system entry). */
 void r3d_starfield_init(uint32_t seed);
+
+/* Proposal-look switch (contact sheets only): 0 = live look (default).
+ * Style-1 bodies exist only under ELITE_STYLE_LAB (host builds); the
+ * setter is always linkable so harness code compiles everywhere. */
+void r3d_scene_set_style(int s);
 /* Blue/red galaxy wash behind the stars; strength 0 = off (plain black). */
 void r3d_scene_set_nebula(uint32_t seed, float strength);
 /* Flat key-colour background + no sky (icon render); 0 = normal. */

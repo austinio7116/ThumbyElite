@@ -118,6 +118,10 @@ static float star_frand(void) {
     return (float)(star_rand() & 0xFFFF) * (1.0f / 65535.0f);
 }
 
+/* Proposal-look switch (style lab — sheets only, live look untouched). */
+static int s_style;
+void r3d_scene_set_style(int s) { s_style = s; }
+
 void r3d_starfield_init(uint32_t seed) {
     s_star_rng = seed | 1u;
     for (int i = 0; i < STAR_COUNT; i++) {
@@ -127,6 +131,38 @@ void r3d_starfield_init(uint32_t seed) {
                     star_frand() * 2 - 1);
         if (v3_len2(d) < 1e-4f) d = v3(0, 0, 1);
         s_stars[i].dir = v3_norm(d);
+#ifdef ELITE_STYLE_LAB
+        if (s_style == 1) {
+            /* PROPOSAL: real temperature tints (O/B blue .. M red) and
+             * a handful of hero stars that read as foreground suns. */
+            static const uint16_t k_tint[5] = {
+                RGB565C(185, 205, 255),   /* blue-white */
+                RGB565C(230, 235, 255),   /* white      */
+                RGB565C(255, 244, 214),   /* yellow     */
+                RGB565C(255, 214, 170),   /* orange     */
+                RGB565C(255, 178, 150),   /* red        */
+            };
+            int tier = (int)(star_rand() % 10);
+            uint16_t tint = k_tint[star_rand() % 5u];
+            if (tier == 0) {             /* hero: bright + tinted */
+                s_stars[i].color = tint;
+                s_stars[i].big = 1;
+            } else if (tier < 5) {
+                int r = ((tint >> 11) & 31) * 24 / 31;
+                int g = ((tint >> 5) & 63) * 48 / 63;
+                int b = (tint & 31) * 24 / 31;
+                s_stars[i].color = (uint16_t)((r << 11) | (g << 5) | b);
+                s_stars[i].big = 0;
+            } else {
+                int r = ((tint >> 11) & 31) * 13 / 31;
+                int g = ((tint >> 5) & 63) * 26 / 63;
+                int b = (tint & 31) * 14 / 31;
+                s_stars[i].color = (uint16_t)((r << 11) | (g << 5) | b);
+                s_stars[i].big = 0;
+            }
+            continue;
+        }
+#endif
         int tier = (int)(star_rand() % 8);
         if (tier == 0) {            /* bright, slightly tinted */
             uint8_t warm = (uint8_t)(star_rand() & 1);
@@ -216,6 +252,41 @@ static void nebula_fill(uint16_t *fb, int y0p, int y1p) {
                       nb_noise(d.z * F + 17.0f, d.x * F) * 0.3f +
                       nb_noise(d.y * F + 7.0f,  d.z * F + 23.0f) * 0.2f;
             uint16_t c = 0;
+#ifdef ELITE_STYLE_LAB
+            if (s_style == 1) {
+                /* PROPOSAL: two-layer nebula (broad wash + bright cores
+                 * in a second hue) over a faint galactic band. */
+                int r = 0, g = 0, b = 0;
+                float band = 1.0f - (d.y < 0 ? -d.y : d.y) * 2.6f;
+                if (band > 0) {            /* the milky stripe */
+                    float bb = band * band * 0.9f;
+                    float gr = nb_noise(d.x * 5.0f + 3.0f, d.z * 5.0f);
+                    bb *= 0.55f + 0.45f * gr;
+                    r += (int)(bb * 5); g += (int)(bb * 9); b += (int)(bb * 6);
+                }
+                if (n > 0.50f) {
+                    float k = (n - 0.50f) * 2.6f * s_neb_str;
+                    if (k > 1.0f) k = 1.0f;
+                    float w = nb_noise(d.x * F + 77.0f, d.z * F - 19.0f);
+                    float core = nb_noise(d.x * F * 2.3f - 9.0f,
+                                          d.y * F * 2.3f + 31.0f);
+                    if (w > 0.55f) { r += (int)(k * 13); g += (int)(k * 4);
+                                     b += (int)(k * 8); }
+                    else           { r += (int)(k * 4);  g += (int)(k * 6);
+                                     b += (int)(k * 16); }
+                    if (core > 0.62f) {    /* bright knots inside clouds */
+                        float kk = k * (core - 0.62f) * 2.6f;
+                        r += (int)(kk * 10); g += (int)(kk * 9);
+                        b += (int)(kk * 12);
+                    }
+                }
+                if (r > 31) r = 31;
+                if (g > 63) g = 63;
+                if (b > 31) b = 31;
+                c = (uint16_t)((r << 11) | (g << 5) | b);
+                goto neb_fill;
+            }
+#endif
             if (n > 0.52f) {               /* patchy, but visible where it is */
                 float k = (n - 0.52f) * 2.4f * s_neb_str; if (k > 1.0f) k = 1.0f;
                 float w = nb_noise(d.x * F + 77.0f, d.z * F - 19.0f);
@@ -224,6 +295,9 @@ static void nebula_fill(uint16_t *fb, int y0p, int y1p) {
                 int b = (int)(k * (w > 0.55f ? 9 : 15));
                 c = (uint16_t)(((r & 31) << 11) | ((g & 63) << 5) | (b & 31));
             }
+#ifdef ELITE_STYLE_LAB
+neb_fill:;
+#endif
             for (int yy = y; yy < y + STEP && yy < y1p; yy++)
                 for (int xx = x; xx < x + STEP && xx < R3D_FB_W; xx++)
                     fb[yy * R3D_FB_W + xx] = c;

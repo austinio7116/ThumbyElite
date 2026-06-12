@@ -20,6 +20,18 @@ typedef struct {
 static PlanetArt s_art[GAL_MAX_PLANETS];
 static const SystemInfo *s_info;
 
+/* Proposal-look switch (style lab — sheets only). */
+static int s_style;
+void r3d_planet_set_style(int s) { s_style = s; }
+#ifdef ELITE_STYLE_LAB
+int r3d_planet_art_peek(int i, const uint8_t **tex, const uint16_t **pal) {
+    if (i < 0 || i >= GAL_MAX_PLANETS) return 0;
+    *tex = s_art[i].tex;
+    *pal = s_art[i].pal;
+    return 1;
+}
+#endif
+
 /* --- bake-time noise (value noise, ThumbyCraft lineage) ----------------*/
 static uint32_t phash(int x, int y, uint32_t seed) {
     uint32_t h = (uint32_t)x * 374761393u + (uint32_t)y * 668265263u + seed * 2147483647u;
@@ -152,6 +164,110 @@ static void make_palette(PlanetType t, uint32_t seed, uint16_t pal[PAL_N]) {
     }
 }
 
+#ifdef ELITE_STYLE_LAB
+/* PROPOSAL feature pass: craters, ice cracks, lava veins, atolls,
+ * polar caps, gas-giant storms — stamped onto the baked index tile. */
+static void tex_enrich(PlanetArt *a, const PlanetInfo *p) {
+    uint32_t h = p->tex_seed * 2654435761u ^ 0xE17Au;
+#define EN_RND() (h ^= h << 13, h ^= h >> 17, h ^= h << 5, h)
+    uint8_t *t = a->tex;
+    switch (p->type) {
+    case PT_ROCK: {
+        int nc = 3 + (int)(EN_RND() % 4u);
+        for (int c = 0; c < nc; c++) {
+            int cx = (int)(EN_RND() % 32u), cy = 4 + (int)(EN_RND() % 24u);
+            int cr = 2 + (int)(EN_RND() % 3u);
+            for (int dy = -cr; dy <= cr; dy++)
+                for (int dx = -cr; dx <= cr; dx++) {
+                    int x = (cx + dx) & 31, y = cy + dy;
+                    if (y < 0 || y > 31) continue;
+                    int d2 = dx * dx + dy * dy;
+                    uint8_t *px = &t[y * TEX_N + x];
+                    if (d2 <= (cr - 1) * (cr - 1)) {
+                        if (*px >= 2) *px -= 2;       /* dark floor */
+                    } else if (d2 <= cr * cr) {
+                        if (*px < PAL_N - 2) *px += 2; /* bright rim */
+                    }
+                }
+        }
+        if (EN_RND() & 1)                              /* polar caps */
+            for (int y = 0; y < 32; y++) {
+                int e = (y < 3) ? 3 - y : (y > 28) ? y - 28 : 0;
+                if (!e) continue;
+                for (int x = 0; x < 32; x++)
+                    if (((EN_RND() >> 8) % 4u) < (uint32_t)e + 1)
+                        t[y * TEX_N + x] = PAL_N - 1;
+            }
+        break;
+    }
+    case PT_ICE: {
+        for (int w = 0; w < 5; w++) {                  /* crack walks */
+            float x = (float)(EN_RND() % 32u), y = (float)(EN_RND() % 32u);
+            float dx = ((int)(EN_RND() % 5u) - 2) * 0.5f;
+            float dy = ((int)(EN_RND() % 5u) - 2) * 0.5f;
+            if (dx == 0 && dy == 0) dx = 0.7f;
+            for (int s = 0; s < 22; s++) {
+                t[(((int)y) & 31) * TEX_N + (((int)x) & 31)] = 1;
+                x += dx; y += dy;
+                if ((EN_RND() & 7u) == 0) { dx = -dy; dy = dx * 0.6f; }
+            }
+        }
+        break;
+    }
+    case PT_LAVA:
+        for (int y = 0; y < 32; y++)
+            for (int x = 0; x < 32; x++)
+                if (fbm(x * 0.45f, y * 0.45f, p->tex_seed ^ 0x33u) > 0.66f)
+                    t[y * TEX_N + x] = PAL_N - 1;      /* glow veins */
+        a->pal[PAL_N - 1] = RGB565C(255, 190, 90);     /* hotter pop */
+        break;
+    case PT_OCEAN:
+        for (int y = 0; y < 32; y++)
+            for (int x = 0; x < 32; x++) {
+                float rg = fbm(x * 0.3f, y * 0.3f, p->tex_seed ^ 0x77u);
+                rg = rg * 2.0f - 1.0f;
+                if (rg < 0) rg = -rg;
+                if (rg < 0.06f && t[y * TEX_N + x] < 4)
+                    t[y * TEX_N + x] = 6;              /* atoll chains */
+            }
+        break;
+    case PT_EARTHLIKE:
+        for (int y = 0; y < 32; y++) {                 /* polar caps */
+            int e = (y < 4) ? 4 - y : (y > 27) ? y - 27 : 0;
+            for (int x = 0; x < 32; x++) {
+                if (e && ((EN_RND() >> 6) % 5u) < (uint32_t)e + 1)
+                    t[y * TEX_N + x] = PAL_N - 1;
+                else if (pnoise(x * 0.32f + 9.0f, y * 0.13f,
+                                p->tex_seed ^ 0x5Cu) > 0.74f)
+                    t[y * TEX_N + x] = PAL_N - 1;      /* cloud streaks */
+            }
+        }
+        break;
+    case PT_GAS: {
+        int gx = (int)(EN_RND() % 32u), gy = 8 + (int)(EN_RND() % 16u);
+        int rx2 = 4 + (int)(EN_RND() % 3u), ry2 = 2 + (int)(EN_RND() % 2u);
+        for (int dy = -ry2; dy <= ry2; dy++)           /* the great spot */
+            for (int dx = -rx2; dx <= rx2; dx++) {
+                float e = (float)(dx * dx) / (float)(rx2 * rx2) +
+                          (float)(dy * dy) / (float)(ry2 * ry2);
+                if (e > 1.0f) continue;
+                int x = (gx + dx) & 31, y = gy + dy;
+                if (y < 0 || y > 31) continue;
+                t[y * TEX_N + x] = (e > 0.55f) ? PAL_N - 1
+                                  : (t[y * TEX_N + x] >= 4 ? 1 : PAL_N - 2);
+            }
+        for (int k = 0; k < 4; k++) {                  /* small eddies */
+            int x = (int)(EN_RND() % 32u), y = (int)(EN_RND() % 32u);
+            t[y * TEX_N + x] = PAL_N - 1;
+            t[y * TEX_N + ((x + 1) & 31)] = 0;
+        }
+        break;
+    }
+    }
+#undef EN_RND
+}
+#endif
+
 void r3d_planet_bake(const SystemInfo *info) {
     s_info = info;
     for (int i = 0; i < info->n_planets; i++) {
@@ -181,6 +297,9 @@ void r3d_planet_bake(const SystemInfo *info) {
                 a->tex[y * TEX_N + x] = (uint8_t)idx;
             }
         }
+#ifdef ELITE_STYLE_LAB
+        if (s_style == 1) tex_enrich(a, p);
+#endif
     }
 }
 

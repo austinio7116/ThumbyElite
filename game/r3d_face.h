@@ -18,4 +18,8 @@
 void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
                int kind);
 
+/* Proposal-look switch (contact sheets only; style-1 bodies exist under
+ * ELITE_STYLE_LAB). 0 = live look, the default. */
+void face_set_style(int s);
+
 #endif

@@ -40,6 +40,9 @@
 #include "ui_event.h"
 #include "ui_station.h"
 #include "r3d_face.h"
+#include "r3d_planet.h"
+#include "ship_gen.h"
+#include "station_gen.h"
 
 #include <SDL2/SDL.h>
 #include <stdio.h>
@@ -655,6 +658,94 @@ static void host_settings_save(void) {
     fclose(f);
 }
 
+#ifdef ELITE_STYLE_LAB
+/* --- contact-sheet canvas (style lab — proposal renders only) ----------- */
+#define SHEET_MAX 720
+static uint16_t s_sheet[SHEET_MAX * SHEET_MAX];
+static int s_sheet_w, s_sheet_h;
+static void sheet_clear(int w, int h) {
+    s_sheet_w = w; s_sheet_h = h;
+    for (int i = 0; i < w * h; i++) s_sheet[i] = RGB565C(10, 12, 18);
+}
+static void sheet_blit(const uint16_t *src, int src_stride,
+                       int sw, int sh, int dx, int dy, int down) {
+    for (int y = 0; y < sh / down; y++)
+        for (int x = 0; x < sw / down; x++) {
+            int r = 0, g = 0, b = 0;
+            for (int yy = 0; yy < down; yy++)
+                for (int xx = 0; xx < down; xx++) {
+                    uint16_t c = src[(y * down + yy) * src_stride +
+                                     x * down + xx];
+                    r += (c >> 11) & 31; g += (c >> 5) & 63; b += c & 31;
+                }
+            int n2 = down * down;
+            uint16_t o = (uint16_t)(((r / n2) << 11) |
+                                    ((g / n2) << 5) | (b / n2));
+            int px = dx + x, py = dy + y;
+            if (px >= 0 && py >= 0 && px < s_sheet_w && py < s_sheet_h)
+                s_sheet[py * s_sheet_w + px] = o;
+        }
+}
+static void sheet_save(const char *path) {
+    FILE *f = fopen(path, "wb");
+    if (!f) { perror(path); return; }
+    fprintf(f, "P6\n%d %d\n255\n", s_sheet_w, s_sheet_h);
+    for (int i = 0; i < s_sheet_w * s_sheet_h; i++) {
+        uint16_t c = s_sheet[i];
+        uint8_t rgb[3] = { (uint8_t)(((c >> 11) & 31) * 255 / 31),
+                           (uint8_t)(((c >> 5) & 63) * 255 / 63),
+                           (uint8_t)((c & 31) * 255 / 31) };
+        fwrite(rgb, 1, 3, f);
+    }
+    fclose(f);
+    printf("[stylelab] wrote %s (%dx%d)\n", path, s_sheet_w, s_sheet_h);
+}
+
+/* Lit-sphere render of a baked planet tile (mirrors the impostor
+ * shader: terminator, limb darkening, world-up texture anchor). */
+static void sheet_planet_disc(const uint8_t *tex, const uint16_t *pal,
+                              int dx, int dy, int r_px) {
+    const float lx = -0.52f, ly = -0.34f, lz = 0.78f;
+    for (int py = -r_px; py <= r_px; py++)
+        for (int px = -r_px; px <= r_px; px++) {
+            float nx = (float)px / (float)r_px;
+            float ny = (float)py / (float)r_px;
+            float nz2 = 1.0f - nx * nx - ny * ny;
+            if (nz2 < 0) continue;
+            float nz = sqrtf(nz2);
+            float light = nx * lx + ny * ly + nz * lz;
+            if (light < 0) light = 0;
+            float shade = 0.07f + 0.93f * light;
+            shade *= 0.55f + 0.45f * nz;
+            int tu = (int)((nx * 0.5f + 0.5f) * 31.0f);
+            int tv = (int)((ny * 0.5f + 0.5f) * 31.0f);
+            uint16_t c = pal[tex[tv * 32 + tu]];
+            int cr = (int)(((c >> 11) & 31) * shade);
+            int cg = (int)(((c >> 5) & 63) * shade);
+            int cb = (int)((c & 31) * shade);
+            int X = dx + r_px + px, Y = dy + r_px + py;
+            if (X >= 0 && Y >= 0 && X < s_sheet_w && Y < s_sheet_h)
+                s_sheet[Y * s_sheet_w + X] =
+                    (uint16_t)((cr << 11) | (cg << 5) | cb);
+        }
+}
+
+/* One mesh rendered to g_fb via the real scene pipe (flat backdrop). */
+static void sheet_render_mesh(const Mesh *mesh, float yaw, float pitch) {
+    Mat3 cam = m3_identity();
+    r3d_scene_begin(&cam, 50.0f);
+    r3d_pipe_set_sun(v3_norm(v3(0.45f, 0.55f, -0.72f)));
+    R3DObject obj;
+    obj.mesh = mesh;
+    obj.basis = m3_identity();
+    m3_rotate_local(&obj.basis, 1, yaw);
+    m3_rotate_local(&obj.basis, 0, pitch);
+    obj.pos = v3(0, 0, mesh->bound_r * 2.25f);
+    r3d_scene_add_object(&obj);
+    r3d_scene_raster(g_fb, 0, ELITE_FB_H);
+}
+#endif
+
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
     const char *shot_path = getenv("ELITE_SHOT");
@@ -1143,6 +1234,135 @@ int main(int argc, char **argv) {
         dump_ppm(path);
         return 0;
     }
+
+#ifdef ELITE_STYLE_LAB
+    if (getenv("ELITE_STYLELAB")) {
+        /* Contact sheets: current vs proposed look for faces, planets,
+         * space, ships and stations. NOTHING here changes the live
+         * game — styles reset to 0 on the way out. */
+        const char *pre = getenv("ELITE_STYLELAB");
+        char path[300];
+        uint32_t base = (argc > 1) ? (uint32_t)strtoul(argv[1], NULL, 0)
+                                   : 42u;
+
+        /* A) faces: 10x10, kinds cycling by row */
+        static const int kinds[5] = { NK_CIVILIAN, NK_OFFICIAL, NK_PIRATE,
+                                      NK_MYSTIC, NK_DOCKHAND };
+        for (int st = 0; st <= 1; st++) {
+            face_set_style(st);
+            sheet_clear(2 + 10 * 34, 2 + 10 * 34);
+            for (int i = 0; i < 100; i++) {
+                int row = i / 10, col = i % 10;
+                for (int p = 0; p < OUT_W * OUT_H; p++) g_fb[p] = 0;
+                face_draw(g_fb, 0, 0, 32, base + (uint32_t)i * 2654435761u,
+                          kinds[row % 5]);
+                sheet_blit(g_fb, ELITE_FB_W, 32, 32,
+                           2 + col * 34, 2 + row * 34, 1);
+            }
+            snprintf(path, sizeof path, "%s_faces_%s.ppm", pre,
+                     st ? "new" : "cur");
+            sheet_save(path);
+        }
+        face_set_style(0);
+
+        /* B) planets: 6 types x 10 seeds, lit-sphere renders */
+        for (int st = 0; st <= 1; st++) {
+            r3d_planet_set_style(st);
+            sheet_clear(2 + 6 * 46, 2 + 10 * 46);
+            for (int row = 0; row < 10; row++) {
+                SystemInfo si;
+                memset(&si, 0, sizeof si);
+                si.n_planets = 6;
+                for (int t = 0; t < 6; t++) {
+                    si.planets[t].type = (PlanetType)t;
+                    si.planets[t].tex_seed =
+                        base * 977u + (uint32_t)row * 131u +
+                        (uint32_t)t * 7919u;
+                    si.planets[t].radius_mm = 6.0f;
+                    si.planets[t].orbit_mm = 1000.0f + t;
+                    si.planets[t].station = -1;
+                }
+                r3d_planet_bake(&si);
+                for (int t = 0; t < 6; t++) {
+                    const uint8_t *tex;
+                    const uint16_t *pal;
+                    if (r3d_planet_art_peek(t, &tex, &pal))
+                        sheet_planet_disc(tex, pal,
+                                          2 + t * 46, 2 + row * 46, 21);
+                }
+            }
+            snprintf(path, sizeof path, "%s_planets_%s.ppm", pre,
+                     st ? "new" : "cur");
+            sheet_save(path);
+        }
+        r3d_planet_set_style(0);
+
+        /* C) space: open sky (starfield + nebula), current vs proposed,
+         * two seeds x two view angles in one 2x2 sheet per style. */
+        for (int st = 0; st <= 1; st++) {
+            r3d_scene_set_style(st);
+            sheet_clear(2 + 2 * 130, 2 + 2 * 130);
+            for (int s2 = 0; s2 < 2; s2++) {
+                uint32_t sd = base + (uint32_t)s2 * 7777u;
+                r3d_starfield_init(sd);
+                r3d_scene_set_nebula(sd * 31u, 0.85f);
+                for (int ang = 0; ang < 2; ang++) {
+                    Mat3 cam = m3_identity();
+                    m3_rotate_local(&cam, 1, 0.9f + ang * 2.1f);
+                    m3_rotate_local(&cam, 0, ang ? -0.5f : 0.25f);
+                    r3d_scene_begin(&cam, 60.0f);
+                    r3d_scene_raster(g_fb, 0, ELITE_FB_H);
+                    sheet_blit(g_fb, ELITE_FB_W, 128, 128,
+                               2 + ang * 130, 2 + s2 * 130, 1);
+                }
+            }
+            snprintf(path, sizeof path, "%s_space_%s.ppm", pre,
+                     st ? "new" : "cur");
+            sheet_save(path);
+        }
+        r3d_scene_set_style(0);
+        r3d_scene_set_nebula(0, 0);
+
+        /* D) ships: 10 classes x 10 seeds */
+        r3d_scene_set_icon_bg(RGB565C(7, 9, 15));
+        for (int st = 0; st <= 1; st++) {
+            ship_gen_set_style(st);
+            sheet_clear(2 + 10 * 66, 2 + 10 * 66);
+            for (int cls = 0; cls < 10; cls++)
+                for (int col = 0; col < 10; col++) {
+                    const Mesh *m = ship_gen_mesh_class(
+                        base + (uint32_t)col * 2654435761u +
+                        (uint32_t)cls * 97u, cls);
+                    sheet_render_mesh(m, 0.75f, 0.28f);
+                    sheet_blit(g_fb, ELITE_FB_W, 128, 128,
+                               2 + col * 66, 2 + cls * 66, 2);
+                }
+            snprintf(path, sizeof path, "%s_ships_%s.ppm", pre,
+                     st ? "new" : "cur");
+            sheet_save(path);
+        }
+        ship_gen_set_style(0);
+
+        /* E) stations: 3x3, full resolution */
+        for (int st = 0; st <= 1; st++) {
+            station_gen_set_style(st);
+            sheet_clear(2 + 3 * 130, 2 + 3 * 130);
+            for (int i = 0; i < 9; i++) {
+                const Mesh *m =
+                    station_gen_mesh(base * 31u + (uint32_t)i * 2654435761u);
+                sheet_render_mesh(m, 0.6f, 0.35f);
+                sheet_blit(g_fb, ELITE_FB_W, 128, 128,
+                           2 + (i % 3) * 130, 2 + (i / 3) * 130, 1);
+            }
+            snprintf(path, sizeof path, "%s_stations_%s.ppm", pre,
+                     st ? "new" : "cur");
+            sheet_save(path);
+        }
+        station_gen_set_style(0);
+        r3d_scene_set_icon_bg(0);
+        return 0;
+    }
+#endif
 
     if (getenv("ELITE_WARTEST")) {
         /* Faction war: contested detection, offers, grant, quota,

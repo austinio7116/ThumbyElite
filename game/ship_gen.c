@@ -27,6 +27,11 @@ static uint32_t rnd(void) {
     s_rng ^= s_rng << 13; s_rng ^= s_rng >> 17; s_rng ^= s_rng << 5;
     return s_rng;
 }
+
+/* Proposal-look switch (style lab — sheets only). */
+static int s_style;
+static uint32_t s_style_seed;
+void ship_gen_set_style(int s) { s_style = s; }
 static float rndf(float lo, float hi) {
     return lo + (hi - lo) * (float)(rnd() & 0xFFFF) * (1.0f / 65535.0f);
 }
@@ -235,6 +240,7 @@ static void gun_pair(float x, float y, float z, float blen, float br,
 static int s_hint = -1;
 
 const Mesh *ship_gen_mesh(uint32_t seed) {
+    s_style_seed = seed;
     /* Proper mix — seed|1 made adjacent even/odd seeds identical. */
     s_rng = seed * 2654435761u;
     s_rng ^= s_rng >> 15;
@@ -827,6 +833,53 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
     }
 
 finish:;
+#ifdef ELITE_STYLE_LAB
+    if (s_style == 1) {
+        /* PROPOSAL material pass: faction accent stripe down the spine,
+         * emissive engine ring, shadowed belly, per-panel tone variance.
+         * Geometry untouched — this is a paint job direction. */
+        uint32_t h = s_style_seed * 2654435761u ^ 0x57F1u;
+        h ^= h >> 13;
+        static const uint16_t k_acc[6] = {
+            RGB565C(196, 60, 50),   RGB565C(220, 140, 40),
+            RGB565C(60, 170, 170),  RGB565C(205, 170, 60),
+            RGB565C(225, 225, 230), RGB565C(90, 160, 90),
+        };
+        uint16_t acc = k_acc[h % 6u];
+        uint16_t eng = (h & 8u) ? RGB565C(120, 200, 255)
+                                : RGB565C(255, 160, 70);
+        float wmax = 0.2f;
+        for (int i = 0; i < s_nv; i++)
+            if (fabsf(s_fx[i]) > wmax) wmax = fabsf(s_fx[i]);
+        for (int i = 0; i < s_nf; i++) {
+            MeshFace *f = &s_faces[i];
+            float fcx = (s_fx[f->a] + s_fx[f->b] + s_fx[f->c]) / 3.0f;
+            if (f->nz < -100) {
+                f->color = eng;                     /* engine emissives */
+            } else if (f->ny > 64 && fabsf(fcx) < wmax * 0.22f &&
+                       ((h >> 4) & 3u) != 0) {
+                f->color = acc;                     /* spine stripe */
+            } else {
+                int pc = 100;
+                if (f->ny < -64) pc = 84;           /* shadowed belly */
+                uint32_t ph = (uint32_t)i * 2654435761u ^ h;
+                ph ^= ph >> 13;
+                int pv = (int)(ph % 7u);            /* panel variance */
+                if (pv == 0) pc = pc * 90 / 100;
+                if (pv == 1) pc = pc * 108 / 100;
+                if (pc != 100) {
+                    int r2 = ((f->color >> 11) & 31) * pc / 100;
+                    int g2 = ((f->color >> 5) & 63) * pc / 100;
+                    int b2 = (f->color & 31) * pc / 100;
+                    if (r2 > 31) r2 = 31;
+                    if (g2 > 63) g2 = 63;
+                    if (b2 > 31) b2 = 31;
+                    f->color = (uint16_t)((r2 << 11) | (g2 << 5) | b2);
+                }
+            }
+        }
+    }
+#endif
     /* --- quantise ------------------------------------------------------ */
     float maxc = 1.0f, bound2 = 1.0f;
     for (int i = 0; i < s_nv; i++) {

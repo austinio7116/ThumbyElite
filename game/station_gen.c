@@ -25,6 +25,10 @@ static MeshVert s_verts[MAX_SV];
 static MeshFace s_faces[MAX_SF];
 static Mesh     s_mesh;
 
+/* Proposal-look switch (style lab — sheets only). */
+static int s_style;
+void station_gen_set_style(int s) { s_style = s; }
+
 /* Float-space build buffers. */
 static float s_fx[MAX_SV], s_fy[MAX_SV], s_fz[MAX_SV];
 static int   s_nv, s_nf;
@@ -339,6 +343,36 @@ const Mesh *station_gen_mesh(uint32_t seed) {
         s_verts[i].z = (int8_t)(s_fz[i] * q);
     }
 
+#ifdef ELITE_STYLE_LAB
+    if (s_style == 1) {
+        /* PROPOSAL: per-panel weathering, hotter window glow, and
+         * hazard-orange accents around the docking face. */
+        uint32_t h = seed * 2654435761u ^ 0x5747u;
+        h ^= h >> 13;
+        for (int i = 0; i < s_nf; i++) {
+            MeshFace *f = &s_faces[i];
+            if (f->color == RGB565C(34, 60, 96))
+                f->color = RGB565C(70, 130, 175);    /* lit windows */
+            else if (f->nz > 100 && (i & 3) == 0)
+                f->color = RGB565C(225, 130, 40);    /* bay hazard ring */
+            else {
+                uint32_t ph = (uint32_t)i * 2654435761u ^ h;
+                ph ^= ph >> 13;
+                int pv = (int)(ph % 6u);
+                if (pv < 2) {
+                    int pc = pv ? 110 : 86;          /* weathered panels */
+                    int r2 = ((f->color >> 11) & 31) * pc / 100;
+                    int g2 = ((f->color >> 5) & 63) * pc / 100;
+                    int b2 = (f->color & 31) * pc / 100;
+                    if (r2 > 31) r2 = 31;
+                    if (g2 > 63) g2 = 63;
+                    if (b2 > 31) b2 = 31;
+                    f->color = (uint16_t)((r2 << 11) | (g2 << 5) | b2);
+                }
+            }
+        }
+    }
+#endif
     s_mesh.verts = s_verts;
     s_mesh.faces = s_faces;
     s_mesh.nverts = (uint16_t)s_nv;

@@ -17,4 +17,7 @@
  * at a time (the anchored one). */
 const Mesh *station_gen_mesh(uint32_t seed);
 
+/* Proposal-look switch (sheets only; see ship_gen_set_style). */
+void station_gen_set_style(int s);
+
 #endif
