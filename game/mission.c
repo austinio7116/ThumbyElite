@@ -125,13 +125,19 @@ static bool warzone_build(const SystemInfo *si, uint32_t h, Mission *m) {
     Faction enemy;
     if (!find_warzone(si->addr, h, fac, &dest, &enemy)) return false;
     if (mission_warzone_here(dest, NULL)) return false;   /* one per zone */
-    float rep_bonus = 1.0f + 0.004f * (float)g_rep[fac];
-    /* Battle intensity (user req: 'a choice to join battles at our
-     * level'): tier = the enemy pilots' RANK, pay scales to match.
-     * Lower wars are common; ELITE wars are rare paydays. */
+    /* Loyalty (user req): factions only trust proven friends with war
+     * work — rep 2+ to be offered ANY contract, and the ladder climbs
+     * with standing (ELITE wars need rep 20+, ~3 completed contracts).
+     * War pay also rewards loyalty at double the usual rep scaling. */
+    int rep = g_rep[fac];
+    if (rep < 2) return false;
+    int tmax = rep / 5;
+    if (tmax > 4) tmax = 4;
+    float rep_bonus = 1.0f + 0.008f * (float)rep;
     int roll = (int)((h >> 24) % 100u);
     int t = (roll < 30) ? 0 : (roll < 55) ? 1 : (roll < 75) ? 2
           : (roll < 90) ? 3 : 4;
+    if (t > tmax) t = tmax;
     static const int32_t k_war_base[5] = { 2000, 3200, 5000, 7500, 19000 };
     static const int32_t k_war_var[5]  = { 800, 1200, 1800, 2500, 3000 };
     static const uint8_t k_war_n[5]    = { 4, 5, 5, 6, 6 };

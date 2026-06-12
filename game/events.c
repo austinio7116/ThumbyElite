@@ -89,6 +89,8 @@ static bool gate_ok(uint16_t gate, const SystemInfo *si) {
     if ((gate & GATE_HAS_MEDS) && g_player.cargo[5] == 0) return false;
     if ((gate & GATE_NO_ILLEGAL) && illegal_units() > 0) return false;
     if ((gate & GATE_FRONTLINE) && !mission_near_front(si->addr)) return false;
+    if ((gate & GATE_REP_PLUS) &&
+        g_rep[system_faction(si->addr)] < 2) return false;
     return true;
 }
 

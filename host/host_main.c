@@ -1510,12 +1510,24 @@ int main(int argc, char **argv) {
             printf("[wartest] contested systems in scan: %d\n", n);
             WCHECK(n > 0 && bad == 0, "fronts exist, enemy != own side");
         }
-        /* offers near the front include WAR contracts */
+        /* offers near the front include WAR contracts — but only for
+         * proven friends (rep gate), and the tier ladder needs rep */
         {
             Mission offers[MISSION_OFFERS];
             int war = -1;
+            /* rep 0: the faction doesn't trust you with war work */
+            for (int v = 0; v < 40; v++) {
+                mission_on_docked(&si_front, 0);
+                mission_make_offers(&si_front, 0, offers);
+                for (int i = 0; i < MISSION_OFFERS; i++)
+                    if (offers[i].type == MIS_WARZONE) war = i;
+            }
+            WCHECK(war < 0, "no war contracts at rep 0");
+            /* rep 25: full ladder open */
+            for (int f = 0; f < N_FACTIONS; f++) g_rep[f] = 25;
+            war = -1;
             for (int v = 0; v < 40 && war < 0; v++) {
-                mission_on_docked(&si_front, 0);    /* bump visit salt */
+                mission_on_docked(&si_front, 0);
                 mission_make_offers(&si_front, 0, offers);
                 for (int i = 0; i < MISSION_OFFERS; i++)
                     if (offers[i].type == MIS_WARZONE) war = i;
@@ -1524,7 +1536,7 @@ int main(int argc, char **argv) {
                            "war contract accepted");
                 }
             }
-            WCHECK(war >= 0, "front stations offer WAR contracts");
+            WCHECK(war >= 0, "trusted pilots get WAR contracts");
         }
         /* the battle: jump to the zone, anchor the beacon, count sides */
         {
@@ -1554,6 +1566,16 @@ int main(int argc, char **argv) {
                        "whole enemy force spawns up front");
                 WCHECK(allies == 3 + (wt >= 2) + (wt >= 4),
                        "allied wing scales with tier");
+                /* blended ranks: ceiling = leader only; the grunt
+                 * wall steps down (no all-ELITE force) */
+                int at_max = 0, ldr_rank = wt < 4 ? wt + 1 : 4;
+                for (int i = 1; i < MAX_SHIPS; i++)
+                    if (g_ships[i].alive &&
+                        g_ships[i].team == TEAM_HOSTILE &&
+                        g_ships[i].tier >= ldr_rank) at_max++;
+                printf("[wartest] enemies at leader rank: %d of %d\n",
+                       at_max, hostiles);
+                WCHECK(at_max <= 2, "ranks blend, no wall of aces");
                 static const int k_lo[5] = { 2000, 3200, 5000, 7500, 19000 };
                 static const int k_hi[5] = { 3500, 5500, 8500, 12500, 27000 };
                 WCHECK(wt >= 0 && m->reward >= k_lo[wt] &&

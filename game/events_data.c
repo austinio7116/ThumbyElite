@@ -851,7 +851,7 @@ const Event k_events[] = {
 
     /* faction war */
     { .id = 27, .weight = 13, .npc_kind = NK_OFFICIAL, .trig = TRIG_DOCK,
-      .gate = GATE_FRONTLINE,
+      .gate = GATE_FRONTLINE | GATE_REP_PLUS,
       .title = "THE RECRUITER",
       .body = "A $F OFFICER WORKS THE ARRIVALS QUEUE, UNIFORM PRESSED, VOICE TIRED. 'THE FRONT NEEDS GUNS. YOURS WILL DO. SIGNING BONUS, COMBAT PAY, GRATITUDE.'",
       .texts = e27_tx, .choices = e27_ch, .n_choices = 2 },

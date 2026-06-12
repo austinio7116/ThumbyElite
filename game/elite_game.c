@@ -417,9 +417,18 @@ static void war_spawn_battle(int quota, int tier) {
     if (tier < 0) tier = 2;
     int ldr = tier < 4 ? tier + 1 : 4;
     int allies = 3 + (tier >= 2) + (tier >= 4);
-    for (int i = 0; i < allies; i++)
-        war_spawn_ship(true, i == 0 ? ldr : tier);
-    for (int i = 0; i < quota - 1; i++) war_spawn_ship(false, tier);
+    for (int i = 0; i < allies; i++) {
+        int at = tier - (i % 2);               /* allies blend too */
+        war_spawn_ship(true, i == 0 ? ldr : (at < 0 ? 0 : at));
+    }
+    /* Blended ranks (user req: 6-7 elites would be impossible): the
+     * contract tier is the CEILING for grunts, thirds stepping down —
+     * an ELITE war fields ranks 4/3/2 with one rank-4 leader, not a
+     * wall of aces. */
+    for (int i = 0; i < quota - 1; i++) {
+        int gt = tier - (i % 3);
+        war_spawn_ship(false, gt < 0 ? 0 : gt);
+    }
     war_spawn_ship(false, ldr);                /* the wing leader */
     s_war_won_toast = false;
     snprintf(s_scoop_toast, sizeof s_scoop_toast, "%s WAR - ENGAGE",

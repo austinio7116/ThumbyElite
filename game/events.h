@@ -51,6 +51,7 @@ typedef struct { uint8_t op; int8_t a; int8_t b; } Op;
 #define GATE_HAS_MEDS    0x0100   /* carrying MEDICINE              */
 #define GATE_NO_ILLEGAL  0x0200   /* hold is clean of contraband    */
 #define GATE_FRONTLINE   0x0400   /* near a faction front           */
+#define GATE_REP_PLUS    0x0800   /* local faction rep >= 2         */
 
 typedef struct {
     const char *label;        /* "GIVE THEM FUEL"                          */
