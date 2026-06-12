@@ -118,9 +118,18 @@ static float star_frand(void) {
     return (float)(star_rand() & 0xFFFF) * (1.0f / 65535.0f);
 }
 
-/* Style switch retired: the space proposal was rejected (2026-06-12).
- * The setter stays a no-op so lab harnesses keep linking. */
-void r3d_scene_set_style(int s) { (void)s; }
+/* Space proposal v3 (v2 rejected as muddy/unclear in game): SUBTLE is
+ * the brief. Style-1 bodies under ELITE_STYLE_LAB; live look untouched. */
+#ifdef ELITE_STYLE_LAB
+static int s_style;
+#endif
+void r3d_scene_set_style(int s) {
+#ifdef ELITE_STYLE_LAB
+    s_style = s;
+#else
+    (void)s;
+#endif
+}
 
 void r3d_starfield_init(uint32_t seed) {
     s_star_rng = seed | 1u;
@@ -131,6 +140,32 @@ void r3d_starfield_init(uint32_t seed) {
                     star_frand() * 2 - 1);
         if (v3_len2(d) < 1e-4f) d = v3(0, 0, 1);
         s_stars[i].dir = v3_norm(d);
+#ifdef ELITE_STYLE_LAB
+        if (s_style == 1) {
+            /* PROPOSAL v3: same brightness ladder as live, but each
+             * star leans gently warm or cool — variation you only
+             * notice when you look for it. */
+            int tier = (int)(star_rand() % 8);
+            int warm = (int)(star_rand() % 3);     /* 0 cool 1 wt 2 warm */
+            if (tier == 0) {
+                s_stars[i].color = warm == 2 ? RGB565C(255, 238, 205)
+                                 : warm == 0 ? RGB565C(208, 226, 255)
+                                             : RGB565C(240, 240, 245);
+                s_stars[i].big = 1;
+            } else if (tier < 4) {
+                s_stars[i].color = warm == 2 ? RGB565C(198, 188, 172)
+                                 : warm == 0 ? RGB565C(172, 186, 205)
+                                             : RGB565C(188, 188, 196);
+                s_stars[i].big = 0;
+            } else {
+                s_stars[i].color = warm == 2 ? RGB565C(118, 110, 100)
+                                 : warm == 0 ? RGB565C(100, 110, 128)
+                                             : RGB565C(108, 108, 122);
+                s_stars[i].big = 0;
+            }
+            continue;
+        }
+#endif
         int tier = (int)(star_rand() % 8);
         if (tier == 0) {            /* bright, slightly tinted */
             uint8_t warm = (uint8_t)(star_rand() & 1);
@@ -160,6 +195,32 @@ static void starfield_raster(uint16_t *fb, int y0p, int y1p) {
         int sy = (int)((64.0f - focal * v.y * inv_z) * R3D_SS);
         if (sx < 0 || sy + R3D_SS * 2 <= y0p || sy >= y1p) continue;
         uint16_t c = s_stars[i].color;
+#ifdef ELITE_STYLE_LAB
+        if (s_style == 1 && s_stars[i].big) {
+            /* one-pixel additive halo ring around the hero stars —
+             * a faint glow, not a sprite */
+            static const int hdx[4] = { -1, 2, 0, 1 };
+            static const int hdy[4] = { 0, 0, -1, 2 };
+            for (int hk = 0; hk < 4; hk++) {
+                int px = sx + hdx[hk] * R3D_SS;
+                int py = sy + hdy[hk] * R3D_SS;
+                for (int by2 = 0; by2 < R3D_SS; by2++)
+                    for (int bx2 = 0; bx2 < R3D_SS; bx2++) {
+                        int qx = px + bx2, qy = py + by2;
+                        if ((unsigned)qx >= R3D_FB_W) continue;
+                        if (qy < y0p || qy >= y1p) continue;
+                        uint16_t *fp = &fb[qy * R3D_FB_W + qx];
+                        int r = ((*fp >> 11) & 31) + (((c >> 11) & 31) >> 2);
+                        int g = ((*fp >> 5) & 63) + (((c >> 5) & 63) >> 2);
+                        int b = (*fp & 31) + ((c & 31) >> 2);
+                        if (r > 31) r = 31;
+                        if (g > 63) g = 63;
+                        if (b > 31) b = 31;
+                        *fp = (uint16_t)((r << 11) | (g << 5) | b);
+                    }
+            }
+        }
+#endif
         /* big: 2x1 + 1 below (device pattern), scaled. */
         int w = s_stars[i].big ? R3D_SS * 2 : R3D_SS;
         int h = R3D_SS;
@@ -204,7 +265,108 @@ static float nb_noise(float x, float y) {
 }
 /* Direction-based so the wash is fixed in space and rotates with the view
  * (sampled along each pixel's world ray), in coarse blocks to stay cheap. */
+#ifdef ELITE_STYLE_LAB
+/* PROPOSAL v3 nebula: the failure modes last time were mud (too bright,
+ * too busy) and the look of the renderer itself — 2x2 blocks and raw
+ * RGB565 banding at low levels. Fixes, in order of importance:
+ *   1. Bayer-dithered output: float colour + 4x4 ordered threshold
+ *      before truncation — smooth gradients at 5-bit depth.
+ *   2. Per-pixel bilinear interpolation between block-corner noise
+ *      samples — no visible block structure, same sample budget.
+ *   3. Restraint: peak channel ~45% of the old v2, soft quadratic
+ *      onset, ONE hue pair (deep indigo wash, dusty rose where a slow
+ *      field says so), no filaments, no galactic band.
+ * Cost stays near the live path (4 corner samples per 4x4 block). */
+/* unstructured grain dither — a hash, not a bayer lattice (the ordered
+ * matrix read as a regular dot grid over large faint areas) */
+static inline float nb_grain(int x, int y) {
+    uint32_t h = (uint32_t)x * 0x9E3779B9u ^ (uint32_t)y * 0x85EBCA6Bu;
+    h ^= h >> 15; h *= 0x2C1B3C6Du; h ^= h >> 12;
+    return (float)(h & 0xFF) * (1.0f / 256.0f);
+}
+static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
+    const Mat3 *cam = r3d_pipe_camera();
+    float focal = r3d_pipe_focal() * (float)R3D_SS;
+    float cx = 64.0f * R3D_SS, cy = 64.0f * R3D_SS;
+    float ox = (float)(s_nebula & 0xFF) * 0.6f;
+    const float F = 1.05f;
+    const int STEP = 4 * R3D_SS;
+    /* corner sample of the cloud field (intensity) + hue field */
+    #define NB_V3(px, py, out_n, out_w) do { \
+        float vx_ = ((float)(px) - cx) / focal; \
+        float vy_ = -((float)(py) - cy) / focal; \
+        Vec3 d_ = v3_norm(m3_mul_v3(cam, v3(vx_, vy_, 1.0f))); \
+        (out_n) = nb_noise(d_.x * F + 40.0f + ox, d_.y * F + 40.0f) * 0.5f + \
+                  nb_noise(d_.z * F + 17.0f, d_.x * F) * 0.3f + \
+                  nb_noise(d_.y * F * 2.1f + 7.0f, d_.z * F * 2.1f + 23.0f) \
+                      * 0.2f; \
+        (out_w) = nb_noise(d_.x * 0.7f + 77.0f + ox * 0.3f, \
+                           d_.z * 0.7f - 19.0f); \
+    } while (0)
+    for (int y = y0p; y < y1p; y += STEP) {
+        for (int x = 0; x < R3D_FB_W; x += STEP) {
+            float n00, w00, n10, w10, n01, w01, n11, w11;
+            NB_V3(x, y, n00, w00);
+            NB_V3(x + STEP, y, n10, w10);
+            NB_V3(x, y + STEP, n01, w01);
+            NB_V3(x + STEP, y + STEP, n11, w11);
+            /* skip fully-dark blocks outright (most of the sky) */
+            float nmax = n00;
+            if (n10 > nmax) nmax = n10;
+            if (n01 > nmax) nmax = n01;
+            if (n11 > nmax) nmax = n11;
+            int ylim = y + STEP < y1p ? y + STEP : y1p;
+            if (nmax <= 0.48f) {
+                for (int yy = y; yy < ylim; yy++) {
+                    uint16_t *row = fb + yy * R3D_FB_W;
+                    for (int xx = x; xx < x + STEP && xx < R3D_FB_W; xx++)
+                        row[xx] = 0;
+                }
+                continue;
+            }
+            float inv = 1.0f / (float)STEP;
+            for (int yy = y; yy < ylim; yy++) {
+                float ty = (float)(yy - y) * inv;
+                float na = n00 + (n01 - n00) * ty;
+                float nb = n10 + (n11 - n10) * ty;
+                float wa = w00 + (w01 - w00) * ty;
+                float wb = w10 + (w11 - w10) * ty;
+                uint16_t *row = fb + yy * R3D_FB_W;
+                for (int xx = x; xx < x + STEP && xx < R3D_FB_W; xx++) {
+                    float tx = (float)(xx - x) * inv;
+                    float n = na + (nb - na) * tx;
+                    if (n <= 0.48f) { row[xx] = 0; continue; }
+                    float w = wa + (wb - wa) * tx;
+                    float k = (n - 0.48f) * 3.4f * s_neb_str;
+                    if (k > 1.0f) k = 1.0f;
+                    k = k * k * (3.0f - 2.0f * k); /* smoothstep onset */
+                    /* indigo wash <-> dusty rose, gently */
+                    float rose = (w - 0.45f) * 3.0f;
+                    if (rose < 0) rose = 0;
+                    if (rose > 1) rose = 1;
+                    float fr = k * (5.0f + 12.0f * rose);
+                    float fg = k * (3.6f + 2.2f * rose);
+                    float fbl = k * (19.0f - 8.5f * rose);
+                    float dth = nb_grain(xx, yy);
+                    int r = (int)(fr + dth);
+                    int g = (int)(fg + dth);
+                    int b = (int)(fbl + dth);
+                    if (r > 31) r = 31;
+                    if (g > 63) g = 63;
+                    if (b > 31) b = 31;
+                    row[xx] = (uint16_t)((r << 11) | (g << 5) | b);
+                }
+            }
+        }
+    }
+    #undef NB_V3
+}
+#endif
+
 static void nebula_fill(uint16_t *fb, int y0p, int y1p) {
+#ifdef ELITE_STYLE_LAB
+    if (s_style == 1) { nebula_fill_v3(fb, y0p, y1p); return; }
+#endif
     const Mat3 *cam = r3d_pipe_camera();
     float focal = r3d_pipe_focal() * (float)R3D_SS;
     float cx = 64.0f * R3D_SS, cy = 64.0f * R3D_SS;
