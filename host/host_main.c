@@ -1547,9 +1547,18 @@ int main(int argc, char **argv) {
                 printf("[wartest] battle: %d allies vs %d hostiles, "
                        "quota %d, faction-tagged %d\n",
                        allies, hostiles, quota, tagged);
+                int wt = mission_warzone_tier(m->target);
+                printf("[wartest] tier %d (%s), reward %d\n",
+                       wt, k_tier_names[wt < 0 ? 0 : wt], (int)m->reward);
                 WCHECK(hostiles == quota,
                        "whole enemy force spawns up front");
-                WCHECK(allies == 3 + (quota > 5), "allied wing scales");
+                WCHECK(allies == 3 + (wt >= 2) + (wt >= 4),
+                       "allied wing scales with tier");
+                static const int k_lo[5] = { 2000, 3200, 5000, 7500, 19000 };
+                static const int k_hi[5] = { 3500, 5500, 8500, 12500, 27000 };
+                WCHECK(wt >= 0 && m->reward >= k_lo[wt] &&
+                       m->reward <= k_hi[wt],
+                       "pay matches the tier band");
                 WCHECK(tagged == allies + hostiles,
                        "every combatant carries a faction tag");
                 /* the zone counts ANY war kill (allies too) */
@@ -1557,15 +1566,18 @@ int main(int argc, char **argv) {
                     mission_warzone_enemy_down();
                 WCHECK(m->done && m->count == 0,
                        "zone won when the force is dead");
-                /* payday: rep swings BOTH ways */
-                int8_t own0 = g_rep[m->faction], en0 = g_rep[m->tier];
+                /* payday: rep swings BOTH ways (enemy faction comes
+                 * from the front itself — tier is intensity now) */
+                Faction wen = (Faction)0;
+                faction_contested(m->target, &wen);
+                int8_t own0 = g_rep[m->faction], en0 = g_rep[wen];
                 int32_t cr0 = g_player.credits;
                 SystemInfo zi;
                 galaxy_generate(m->target, &zi);
                 int paid = mission_collect(&zi, 0);
                 WCHECK(paid > 0 && g_player.credits == cr0 + paid &&
                        g_rep[m->faction] == own0 + 7 &&
-                       g_rep[m->tier] == en0 - 7,
+                       g_rep[wen] == en0 - 7,
                        "war pay + rep swing both ways");
             }
         }

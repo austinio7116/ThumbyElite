@@ -25,9 +25,9 @@ typedef enum {
     MIS_BOUNTY,        /* kill the marked ace at a system's nav beacon */
     MIS_ASSASSINATE,   /* murder a marked CIVILIAN -- pays well, makes you wanted */
     MIS_WARZONE,       /* join a faction battle at a contested system's
-                          beacon; kill N enemy fighters. tier = ENEMY
-                          faction id. Signing up where you stand IS
-                          taking sides — the other front recruits too. */
+                          beacon; clear the enemy force. tier = BATTLE
+                          intensity (enemy pilot rank 0-4, pay-scaled).
+                          Signing up where you stand IS taking sides. */
 } MissionType;
 
 typedef struct {
@@ -77,6 +77,8 @@ bool faction_contested(SysAddr a, Faction *enemy);
 bool mission_near_front(SysAddr a);
 /* Active warzone mission targeting this system? Fills kills left. */
 bool mission_warzone_here(SysAddr a, int *kills_left);
+/* Battle tier (enemy rank 0-4) of the contract here, or -1. */
+int mission_warzone_tier(SysAddr a);
 /* elite_game marks the battle live while anchored at the target beacon
  * (warzone kills only count inside the zone). */
 void mission_warzone_set_active(bool active);

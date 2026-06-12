@@ -409,16 +409,21 @@ static void war_spawn_ship(bool ally, int tier) {
     }
 }
 
-static void war_spawn_battle(int quota) {
+static void war_spawn_battle(int quota, int tier) {
     /* The WHOLE enemy force spawns up front — no reinforcements; the
-     * zone is won when they're all dead (user req). Allies scale a
-     * little with the job. */
-    int allies = 3 + (quota > 5);
-    for (int i = 0; i < allies; i++) war_spawn_ship(true, 2 + (i == 0));
-    for (int i = 0; i < quota - 1; i++) war_spawn_ship(false, 2);
-    war_spawn_ship(false, 3);                  /* the wing leader */
+     * zone is won when they're all dead. Enemy rank = the contract's
+     * battle tier (VOIDRAT skirmishes up to ELITE wars), and the
+     * allied wing thickens for the big ones. */
+    if (tier < 0) tier = 2;
+    int ldr = tier < 4 ? tier + 1 : 4;
+    int allies = 3 + (tier >= 2) + (tier >= 4);
+    for (int i = 0; i < allies; i++)
+        war_spawn_ship(true, i == 0 ? ldr : tier);
+    for (int i = 0; i < quota - 1; i++) war_spawn_ship(false, tier);
+    war_spawn_ship(false, ldr);                /* the wing leader */
     s_war_won_toast = false;
-    snprintf(s_scoop_toast, sizeof s_scoop_toast, "WARZONE - ENGAGE");
+    snprintf(s_scoop_toast, sizeof s_scoop_toast, "%s WAR - ENGAGE",
+             k_tier_names[tier]);
     s_scoop_toast_t = 3.0f;
 }
 
@@ -432,7 +437,7 @@ static void spawn_poi_content(void) {
         int left;
         if (mission_warzone_here(s_addr, &left)) {
             mission_warzone_set_active(true);
-            war_spawn_battle(left);
+            war_spawn_battle(left, mission_warzone_tier(s_addr));
             return;
         }
     }

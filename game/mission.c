@@ -2,6 +2,7 @@
  * ThumbyElite — procedural missions + faction reputation.
  */
 #include "mission.h"
+#include "elite_entity.h"
 #include "elite_player.h"
 #include "econ.h"
 #include <stdio.h>
@@ -125,16 +126,38 @@ static bool warzone_build(const SystemInfo *si, uint32_t h, Mission *m) {
     if (!find_warzone(si->addr, h, fac, &dest, &enemy)) return false;
     if (mission_warzone_here(dest, NULL)) return false;   /* one per zone */
     float rep_bonus = 1.0f + 0.004f * (float)g_rep[fac];
+    /* Battle intensity (user req: 'a choice to join battles at our
+     * level'): tier = the enemy pilots' RANK, pay scales to match.
+     * Lower wars are common; ELITE wars are rare paydays. */
+    int roll = (int)((h >> 24) % 100u);
+    int t = (roll < 30) ? 0 : (roll < 55) ? 1 : (roll < 75) ? 2
+          : (roll < 90) ? 3 : 4;
+    static const int32_t k_war_base[5] = { 2000, 3200, 5000, 7500, 19000 };
+    static const int32_t k_war_var[5]  = { 800, 1200, 1800, 2500, 3000 };
+    static const uint8_t k_war_n[5]    = { 4, 5, 5, 6, 6 };
     m->type = MIS_WARZONE;
     m->faction = (uint8_t)fac;
-    m->tier = (uint8_t)enemy;            /* tier field = enemy faction */
+    m->tier = (uint8_t)t;                /* battle tier = enemy rank */
     m->target = dest;
-    m->count = (uint8_t)(5 + ((h >> 20) % 3u));   /* 5-7 kills */
-    m->reward = (int32_t)((m->count * 380 + 600) * rep_bonus);
+    m->count = (uint8_t)(k_war_n[t] + ((h >> 18) & 1u));
+    m->reward = (int32_t)((k_war_base[t] +
+                           (int32_t)((h >> 9) % (uint32_t)k_war_var[t])) *
+                          rep_bonus);
     char dname[14];
     galaxy_system_name(dest, dname);
-    snprintf(m->label, sizeof m->label, "WAR: HOLD %s", dname);
+    snprintf(m->label, sizeof m->label, "%s WAR>%s",
+             k_tier_names[t], dname);
+    (void)enemy;
     return true;
+}
+
+/* Battle tier of the active contract here, or -1. */
+int mission_warzone_tier(SysAddr a) {
+    for (int i = 0; i < MAX_MISSIONS; i++)
+        if (g_missions[i].type == MIS_WARZONE && !g_missions[i].done &&
+            sysaddr_eq(g_missions[i].target, a))
+            return g_missions[i].tier;
+    return -1;
 }
 
 bool mission_grant_warzone(const SystemInfo *si) {
@@ -353,8 +376,11 @@ int mission_collect(const SystemInfo *si, int station) {
         rep_add(m->faction, (m->type == MIS_BOUNTY) ? 8
                           : (m->type == MIS_ASSASSINATE) ? 5
                           : (m->type == MIS_WARZONE) ? 7 : 4);
-        if (m->type == MIS_WARZONE)
-            rep_add(m->tier, -7);        /* the other side remembers */
+        if (m->type == MIS_WARZONE) {
+            Faction en;                  /* tier is the BATTLE tier now */
+            if (faction_contested(m->target, &en))
+                rep_add(en, -7);         /* the other side remembers */
+        }
         g_player.xp_trading += (m->type == MIS_DELIVERY) ? 2 : 0;
         g_player.xp_gunnery += (m->type != MIS_DELIVERY) ? 1 : 0;
         m->type = MIS_NONE;
