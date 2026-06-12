@@ -302,6 +302,20 @@ planets life immediately while the narrative side matures.
   + outcomes: EVENTS_TABLE.md. Deferred: individual-NPC rep; outcome
   visibility/buffs pending user direction (EVENTS_TABLE.md "thin spots").
 
+## 11a. Style-lab v2 verdicts (user, 2026-06-12)
+
+- **Faces: much better** — adopt candidate.
+- **Planets**: rim + RINGS look great; some tiles better; **lava veins BAD**
+  (too busy); earthlike caps/clouds uncertain; differences hard to read on
+  sheets → judge in game (F8 / ELITE_STYLE=1).
+- **Space**: maybe better, unclear — judge in game.
+- **Ships**: 96px renders too big/cropped; ORIGINAL classes show no real
+  improvement (the actual brief); **spine-hauler (cuboid) REJECTED, blade
+  (wedge) REJECTED — look incomplete**; catamaran/detailing minor.
+  Retry must target the original classes' silhouettes.
+- **Stations: nothing real done — disappointed.** Retry needs actual
+  structural variety (fins, ring habitats, truss spurs, scale contrast).
+
 ## 11. Backlog (user, 2026-06-12 — after the planned phases)
 
 1. **Faction war events** — missions to support factions in major battles the

@@ -659,6 +659,21 @@ static void host_settings_save(void) {
 }
 
 #ifdef ELITE_STYLE_LAB
+/* In-game A/B: F8 (or ELITE_STYLE=1 at launch) flips every generator to
+ * the proposal look. Planets re-bake on the spot; the nebula/band are
+ * per-frame; STARS and SHIP/STATION meshes restyle on the next arrival
+ * (tints and hulls are baked at spawn). */
+static int s_lab_style;
+static void lab_apply_style(int st) {
+    face_set_style(st);
+    r3d_planet_set_style(st);
+    r3d_scene_set_style(st);
+    ship_gen_set_style(st);
+    station_gen_set_style(st);
+    if (system_info()) r3d_planet_bake(system_info());
+    printf("[stylelab] in-game style = %s\n", st ? "PROPOSED" : "CURRENT");
+}
+
 /* --- contact-sheet canvas (style lab — proposal renders only) ----------- */
 #define SHEET_MAX 1000
 static uint16_t s_sheet[SHEET_MAX * SHEET_MAX];
@@ -753,6 +768,20 @@ int main(int argc, char **argv) {
     uint32_t seed = (argc > 1) ? (uint32_t)strtoul(argv[1], NULL, 0)
                                : (uint32_t)time(NULL);
     printf("[elite] seed = %u\n", seed);
+#ifdef ELITE_STYLE_LAB
+    /* ELITE_STYLE=1: boot straight into the proposal look (everything,
+     * including first-spawn ships/stars, generates restyled). F8 flips
+     * live in-game. */
+    if (getenv("ELITE_STYLE") && atoi(getenv("ELITE_STYLE"))) {
+        s_lab_style = 1;
+        face_set_style(1);
+        r3d_planet_set_style(1);
+        r3d_scene_set_style(1);
+        ship_gen_set_style(1);
+        station_gen_set_style(1);
+        printf("[stylelab] booting with PROPOSED style (F8 toggles)\n");
+    }
+#endif
     elite_game_init(seed);
     /* LB: taps cycle target, 3s STILL hold shifts mode, hold+roll rolls. */
     if (getenv("ELITE_LBTEST")) {
@@ -5689,6 +5718,12 @@ int main(int argc, char **argv) {
                     s_host_settings[5] = !s_host_settings[5];
                     host_apply_fullscreen();
                 }
+#ifdef ELITE_STYLE_LAB
+                if (sc == SDL_SCANCODE_F8) {            /* style lab A/B */
+                    s_lab_style ^= 1;
+                    lab_apply_style(s_lab_style);
+                }
+#endif
             }
             /* Controller / HOTAS hotplug. */
             if (ev.type == SDL_CONTROLLERDEVICEADDED ||
