@@ -55,15 +55,24 @@ typedef struct {
 
 #define EV_ONESHOT 0x01       /* never offered again once seen            */
 
+/* Where an event can fire. */
+enum { TRIG_DOCK = 0, TRIG_BAR, TRIG_SPACE };
+
 /* NPC portrait archetype hint (biases r3d_face). */
 enum { NK_CIVILIAN = 0, NK_OFFICIAL, NK_PIRATE, NK_MYSTIC, NK_DOCKHAND,
        NK_NONE = 0xFF };
 
-typedef struct {
+typedef struct Event {
     uint8_t  id;              /* stable, unique — seen/suppression key     */
     uint8_t  weight;
     uint8_t  flags;           /* EV_*                                      */
     uint8_t  npc_kind;        /* NK_*                                      */
+    uint8_t  trig;            /* TRIG_*                                    */
+    uint8_t  need_flag;       /* 0 none, else story flag (id+1) must be SET
+                                 — chains authored arcs in order           */
+    uint8_t  not_flag;        /* 0 none, else flag (id+1) must be CLEAR    */
+    uint8_t  fixed_npc;       /* 0 = per-pick face/name; else a stable
+                                 campaign identity (recurring character)   */
     uint16_t gate;            /* bits required to offer at all             */
     const char *title;
     const char *body;         /* tokens: $N name $S system $T station
@@ -73,10 +82,12 @@ typedef struct {
     uint8_t n_choices;
 } Event;
 
+typedef struct { const char *title, *body; } Lore;
+
 /* --- pool (events_data.c) ---------------------------------------------- */
 extern const Event k_events[];
 extern const int   k_n_events;
-extern const char *const k_lore[];
+extern const Lore  k_lore[];
 extern const int   k_n_lore;
 
 /* --- engine ------------------------------------------------------------ */
@@ -84,6 +95,8 @@ void events_init(void);                       /* new game: clear all bits */
 
 /* Roll the dock-arrival hail. NULL = quiet arrival (most docks). */
 const Event *events_roll_dock(const SystemInfo *si, int station);
+/* Roll the bar encounter (once per dock visit; ui_station owns it). */
+const Event *events_roll_bar(const SystemInfo *si, int station);
 
 bool events_choice_enabled(const Event *ev, int choice);
 /* Deduct cost, run ops. Returns texts[] index for the aftermath panel,

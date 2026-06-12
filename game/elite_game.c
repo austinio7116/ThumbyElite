@@ -64,6 +64,7 @@ typedef enum {
 #define SC_DROP_MM 1.2f          /* auto-drop distance to destination */
 
 static GState  s_state;
+static bool    s_event_to_docked;  /* ST_EVENT came from the bar */
 static SysAddr s_addr;           /* current system */
 static Vec3    s_anchor_mm;      /* local-frame origin in system space */
 static Poi     s_anchor_poi;     /* what we're anchored at */
@@ -1841,12 +1842,31 @@ void elite_game_tick(const CraftRawButtons *btn, float dt) {
 
     case ST_EVENT:
         audio_engine_set(0, 0);
-        if (ui_event_tick(btn, dt)) dock_finish();
+        if (ui_event_tick(btn, dt)) {
+            if (s_event_to_docked) {
+                /* Bar encounter: bank the outcome, back to the station
+                 * (services stay open — no dock_finish re-run). */
+                s_event_to_docked = false;
+                save_write(s_addr, s_anchor_poi.index, combat_kills());
+                s_state = ST_DOCKED;
+            } else {
+                dock_finish();
+            }
+        }
         break;
 
     case ST_DOCKED: {
         audio_engine_set(0, 0);
         DockAction act = station_tick(btn, dt);
+        if (act == DOCK_EVENT) {
+            const Event *ev = station_pending_event();
+            if (ev) {
+                ui_event_open(ev);
+                s_event_to_docked = true;
+                s_state = ST_EVENT;
+            }
+            break;
+        }
         if (act == DOCK_LAUNCH) {
             /* Save on the way OUT too (user: otherwise you re-dock just
              * to bank a good purchase). */

@@ -281,10 +281,26 @@ planets life immediately while the narrative side matures.
   `poi_encounter` populator + the no-modal archetypes `SALVAGE_FIELD`,
   `ROCK_CLUSTER`, `PATROL`/`AMBUSH` over the existing loot/entity/combat pools.
   Empty planets stop feeling dead — no event VM needed for these.
-- **Phase 2 — Codex + Bar trigger + first authored arc + bridged POIs:**
-  `ui_codex` + DATABASE menu entry, `TRIG_BAR`, one 3-step recurring-NPC arc, the
-  `DERELICT`/`DISTRESS`/`ANOMALY` archetypes that bridge into the event VM + lore,
-  more pool events.
+- **Phase 2 — Codex + Bar trigger + first authored arc: DONE 2026-06-12.**
+  Event schema grew `trig`/`need_flag`/`not_flag`/`fixed_npc`; `events_roll_bar`
+  (60% per visit, rolled once on first BAR entry); DATABASE station screen
+  (lore titles + read view, ENCRYPTED rows for locked); bar encounter row +
+  `DOCK_EVENT` handshake (modal returns to the station, outcome saved);
+  the Adjuster 3-step arc (bar → bar → dock, one campaign-stable face,
+  lore 0→1→2) + 4 bar pool events (card game, navigator, war story, fixer).
+  30 EVENTTEST asserts green; BARSHOT/CODEXSHOT renders; slot 207,032 B
+  (53.7 KB headroom). The `DERELICT`/`DISTRESS`/`ANOMALY` modal bridges moved
+  to Phase 3 — they belong with the in-space work.
 - **Phase 3 — in-space hails + arc breadth:**
   `TRIG_ARRIVAL`, more arcs, individual-NPC rep consequences, lore that gates later
   events (the slow world reveal).
+
+## 11. Backlog (user, 2026-06-12 — after the planned phases)
+
+1. **Faction war events** — missions to support factions in major battles the
+   player can join and take sides in (large multi-wing engagements, rep stakes).
+2. **Ship + station model glow-up** — improve the look and ADD variety.
+   RULE: change nothing until the user has seen contact sheets of ~100
+   examples of the proposed improved models and approved a direction.
+3. **Face variety** — more helmet/hair variety, more species/races.
+   Same rule: 100-example contact sheets before changing the live look.

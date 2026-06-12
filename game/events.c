@@ -14,8 +14,13 @@
 void elite_game_event_ambush(int n, int tier);
 
 #define EVENT_DOCK_PCT 35
-static int s_chance = EVENT_DOCK_PCT;
-void events_set_chance(int pct) { s_chance = pct < 0 ? EVENT_DOCK_PCT : pct; }
+#define EVENT_BAR_PCT  60
+static int s_override = -1;            /* -1 = per-trigger defaults */
+void events_set_chance(int pct) { s_override = pct; }
+static int chance_for(int trig) {
+    if (s_override >= 0) return s_override;
+    return (trig == TRIG_BAR) ? EVENT_BAR_PCT : EVENT_DOCK_PCT;
+}
 
 /* Persistent bits: lore 0..127, story flags 128..159, oneshot-seen
  * 160 + event id. Carried by the save (events_save_bits). */
@@ -89,29 +94,32 @@ static bool in_recent(uint8_t id) {
     return false;
 }
 
-const Event *events_roll_dock(const SystemInfo *si, int station) {
+static bool eligible(const Event *e, int trig, const SystemInfo *si) {
+    if (e->trig != trig) return false;
+    if ((e->flags & EV_ONESHOT) && bit(160 + e->id)) return false;
+    if (in_recent(e->id)) return false;
+    if (e->need_flag && !bit(128 + ((e->need_flag - 1) & 31))) return false;
+    if (e->not_flag && bit(128 + ((e->not_flag - 1) & 31))) return false;
+    return gate_ok(e->gate, si);
+}
+
+static const Event *roll(const SystemInfo *si, int station, int trig) {
     s_salt += 0x9E3779B9u;
     uint32_t h = mix32((uint32_t)(si->seed >> 8) ^ s_salt ^
-                       (uint32_t)((station + 1) * 0x85EBCA6Bu));
-    if ((int)(h % 100u) >= s_chance) return NULL;
+                       (uint32_t)((station + 1) * 0x85EBCA6Bu) ^
+                       (uint32_t)(trig * 0x27D4EB2Fu));
+    if ((int)(h % 100u) >= chance_for(trig)) return NULL;
 
     /* Weighted pick over the eligible pool. */
     int total = 0;
-    for (int i = 0; i < k_n_events; i++) {
-        const Event *e = &k_events[i];
-        if ((e->flags & EV_ONESHOT) && bit(160 + e->id)) continue;
-        if (in_recent(e->id)) continue;
-        if (!gate_ok(e->gate, si)) continue;
-        total += e->weight;
-    }
+    for (int i = 0; i < k_n_events; i++)
+        if (eligible(&k_events[i], trig, si)) total += k_events[i].weight;
     if (total <= 0) return NULL;
     int pick = (int)(mix32(h ^ 0xC2B2AE35u) % (uint32_t)total);
     const Event *ev = NULL;
     for (int i = 0; i < k_n_events; i++) {
         const Event *e = &k_events[i];
-        if ((e->flags & EV_ONESHOT) && bit(160 + e->id)) continue;
-        if (in_recent(e->id)) continue;
-        if (!gate_ok(e->gate, si)) continue;
+        if (!eligible(e, trig, si)) continue;
         pick -= e->weight;
         if (pick < 0) { ev = e; break; }
     }
@@ -119,12 +127,25 @@ const Event *events_roll_dock(const SystemInfo *si, int station) {
 
     s_si = si;
     s_station = station;
-    s_npc_seed = mix32(h ^ (uint32_t)ev->id * 0x9E3779B9u);
-    s_outcome_seed = mix32(s_npc_seed ^ 0x6A09E667u);
+    /* Recurring characters carry a campaign-stable identity; everyone
+     * else is minted from the pick. */
+    s_npc_seed = ev->fixed_npc
+                     ? mix32(galaxy_get_seed() ^
+                             (uint32_t)ev->fixed_npc * 0x9E3779B9u)
+                     : mix32(h ^ (uint32_t)ev->id * 0x9E3779B9u);
+    s_outcome_seed = mix32(mix32(h) ^ 0x6A09E667u);
     if (ev->flags & EV_ONESHOT) bit_set(160 + ev->id);
     s_recent[s_recent_at] = ev->id;
     s_recent_at = (uint8_t)((s_recent_at + 1) % EVENTS_RECENT_LEN);
     return ev;
+}
+
+const Event *events_roll_dock(const SystemInfo *si, int station) {
+    return roll(si, station, TRIG_DOCK);
+}
+
+const Event *events_roll_bar(const SystemInfo *si, int station) {
+    return roll(si, station, TRIG_BAR);
 }
 
 /* --- text ----------------------------------------------------------------

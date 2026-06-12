@@ -38,6 +38,7 @@
 #include "vec.h"
 #include "events.h"
 #include "ui_event.h"
+#include "ui_station.h"
 #include "r3d_face.h"
 
 #include <SDL2/SDL.h>
@@ -923,6 +924,66 @@ int main(int argc, char **argv) {
             EVCHECK(!dollar && out[0], "tokens fully expanded");
         }
 
+        /* triggers are separate pools: dock never deals bar events */
+        {
+            events_init();
+            int cross = 0;
+            for (int k = 0; k < 2500; k++) {
+                const Event *e2 = events_roll_dock(&si_any, 0);
+                if (e2 && e2->trig != TRIG_DOCK) cross++;
+                e2 = events_roll_bar(&si_any, 0);
+                if (e2 && e2->trig != TRIG_BAR) cross++;
+            }
+            EVCHECK(cross == 0, "dock/bar pools separate");
+        }
+
+        /* the Adjuster arc: ordered by flags, one stable face */
+        {
+            events_init();
+            g_player.credits = 1000;
+            int early = 0;
+            for (int k = 0; k < 3000; k++) {
+                const Event *e2 = events_roll_bar(&si_any, 0);
+                if (e2 && (e2->id == 12 || e2->id == 13)) early++;
+            }
+            EVCHECK(early == 0, "arc steps 2/3 wait for step 1");
+            /* meet the stranger */
+            const Event *ev = NULL;
+            for (uint32_t s2 = 0; s2 < 200000u && !ev; s2++) {
+                events_init(); events_set_salt(s2);
+                const Event *e2 = events_roll_bar(&si_any, 0);
+                if (e2 && e2->id == 11) ev = e2;
+            }
+            EVCHECK(ev != NULL, "stranger in grey reachable");
+            uint32_t npc1 = events_npc_seed();
+            events_run_choice(ev, 0);            /* HEAR -> flag 8 */
+            EVCHECK(events_lore_seen(0), "step 1 reveals lore 0");
+            /* retainer now offerable, same face */
+            const Event *ev2 = NULL;
+            for (int k = 0; k < 30000 && !ev2; k++) {
+                const Event *e2 = events_roll_bar(&si_any, 0);
+                if (e2 && e2->id == 12) ev2 = e2;
+            }
+            EVCHECK(ev2 != NULL, "retainer unlocked by flag 8");
+            EVCHECK(events_npc_seed() == npc1, "recurring NPC keeps face");
+            events_run_choice(ev2, 0);           /* TAKE -> flag 10 */
+            EVCHECK(events_lore_seen(1), "step 2 reveals lore 1");
+            int again12 = 0;
+            const Event *ev3 = NULL;
+            for (int k = 0; k < 30000; k++) {
+                const Event *e2 = events_roll_bar(&si_any, 0);
+                if (e2 && e2->id == 12) again12++;
+                e2 = events_roll_dock(&si_any, 0);
+                if (e2 && e2->id == 13 && !ev3) ev3 = e2;
+            }
+            EVCHECK(again12 == 0, "retainer retires on flag 10");
+            EVCHECK(ev3 != NULL, "claim adjusted fires at dock");
+            if (ev3) {
+                events_run_choice(ev3, 0);       /* DEMAND -> lore 2 */
+                EVCHECK(events_lore_seen(2), "step 3 reveals lore 2");
+            }
+        }
+
         /* save round-trip carries lore bits (v5) */
         {
             events_init();
@@ -958,6 +1019,76 @@ int main(int argc, char **argv) {
                           base + (uint32_t)(row * 4 + col) * 2654435761u,
                           kinds[row]);
         dump_ppm(path);
+        return 0;
+    }
+
+    if (getenv("ELITE_BARSHOT") || getenv("ELITE_CODEXSHOT")) {
+        /* Drive the station UI headless: bar encounter row + modal, or
+         * the DATABASE list + read view. */
+        const char *barp = getenv("ELITE_BARSHOT");
+        const char *codp = getenv("ELITE_CODEXSHOT");
+        events_set_chance(100);
+        galaxy_set_seed(42);
+        player_init();
+        g_player.credits = 1000;
+        SystemInfo si;
+        bool got = false;
+        for (int sy = -14; sy <= 14 && !got; sy++)
+            for (int sx = -14; sx <= 14 && !got; sx++) {
+                int ns = galaxy_sector_stars(sx, sy);
+                for (int i = 0; i < ns && !got; i++) {
+                    SysAddr a = { sx, sy, (uint8_t)i };
+                    galaxy_generate(a, &si);
+                    if (si.n_stations > 0) got = true;
+                }
+            }
+        if (!got) { printf("[barshot] no system\n"); return 1; }
+        system_enter(si.addr);
+        events_init();
+        if (codp) {
+            /* unlock two fragments so the list has content (bit layout:
+             * lore 0..127 lives at the front of the save bits) */
+            uint8_t *bits = events_save_bits();
+            bits[0] |= (1u << 0) | (1u << 5);
+        }
+        station_open(0);
+        CraftRawButtons none = {0}, b = {0};
+        float dt2 = 1.0f / 30.0f;
+        station_tick(&none, dt2);                /* release the debounce */
+        char p1[256];
+        int moves = codp ? 6 : 4;                /* DATABASE row vs BAR */
+        for (int k = 0; k < moves; k++) {
+            b = none; b.down = true;
+            station_tick(&b, dt2);
+            station_tick(&none, dt2);
+        }
+        b = none; b.a = true;
+        DockAction act = station_tick(&b, dt2);
+        station_tick(&none, dt2);
+        station_draw(g_fb);
+        snprintf(p1, sizeof p1, "%s_list.ppm", codp ? codp : barp);
+        dump_ppm(p1);
+        b = none; b.a = true;
+        act = station_tick(&b, dt2);
+        station_tick(&none, dt2);
+        if (codp) {
+            station_draw(g_fb);                  /* read view */
+            snprintf(p1, sizeof p1, "%s_read.ppm", codp);
+            dump_ppm(p1);
+        } else if (act == DOCK_EVENT) {
+            const Event *ev = station_pending_event();
+            if (ev) {
+                ui_event_open(ev);
+                ui_event_tick(&none, dt2);
+                for (int i = 0; i < OUT_W * OUT_H; i++)
+                    g_fb[i] = RGB565C(8, 10, 18);
+                ui_event_draw(g_fb);
+                snprintf(p1, sizeof p1, "%s_modal.ppm", barp);
+                dump_ppm(p1);
+            }
+        } else {
+            printf("[barshot] no DOCK_EVENT (act=%d)\n", (int)act);
+        }
         return 0;
     }
 

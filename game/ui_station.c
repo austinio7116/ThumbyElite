@@ -21,6 +21,7 @@
 #include "enames.h"
 #include "elite_weapons.h"
 #include "craft_font.h"
+#include "events.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -36,7 +37,7 @@
 
 typedef enum {
     SCR_HOME = 0, SCR_MARKET, SCR_SHIPYARD, SCR_OUTFIT, SCR_STATUS,
-    SCR_MISSIONS, SCR_BAR
+    SCR_MISSIONS, SCR_BAR, SCR_CODEX
 } Screen;
 
 static Screen s_screen;
@@ -51,12 +52,16 @@ static float s_toast_t;
 static int s_detail;       /* 0 = list, 1 = detail sheet open */
 static uint8_t s_kit_view;  /* shipyard: showing a ship's included kit */
 
-#define HOME_ITEMS 10
+#define HOME_ITEMS 11
 static const char *k_home[HOME_ITEMS] = {
     "MARKET", "SHIPYARD", "OUTFITTING", "MISSIONS", "BAR", "STATUS",
-    "REFUEL", "SERVICE", "PAY FINE", "LAUNCH",
+    "DATABASE", "REFUEL", "SERVICE", "PAY FINE", "LAUNCH",
 };
 static Mission s_offers[MISSION_OFFERS];
+
+/* Bar encounter: rolled once per dock visit, on first BAR entry. */
+static const Event *s_bar_ev;
+static bool s_bar_rolled;
 
 /* Shipyard stock: each dockyard rolls its own 5 ships. */
 #define YARD_OFFERS 5
@@ -141,6 +146,8 @@ void station_open(int station_idx) {
     s_station = station_idx;
     s_cursor = 0;
     s_scroll = 0;
+    s_bar_ev = NULL;
+    s_bar_rolled = false;
     memset(s_bought, 0, sizeof s_bought);
     /* Debounce: everything counts as held until released once.
      * (Per-field true — memset(0xFF) breaks _Bool negation.) */
@@ -154,6 +161,12 @@ void station_open(int station_idx) {
 static void toast(const char *msg) {
     snprintf(s_toast, sizeof s_toast, "%s", msg);
     s_toast_t = 1.6f;
+}
+
+const Event *station_pending_event(void) {
+    const Event *ev = s_bar_ev;
+    s_bar_ev = NULL;          /* consumed — one approach per visit */
+    return ev;
 }
 
 int station_preview2(uint32_t *mesh_seed, int *class_hint) {
@@ -1160,11 +1173,18 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
                 mission_make_offers(system_info(), s_station, s_offers);
                 s_screen = SCR_MISSIONS; s_cursor = 0;
             }
-            else if (s_cursor == 4) { s_screen = SCR_BAR; }
+            else if (s_cursor == 4) {
+                s_screen = SCR_BAR;
+                if (!s_bar_rolled) {           /* one roll per dock visit */
+                    s_bar_rolled = true;
+                    s_bar_ev = events_roll_bar(system_info(), s_station);
+                }
+            }
             else if (s_cursor == 5) { s_screen = SCR_STATUS; status_open(); }
-            else if (s_cursor == 6) try_refuel();
-            else if (s_cursor == 7) try_service();
-            else if (s_cursor == 8) {
+            else if (s_cursor == 6) { s_screen = SCR_CODEX; s_cursor = 0; }
+            else if (s_cursor == 7) try_refuel();
+            else if (s_cursor == 8) try_service();
+            else if (s_cursor == 9) {
                 if (g_player.fine <= 0) toast("RECORD CLEAN");
                 else if (g_player.credits < g_player.fine)
                     toast("NO CREDITS");
@@ -1176,7 +1196,7 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
                     toast("RECORD CLEARED");
                 }
             }
-            else if (s_cursor == 9) act = DOCK_LAUNCH;
+            else if (s_cursor == 10) act = DOCK_LAUNCH;
         }
         if (back) act = DOCK_LAUNCH;           /* MENU = leave */
         break;
@@ -1288,8 +1308,22 @@ DockAction station_tick(const CraftRawButtons *btn, float dt) {
     }
 
     case SCR_BAR:
+        if (s_bar_ev && a_edge) { act = DOCK_EVENT; break; }
         if (back || a_edge) { s_screen = SCR_HOME; s_cursor = 4; }
         break;
+
+    case SCR_CODEX: {
+        /* Unlocked entries are selectable; locked rows show as ???. */
+        if (s_detail) {
+            if (back || a_edge) s_detail = 0;
+            break;
+        }
+        if (up && s_cursor > 0) s_cursor--;
+        if (down && s_cursor < k_n_lore - 1) s_cursor++;
+        if (a_edge && events_lore_seen(s_cursor)) s_detail = 1;
+        if (back) { s_detail = 0; s_screen = SCR_HOME; s_cursor = 6; }
+        break;
+    }
 
     case SCR_STATUS:
         if (status_tick(btn, dt)) { s_screen = SCR_HOME; s_cursor = 5; }
@@ -1882,6 +1916,11 @@ static void draw_bar(uint16_t *fb) {
     const SystemInfo *si = system_info();
     char buf[34];
     int y = 26;
+    if (s_bar_ev) {                 /* someone here wants a word */
+        craft_font_draw(fb, ">", 2, y, COL_TXT);
+        craft_font_draw(fb, s_bar_ev->title, 8, y, COL_TXT);
+        y += 12;
+    }
     /* Rumours: seeded flavour + a genuine trade tip. */
     uint32_t h = (uint32_t)(si->seed >> 20) ^ (uint32_t)(s_station * 131);
     h ^= h >> 13; h *= 1274126177u; h ^= h >> 16;
@@ -1924,7 +1963,71 @@ static void draw_bar(uint16_t *fb) {
         y += 8;
     }
     hl(fb, 118, COL_GRID);
-    { char h[16]; snprintf(h, sizeof h, "%s:BACK", plat_menu_btn(MB_B));
+    { char h[32];
+      if (s_bar_ev) snprintf(h, sizeof h, "%s:APPROACH %s:BACK",
+                             plat_menu_btn(MB_A), plat_menu_btn(MB_B));
+      else snprintf(h, sizeof h, "%s:BACK", plat_menu_btn(MB_B));
+      craft_font_draw(fb, h, 2, 121, COL_DIM); }
+}
+
+/* DATABASE: re-read unlocked lore fragments (events OP_LORE bits). */
+static int codex_wrap(uint16_t *fb, const char *text, int x0, int x1,
+                      int y, uint16_t col) {
+    int maxc = (x1 - x0) / CRAFT_FONT_CELL_W;
+    const char *p = text;
+    char line[34];
+    while (*p && y < 114) {
+        int n = 0, sp = -1;
+        while (p[n] && n < maxc && n < (int)sizeof line - 1) {
+            if (p[n] == ' ') sp = n;
+            n++;
+        }
+        if (p[n] && sp > 0) n = sp;
+        memcpy(line, p, n);
+        line[n] = 0;
+        craft_font_draw(fb, line, x0, y, col);
+        y += 7;
+        p += n;
+        while (*p == ' ') p++;
+    }
+    return y;
+}
+
+static void draw_codex(uint16_t *fb) {
+    draw_header(fb);
+    int seen = 0;
+    for (int i = 0; i < k_n_lore; i++)
+        if (events_lore_seen(i)) seen++;
+
+    if (s_detail && events_lore_seen(s_cursor)) {
+        craft_font_draw(fb, k_lore[s_cursor].title, 2, 12, COL_HDR);
+        hl(fb, 19, COL_GRID);
+        codex_wrap(fb, k_lore[s_cursor].body, 2, 126, 26, COL_TXT);
+        hl(fb, 118, COL_GRID);
+        { char h[16]; snprintf(h, sizeof h, "%s:BACK", plat_menu_btn(MB_B));
+          craft_font_draw(fb, h, 2, 121, COL_DIM); }
+        return;
+    }
+
+    { char buf[24];
+      snprintf(buf, sizeof buf, "DATABASE  %d/%d", seen, k_n_lore);
+      craft_font_draw(fb, buf, 2, 12, COL_DIM); }
+    hl(fb, 19, COL_GRID);
+    if (seen == 0)
+        craft_font_draw(fb, "NO RECORDS DECRYPTED", 2, 30, COL_DIM);
+    for (int i = 0; i < k_n_lore; i++) {
+        int y = 26 + i * 9;
+        bool unlocked = events_lore_seen(i);
+        if (i == s_cursor)
+            craft_font_draw(fb, ">", 2, y, unlocked ? COL_TXT : COL_DIM);
+        craft_font_draw(fb, unlocked ? k_lore[i].title : "- ENCRYPTED -",
+                        8, y,
+                        unlocked ? (i == s_cursor ? COL_TXT : COL_HDR)
+                                 : COL_GRID);
+    }
+    hl(fb, 118, COL_GRID);
+    { char h[28]; snprintf(h, sizeof h, "%s:READ %s:BACK",
+        plat_menu_btn(MB_A), plat_menu_btn(MB_B));
       craft_font_draw(fb, h, 2, 121, COL_DIM); }
 }
 
@@ -2081,6 +2184,7 @@ void station_draw(uint16_t *fb) {
     else if (s_screen == SCR_OUTFIT) draw_outfit(fb);
     else if (s_screen == SCR_MISSIONS) draw_missions(fb);
     else if (s_screen == SCR_BAR) draw_bar(fb);
+    else if (s_screen == SCR_CODEX) draw_codex(fb);
     else if (s_screen == SCR_STATUS) { status_draw(fb); return; }
     else draw_home(fb);
 

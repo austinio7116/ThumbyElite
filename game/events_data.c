@@ -6,8 +6,10 @@
  *     must therefore return stake + winnings).
  *   - $-tokens expand in body AND result texts ($N npc, $S system,
  *     $T station, $F faction, $G trade good).
- * Lore ids: 3 prospector's claim, 4 your file, 5 the cover.
- * Story flags: 1 stowaway rode along, 2 preacher's token, 3 purged file.
+ * Lore ids: 0/1/2 the Adjuster arc, 3 prospector's claim, 4 your file,
+ * 5 the cover.
+ * Story flags: 1 stowaway rode along, 2 preacher's token, 3 purged file,
+ * 8 met the stranger, 10 took the retainer, 11 Adjuster arc complete.
  */
 #include "events.h"
 #include <stddef.h>
@@ -171,58 +173,216 @@ static const Choice e10_ch[] = {
     { "DECLINE",      0, 0,   e10_pass },
 };
 
+/* ======================= THE ADJUSTER (arc, bar/dock) ====================
+ * Recurring grey-coat NPC (fixed_npc 1). Flags: 8 met them, 10 retained,
+ * 11 arc complete. Reveals lore 0 -> 1 -> 2 in order. */
+
+/* --- 11 A STRANGER IN GREY (step 1, bar) -------------------------------- */
+static const Op e11_hear[]  = { {OP_FLAG,8,0}, {OP_LORE,0,0},
+                                {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e11_brush[] = { {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e11_tx[] = {
+    "'EVERY FEE YOU PAY, A FRACTION GOES UP. CALL IT COVER. YOU'LL WANT IT, WHERE YOU FLY.' THEY LEAVE NO GLASS, NO NAME.",
+    "THEY NOD AS IF YOU'D SIGNED SOMETHING ANYWAY, AND GO.",
+};
+static const Choice e11_ch[] = {
+    { "HEAR THEM OUT",  0, 0, e11_hear },
+    { "BRUSH THEM OFF", 0, 0, e11_brush },
+};
+
+/* --- 12 THE RETAINER (step 2, bar) --------------------------------------- */
+static const Op e12_take[]  = { {OP_CR,12,0}, {OP_FLAG,10,0}, {OP_LORE,1,0},
+                                {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e12_press[] = { {OP_FLAG,10,0}, {OP_LORE,1,0},
+                                {OP_RESULT,1,0}, {OP_END,0,0} };
+static const Op e12_walk[]  = { {OP_RESULT,2,0}, {OP_END,0,0} };
+static const char *const e12_tx[] = {
+    "CREDITS ARRIVE FROM AN ACCOUNT THAT DOESN'T EXIST. THE WRECK THEY NAMED ISN'T ON ANY SCHEDULE.",
+    "'WE DON'T CAUSE THE LOSSES. WE COVER THEM.' BY THE TIME YOU BLINK, THE STOOL IS EMPTY.",
+    "YOU LEAVE YOUR DRINK. SOME JOBS SMELL LIKE BAD WEATHER.",
+};
+static const Choice e12_ch[] = {
+    { "TAKE THE RETAINER", 0, 0, e12_take },
+    { "PRESS FOR ANSWERS", 0, 0, e12_press },
+    { "WALK AWAY",         0, 0, e12_walk },
+};
+
+/* --- 13 CLAIM ADJUSTED (step 3, dock, oneshot) ---------------------------- */
+static const Op e13_demand[] = { {OP_LORE,2,0}, {OP_FLAG,11,0},
+                                 {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e13_report[] = { {OP_REP,-1,3}, {OP_FLAG,11,0},
+                                 {OP_RESULT,1,0}, {OP_END,0,0} };
+static const Op e13_quiet[]  = { {OP_CR,20,0}, {OP_FLAG,11,0},
+                                 {OP_RESULT,2,0}, {OP_END,0,0} };
+static const char *const e13_tx[] = {
+    "'CLAIM SETTLED IN FULL,' IS ALL THE GREY PILOT SAYS. 'THE COLONY CASE? BEFORE MY TIME.' YOU DIDN'T MENTION ANY COLONY.",
+    "SECURITY BOARDS THE GREY SHIP AND FINDS NOBODY ABOARD. NO LOGS. NO SEATS.",
+    "AN UNSIGNED TRANSFER LANDS IN YOUR ACCOUNT: 'FOR DISCRETION.' THE GREY SHIP IS GONE BY MORNING.",
+};
+static const Choice e13_ch[] = {
+    { "DEMAND ANSWERS",  0, 0, e13_demand },
+    { "REPORT THE SHIP", 0, 0, e13_report },
+    { "SAY NOTHING",     0, 0, e13_quiet },
+};
+
+/* ======================= bar pool ======================================== */
+
+/* --- 14 CARD GAME --------------------------------------------------------- */
+static const Op e14_play[] = { {OP_BRANCH,55,3}, {OP_RESULT,1,0}, {OP_END,0,0},
+                               {OP_CR,8,0}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e14_pass[] = { {OP_RESULT,2,0}, {OP_END,0,0} };
+static const char *const e14_tx[] = {
+    "YOUR LAST CARD LANDS LIKE A DOCKING CLAMP. THE TABLE PAYS, GRUMBLING.",
+    "THE DEALER'S SMILE NEVER MOVES. NEITHER DO YOUR CREDITS - AWAY FROM YOU.",
+    "YOU KEEP YOUR CREDITS IN YOUR POCKET AND YOUR BACK TO THE WALL.",
+};
+static const Choice e14_ch[] = {
+    { "SIT IN",   0, 100, e14_play },
+    { "JUST WATCH", 0, 0, e14_pass },
+};
+
+/* --- 15 THE NAVIGATOR'S TRICK --------------------------------------------- */
+static const Op e15_buy[]  = { {OP_FUEL,15,0}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e15_pass[] = { {OP_RESULT,1,0}, {OP_END,0,0} };
+static const char *const e15_tx[] = {
+    "SHE SKETCHES A SCOOP APPROACH ON A NAPKIN THAT SAVES YOU REAL HYDROGEN. CHEAPEST FUEL YOU EVER BOUGHT.",
+    "SHE SHRUGS AND SELLS THE NAPKIN TO THE NEXT BOOTH.",
+};
+static const Choice e15_ch[] = {
+    { "BUY HER A ROUND", 0, 50, e15_buy },
+    { "NOT TONIGHT",     0, 0,  e15_pass },
+};
+
+/* --- 16 OLD WAR STORY ------------------------------------------------------ */
+static const Op e16_listen[] = { {OP_REP,-1,2}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e16_round[]  = { {OP_REP,-1,4}, {OP_RESULT,1,0}, {OP_END,0,0} };
+static const Op e16_leave[]  = { {OP_RESULT,2,0}, {OP_END,0,0} };
+static const char *const e16_tx[] = {
+    "BY THE THIRD TELLING THE ODDS WERE WORSE AND THE ESCAPE NARROWER. THE LOCALS APPROVE OF YOUR PATIENCE.",
+    "THE WHOLE CORNER DRINKS TO $F AND, SOMEHOW, TO YOU. WORD GETS AROUND.",
+    "THE STORY FOLLOWS YOU OUT THE DOOR. IT WAS LOUDER THAN THE MUSIC.",
+};
+static const Choice e16_ch[] = {
+    { "LISTEN",        0, 0,  e16_listen },
+    { "BUY THE ROUND", 0, 25, e16_round },
+    { "SLIP AWAY",     0, 0,  e16_leave },
+};
+
+/* --- 17 THE FIXER (rough space, wanted pilots) ------------------------------ */
+static const Op e17_pay[]  = { {OP_BRANCH,80,4}, {OP_RESULT,1,0}, {OP_END,0,0},
+                               {OP_END,0,0},
+                               {OP_LEGAL,-2,0}, {OP_RESULT,0,0}, {OP_END,0,0} };
+static const Op e17_pass[] = { {OP_RESULT,2,0}, {OP_END,0,0} };
+static const char *const e17_tx[] = {
+    "BY MORNING YOUR WARRANTS HAVE BEEN 'MISFILED'. THE FIXER DOESN'T SAY WHERE. YOU DON'T ASK.",
+    "THE FIXER AND YOUR CREDITS LEAVE BY DIFFERENT DOORS. YOUR RECORD STAYS EXACTLY WHERE IT WAS.",
+    "'SUIT YOURSELF. THE LAW'S MEMORY IS LONG, AND I'M CHEAP AT TWICE THE PRICE.'",
+};
+static const Choice e17_ch[] = {
+    { "PAY THE FIXER", 0, 400, e17_pay },
+    { "WALK ON",       0, 0,   e17_pass },
+};
+
 /* --- pool ----------------------------------------------------------------*/
 const Event k_events[] = {
-    { 1, 12, 0,          NK_CIVILIAN, 0,
-      "DISTRESS HAIL",
-      "$N OF THE $S RUN HAILS YOU FROM A CRIPPLED FREIGHTER. 'TANKS DRY. FAMILY ABOARD. ANYTHING HELPS.'",
-      e1_tx, e1_ch, 3 },
-    { 2, 14, 0,          NK_OFFICIAL, GATE_LAWFUL | GATE_ILLEGAL,
-      "CUSTOMS SWEEP",
-      "$F CUSTOMS FLAGS YOUR MANIFEST. AN INSPECTOR IS ALREADY WALKING THE GANTRY TO YOUR BAY.",
-      e2_tx, e2_ch, 3 },
-    { 3, 8,  EV_ONESHOT, NK_DOCKHAND, 0,
-      "THE PROSPECTOR",
-      "AN OLD MINER BLOCKS YOUR PATH. 'FOUND SOMETHING IN THE DEEP ROCK. CHARTS SAY IT AIN'T THERE. 150 AND IT'S YOURS.'",
-      e3_tx, e3_ch, 2 },
-    { 4, 10, 0,          NK_CIVILIAN, 0,
-      "STOWAWAY",
-      "DOCK CREW FIND A STOWAWAY BEHIND YOUR CARGO RACKS - A KID, MAYBE SIXTEEN, CLUTCHING A TRANSIT PASS FOR $S.",
-      e4_tx, e4_ch, 3 },
-    { 5, 10, 0,          NK_PIRATE,   GATE_THREAT,
-      "BERTHING TAX",
-      "A SCARRED FACE FILLS YOUR COMM. 'THIS IS $N'S DOCK, FRIEND. BERTHING TAX IS 200. CHEAP, FOR PEACE OF MIND.'",
-      e5_tx, e5_ch, 3 },
-    { 6, 10, 0,          NK_DOCKHAND, GATE_CARGO_SPACE,
-      "FIRE SALE",
-      "A TRADER WAVES YOU OVER, PALLET STACKED HIGH. 'WAREHOUSE WANTS IT GONE TONIGHT. $G, 200 FLAT. STEAL AT TWICE THE PRICE.'",
-      e6_tx, e6_ch, 2 },
-    { 7, 8,  EV_ONESHOT, NK_MYSTIC,   0,
-      "THE PREACHER",
-      "A ROBED FIGURE PREACHES TO THE DOCK QUEUE. 'YOU ALL PAY. IN FUEL, IN HULL, IN YEARS. AND THE INDEMNITY COLLECTS.'",
-      e7_tx, e7_ch, 3 },
-    { 8, 9,  0,          NK_CIVILIAN, 0,
-      "CLINIC SHORTFALL",
-      "$T'S CLINIC IS TRIAGING IN THE CORRIDOR. A MEDIC FLAGS EVERY DOCKING PILOT: 'WE NEED SUPPLIES. ANYTHING.'",
-      e8_tx, e8_ch, 3 },
-    { 9, 6,  EV_ONESHOT, NK_NONE,     0,
-      "REGISTRY ERROR",
-      "THE HARBOURMASTER'S TERMINAL CHIMES AS YOU SIGN IN. AN UNCLAIMED-VESSEL RECORD HAS ATTACHED ITSELF TO YOUR DOCKET.",
-      e9_tx, e9_ch, 2 },
-    { 10, 9, 0,          NK_DOCKHAND, 0,
-      "DOCKSIDE WAGER",
-      "'THAT YOUR BIRD?' A RACER NODS AT YOUR BAY. 'BEACON AND BACK, 150 SAYS MINE'S FASTER. DOCK CAMS AS WITNESS.'",
-      e10_tx, e10_ch, 2 },
+    { .id = 1, .weight = 12, .npc_kind = NK_CIVILIAN, .trig = TRIG_DOCK,
+      .title = "DISTRESS HAIL",
+      .body = "$N OF THE $S RUN HAILS YOU FROM A CRIPPLED FREIGHTER. 'TANKS DRY. FAMILY ABOARD. ANYTHING HELPS.'",
+      .texts = e1_tx, .choices = e1_ch, .n_choices = 3 },
+    { .id = 2, .weight = 14, .npc_kind = NK_OFFICIAL, .trig = TRIG_DOCK,
+      .gate = GATE_LAWFUL | GATE_ILLEGAL,
+      .title = "CUSTOMS SWEEP",
+      .body = "$F CUSTOMS FLAGS YOUR MANIFEST. AN INSPECTOR IS ALREADY WALKING THE GANTRY TO YOUR BAY.",
+      .texts = e2_tx, .choices = e2_ch, .n_choices = 3 },
+    { .id = 3, .weight = 8, .flags = EV_ONESHOT, .npc_kind = NK_DOCKHAND,
+      .trig = TRIG_DOCK,
+      .title = "THE PROSPECTOR",
+      .body = "AN OLD MINER BLOCKS YOUR PATH. 'FOUND SOMETHING IN THE DEEP ROCK. CHARTS SAY IT AIN'T THERE. 150 AND IT'S YOURS.'",
+      .texts = e3_tx, .choices = e3_ch, .n_choices = 2 },
+    { .id = 4, .weight = 10, .npc_kind = NK_CIVILIAN, .trig = TRIG_DOCK,
+      .title = "STOWAWAY",
+      .body = "DOCK CREW FIND A STOWAWAY BEHIND YOUR CARGO RACKS - A KID, MAYBE SIXTEEN, CLUTCHING A TRANSIT PASS FOR $S.",
+      .texts = e4_tx, .choices = e4_ch, .n_choices = 3 },
+    { .id = 5, .weight = 10, .npc_kind = NK_PIRATE, .trig = TRIG_DOCK,
+      .gate = GATE_THREAT,
+      .title = "BERTHING TAX",
+      .body = "A SCARRED FACE FILLS YOUR COMM. 'THIS IS $N'S DOCK, FRIEND. BERTHING TAX IS 200. CHEAP, FOR PEACE OF MIND.'",
+      .texts = e5_tx, .choices = e5_ch, .n_choices = 3 },
+    { .id = 6, .weight = 10, .npc_kind = NK_DOCKHAND, .trig = TRIG_DOCK,
+      .gate = GATE_CARGO_SPACE,
+      .title = "FIRE SALE",
+      .body = "A TRADER WAVES YOU OVER, PALLET STACKED HIGH. 'WAREHOUSE WANTS IT GONE TONIGHT. $G, 200 FLAT. STEAL AT TWICE THE PRICE.'",
+      .texts = e6_tx, .choices = e6_ch, .n_choices = 2 },
+    { .id = 7, .weight = 8, .flags = EV_ONESHOT, .npc_kind = NK_MYSTIC,
+      .trig = TRIG_DOCK,
+      .title = "THE PREACHER",
+      .body = "A ROBED FIGURE PREACHES TO THE DOCK QUEUE. 'YOU ALL PAY. IN FUEL, IN HULL, IN YEARS. AND THE INDEMNITY COLLECTS.'",
+      .texts = e7_tx, .choices = e7_ch, .n_choices = 3 },
+    { .id = 8, .weight = 9, .npc_kind = NK_CIVILIAN, .trig = TRIG_DOCK,
+      .title = "CLINIC SHORTFALL",
+      .body = "$T'S CLINIC IS TRIAGING IN THE CORRIDOR. A MEDIC FLAGS EVERY DOCKING PILOT: 'WE NEED SUPPLIES. ANYTHING.'",
+      .texts = e8_tx, .choices = e8_ch, .n_choices = 3 },
+    { .id = 9, .weight = 6, .flags = EV_ONESHOT, .npc_kind = NK_NONE,
+      .trig = TRIG_DOCK,
+      .title = "REGISTRY ERROR",
+      .body = "THE HARBOURMASTER'S TERMINAL CHIMES AS YOU SIGN IN. AN UNCLAIMED-VESSEL RECORD HAS ATTACHED ITSELF TO YOUR DOCKET.",
+      .texts = e9_tx, .choices = e9_ch, .n_choices = 2 },
+    { .id = 10, .weight = 9, .npc_kind = NK_DOCKHAND, .trig = TRIG_DOCK,
+      .title = "DOCKSIDE WAGER",
+      .body = "'THAT YOUR BIRD?' A RACER NODS AT YOUR BAY. 'BEACON AND BACK, 150 SAYS MINE'S FASTER. DOCK CAMS AS WITNESS.'",
+      .texts = e10_tx, .choices = e10_ch, .n_choices = 2 },
+
+    /* the Adjuster arc */
+    { .id = 11, .weight = 7, .npc_kind = NK_OFFICIAL, .trig = TRIG_BAR,
+      .not_flag = 1 + 8, .fixed_npc = 1,
+      .title = "A STRANGER IN GREY",
+      .body = "A FIGURE IN PLAIN GREY TAKES THE STOOL BESIDE YOU AND ORDERS NOTHING. 'YOU FLY THE $S LANES. WE LOG GOOD CARE. KEEP CURRENT.'",
+      .texts = e11_tx, .choices = e11_ch, .n_choices = 2 },
+    { .id = 12, .weight = 9, .npc_kind = NK_OFFICIAL, .trig = TRIG_BAR,
+      .need_flag = 1 + 8, .not_flag = 1 + 10, .fixed_npc = 1,
+      .title = "THE RETAINER",
+      .body = "THE SAME GREY COAT. THE SAME STOOL. 'A FREIGHTER WILL BREAK UP OFF $T. WHEN IT DOES - NOT IF - TELL US HOW MANY ESCAPE PODS YOU COUNT.'",
+      .texts = e12_tx, .choices = e12_ch, .n_choices = 3 },
+    { .id = 13, .weight = 14, .flags = EV_ONESHOT, .npc_kind = NK_OFFICIAL,
+      .trig = TRIG_DOCK, .need_flag = 1 + 10, .fixed_npc = 1,
+      .title = "CLAIM ADJUSTED",
+      .body = "THE NEWS FEED: FREIGHTER LOST OFF $T, ALL HANDS. BERTHED TWO PADS DOWN SITS A PLAIN GREY SHIP THAT DOCKED YESTERDAY.",
+      .texts = e13_tx, .choices = e13_ch, .n_choices = 3 },
+
+    /* bar pool */
+    { .id = 14, .weight = 11, .npc_kind = NK_DOCKHAND, .trig = TRIG_BAR,
+      .title = "CARD GAME",
+      .body = "A BACK-TABLE GAME HAS AN EMPTY CHAIR AND A POT WORTH LOOKING AT. THE DEALER RAPS THE TABLE. 'HUNDRED TO SIT.'",
+      .texts = e14_tx, .choices = e14_ch, .n_choices = 2 },
+    { .id = 15, .weight = 10, .npc_kind = NK_CIVILIAN, .trig = TRIG_BAR,
+      .title = "THE NAVIGATOR",
+      .body = "AN EX-SURVEY NAVIGATOR NURSES AN EMPTY GLASS. 'I KNOW A SCOOP LINE THROUGH $S THAT BEATS THE BOOK BY HALF A TANK.'",
+      .texts = e15_tx, .choices = e15_ch, .n_choices = 2 },
+    { .id = 16, .weight = 10, .npc_kind = NK_CIVILIAN, .trig = TRIG_BAR,
+      .title = "OLD WAR STORY",
+      .body = "A VETERAN OF THE $F LINES HOLDS COURT BY THE WINDOW, REFIGHTING A BATTLE EVERYONE ELSE HAS HEARD TWICE.",
+      .texts = e16_tx, .choices = e16_ch, .n_choices = 3 },
+    { .id = 17, .weight = 12, .npc_kind = NK_PIRATE, .trig = TRIG_BAR,
+      .gate = GATE_ROUGH | GATE_WANTED,
+      .title = "THE FIXER",
+      .body = "A QUIET BOOTH, A QUIETER VOICE. 'I HEAR THE LAW HAS YOUR NAME SPELLED RIGHT FOR ONCE. FOUR HUNDRED MAKES IT A TYPO.'",
+      .texts = e17_tx, .choices = e17_ch, .n_choices = 2 },
 };
 const int k_n_events = (int)(sizeof k_events / sizeof k_events[0]);
 
-/* --- lore fragments (codex lands in Phase 2; bits + reveal text now) ----- */
-const char *const k_lore[] = {
-    /* 0 */ "EVERY DOCKING FEE, EVERY FUEL TITHE, EVERY FINE - A FRACTION ROUTES TO AN ACCOUNT NO AUDIT CAN FOLLOW. THE LEDGERS JUST CALL IT 'COVER'.",
-    /* 1 */ "PILOTS SWEAR THEY'VE SEEN PLAIN GREY SHIPS HOLDING STATION AT WRECK SITES - LOGGED HOURS BEFORE THE WRECK OCCURRED. THE BARS CALL THEM ADJUSTERS.",
-    /* 2 */ "A COLONY ONCE STOPPED PAYING. EVERY CHART NOW AGREES THERE WAS NEVER A COLONY THERE AT ALL.",
-    /* 3 */ "DEEP-ROCK COORDINATES POINTING BEYOND THE RIM, COUNTERSIGNED: CLAIM RECORDED - THE INDEMNITY. NOTHING IS CHARTED OUT THERE.",
-    /* 4 */ "AN UNCLAIMED-VESSEL RECORD: YOUR HULL, LOST WITH ALL HANDS FORTY YEARS AGO. REGISTERED OWNER: YOU. POLICY STATUS: CURRENT.",
-    /* 5 */ "THE DOCTRINE OF THE COVER: NOBODY SIGNED, NOBODY READS THE TERMS. PAYMENT IS TAKEN IN FUEL, IN HULL, IN YEARS. MISS ONE AND IT NOTICES.",
+/* --- lore fragments (read again in the station DATABASE) ----------------- */
+const Lore k_lore[] = {
+    /* 0 */ { "THE COVER CHARGE",
+      "EVERY DOCKING FEE, EVERY FUEL TITHE, EVERY FINE - A FRACTION ROUTES TO AN ACCOUNT NO AUDIT CAN FOLLOW. THE LEDGERS JUST CALL IT 'COVER'." },
+    /* 1 */ { "THE ADJUSTERS",
+      "PILOTS SWEAR THEY'VE SEEN PLAIN GREY SHIPS HOLDING STATION AT WRECK SITES - LOGGED HOURS BEFORE THE WRECK OCCURRED. THE BARS CALL THEM ADJUSTERS." },
+    /* 2 */ { "CLAIM DENIED",
+      "A COLONY ONCE STOPPED PAYING. EVERY CHART NOW AGREES THERE WAS NEVER A COLONY THERE AT ALL." },
+    /* 3 */ { "THE PROSPECTOR'S CLAIM",
+      "DEEP-ROCK COORDINATES POINTING BEYOND THE RIM, COUNTERSIGNED: CLAIM RECORDED - THE INDEMNITY. NOTHING IS CHARTED OUT THERE." },
+    /* 4 */ { "YOUR FILE",
+      "AN UNCLAIMED-VESSEL RECORD: YOUR HULL, LOST WITH ALL HANDS FORTY YEARS AGO. REGISTERED OWNER: YOU. POLICY STATUS: CURRENT." },
+    /* 5 */ { "DOCTRINE OF THE COVER",
+      "THE DOCTRINE OF THE COVER: NOBODY SIGNED, NOBODY READS THE TERMS. PAYMENT IS TAKEN IN FUEL, IN HULL, IN YEARS. MISS ONE AND IT NOTICES." },
 };
 const int k_n_lore = (int)(sizeof k_lore / sizeof k_lore[0]);
