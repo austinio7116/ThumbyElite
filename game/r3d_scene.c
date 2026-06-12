@@ -291,8 +291,20 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
     float ox = (float)(s_nebula & 0xFF) * 0.6f;
     const float F = 1.05f;
     const int STEP = 4 * R3D_SS;
+    /* Galactic band: a fixed great circle of unresolved starlight. The
+     * plane is seeded per galaxy (not per system) so it stays put as
+     * you fly; brightness is kept FAR below the stars — a distant
+     * thing you notice, not a feature that competes. */
+    Vec3 gax;
+    {
+        uint32_t gh = (s_nebula | 1u) * 0x45D9F3Bu;
+        gh ^= gh >> 13;
+        gax = v3_norm(v3(0.30f + (float)(gh & 15) * 0.02f,
+                         1.0f,
+                         -0.24f + (float)((gh >> 4) & 15) * 0.03f));
+    }
     /* corner sample of the cloud field (intensity) + hue field */
-    #define NB_V3(px, py, out_n, out_w) do { \
+    #define NB_V3(px, py, out_n, out_w, out_g) do { \
         float vx_ = ((float)(px) - cx) / focal; \
         float vy_ = -((float)(py) - cy) / focal; \
         Vec3 d_ = v3_norm(m3_mul_v3(cam, v3(vx_, vy_, 1.0f))); \
@@ -302,21 +314,34 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
                       * 0.2f; \
         (out_w) = nb_noise(d_.x * 0.7f + 77.0f + ox * 0.3f, \
                            d_.z * 0.7f - 19.0f); \
+        float gc_ = d_.x * gax.x + d_.y * gax.y + d_.z * gax.z; \
+        float gb_ = 1.0f - (gc_ < 0 ? -gc_ : gc_) * 4.3f; \
+        if (gb_ > 0) { \
+            gb_ *= gb_; \
+            gb_ *= 0.55f + 0.45f * nb_noise(d_.x * 2.6f + 5.0f, \
+                                            d_.z * 2.6f - 11.0f); \
+        } else gb_ = 0; \
+        (out_g) = gb_; \
     } while (0)
     for (int y = y0p; y < y1p; y += STEP) {
         for (int x = 0; x < R3D_FB_W; x += STEP) {
-            float n00, w00, n10, w10, n01, w01, n11, w11;
-            NB_V3(x, y, n00, w00);
-            NB_V3(x + STEP, y, n10, w10);
-            NB_V3(x, y + STEP, n01, w01);
-            NB_V3(x + STEP, y + STEP, n11, w11);
+            float n00, w00, g00, n10, w10, g10;
+            float n01, w01, g01, n11, w11, g11;
+            NB_V3(x, y, n00, w00, g00);
+            NB_V3(x + STEP, y, n10, w10, g10);
+            NB_V3(x, y + STEP, n01, w01, g01);
+            NB_V3(x + STEP, y + STEP, n11, w11, g11);
             /* skip fully-dark blocks outright (most of the sky) */
             float nmax = n00;
             if (n10 > nmax) nmax = n10;
             if (n01 > nmax) nmax = n01;
             if (n11 > nmax) nmax = n11;
+            float gmax = g00;
+            if (g10 > gmax) gmax = g10;
+            if (g01 > gmax) gmax = g01;
+            if (g11 > gmax) gmax = g11;
             int ylim = y + STEP < y1p ? y + STEP : y1p;
-            if (nmax <= 0.48f) {
+            if (nmax <= 0.48f && gmax <= 0.012f) {
                 for (int yy = y; yy < ylim; yy++) {
                     uint16_t *row = fb + yy * R3D_FB_W;
                     for (int xx = x; xx < x + STEP && xx < R3D_FB_W; xx++)
@@ -331,11 +356,36 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
                 float nb = n10 + (n11 - n10) * ty;
                 float wa = w00 + (w01 - w00) * ty;
                 float wb = w10 + (w11 - w10) * ty;
+                float ga = g00 + (g01 - g00) * ty;
+                float gb2 = g10 + (g11 - g10) * ty;
                 uint16_t *row = fb + yy * R3D_FB_W;
                 for (int xx = x; xx < x + STEP && xx < R3D_FB_W; xx++) {
                     float tx = (float)(xx - x) * inv;
                     float n = na + (nb - na) * tx;
-                    if (n <= 0.48f) { row[xx] = 0; continue; }
+                    float gband = ga + (gb2 - ga) * tx;
+                    /* the band: warm-white starlight, per-pixel grain
+                     * sparkle so it reads as unresolved stars, peak
+                     * ~12%% channel — DISTANT */
+                    float gr = 0, gg = 0, gbl = 0;
+                    if (gband > 0.012f) {
+                        float sp = 0.40f + 1.05f * nb_grain(xx + 311, yy + 97);
+                        float gk = gband * sp;
+                        gr = gk * 2.7f;
+                        gg = gk * 5.2f;
+                        gbl = gk * 2.5f;
+                    }
+                    if (n <= 0.48f) {
+                        if (gband <= 0.012f) { row[xx] = 0; continue; }
+                        float dth0 = nb_grain(xx, yy);
+                        int r0 = (int)(gr + dth0);
+                        int g0 = (int)(gg + dth0);
+                        int b0 = (int)(gbl + dth0);
+                        if (r0 > 31) r0 = 31;
+                        if (g0 > 63) g0 = 63;
+                        if (b0 > 31) b0 = 31;
+                        row[xx] = (uint16_t)((r0 << 11) | (g0 << 5) | b0);
+                        continue;
+                    }
                     float w = wa + (wb - wa) * tx;
                     float k = (n - 0.48f) * 3.4f * s_neb_str;
                     if (k > 1.0f) k = 1.0f;
@@ -344,9 +394,9 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
                     float rose = (w - 0.45f) * 3.0f;
                     if (rose < 0) rose = 0;
                     if (rose > 1) rose = 1;
-                    float fr = k * (5.0f + 12.0f * rose);
-                    float fg = k * (3.6f + 2.2f * rose);
-                    float fbl = k * (19.0f - 8.5f * rose);
+                    float fr = k * (5.0f + 12.0f * rose) + gr;
+                    float fg = k * (3.6f + 2.2f * rose) + gg;
+                    float fbl = k * (19.0f - 8.5f * rose) + gbl;
                     float dth = nb_grain(xx, yy);
                     int r = (int)(fr + dth);
                     int g = (int)(fg + dth);
@@ -412,6 +462,10 @@ void r3d_scene_raster(uint16_t *fb, int y0, int y1) {
         r3d_raster_set_fb(fb);
         r3d_depth_clear(y0p, y1p);
     } else {
+#ifdef ELITE_STYLE_LAB
+        if (s_style == 1) nebula_fill(fb, y0p, y1p);   /* band always on */
+        else
+#endif
         if (s_nebula && s_neb_str > 0.01f) nebula_fill(fb, y0p, y1p);
         else memset(fb + y0p * R3D_FB_W, 0,
                     (size_t)(y1p - y0p) * R3D_FB_W * sizeof(uint16_t));
