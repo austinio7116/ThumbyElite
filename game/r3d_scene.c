@@ -286,7 +286,7 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
      * direction of the CORE — a bright wide bulge at one point on the
      * circle, like the Milky Way toward Sagittarius. */
     Vec3 gax, gcore;
-    float gwk, ggain;
+    float gwk, ggain, ganti;
     {
         uint32_t gh = (s_nebula | 1u) * 0x45D9F3Bu;
         gh ^= gh >> 13; gh *= 0x2C1B3C6Du; gh ^= gh >> 15;
@@ -296,6 +296,10 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
         gax = v3(r1 * cosf(a1), z1, r1 * sinf(a1));   /* full sphere */
         gwk = 3.2f + (float)((gh >> 18) & 7) * 0.5f;  /* width 3.2-6.7 */
         ggain = 0.45f + (float)((gh >> 21) & 7) * 0.13f; /* 0.45-1.36 */
+        /* where this system sits in its disc (user req): core-ward
+         * skies are bright nearly all round; rim systems see a strong
+         * band toward the core and a thin whisper behind them */
+        ganti = 0.08f + (float)((gh >> 27) & 7) * 0.075f; /* 0.08-0.60 */
         /* core: a seeded azimuth on the band plane */
         Vec3 ref = (gax.y > 0.9f || gax.y < -0.9f) ? v3(1, 0, 0)
                                                    : v3(0, 1, 0);
@@ -317,9 +321,11 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
                            d_.z * 0.7f - 19.0f); \
         float gc_ = d_.x * gax.x + d_.y * gax.y + d_.z * gax.z; \
         float ac_ = gc_ < 0 ? -gc_ : gc_; \
-        /* core bulge: the band widens AND brightens toward gcore */ \
-        float cb_ = d_.x * gcore.x + d_.y * gcore.y + d_.z * gcore.z; \
-        if (cb_ < 0) cb_ = 0; \
+        /* core bulge + disc asymmetry: bright toward gcore, fading \
+         * to a per-system floor on the anti-core side (no uniform \
+         * hoop — you can FEEL which way the core lies) */ \
+        float ct_ = d_.x * gcore.x + d_.y * gcore.y + d_.z * gcore.z; \
+        float cb_ = ct_ < 0 ? 0 : ct_; \
         cb_ = cb_ * cb_; cb_ *= cb_;                  /* ^4 falloff */ \
         float gb_ = 1.0f - ac_ * gwk / (1.0f + 1.8f * cb_); \
         if (gb_ > 0) { \
@@ -327,6 +333,7 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
             float ridge_ = 1.0f - ac_ * gwk * 2.6f; \
             if (ridge_ > 0) gb_ += ridge_ * ridge_ * ridge_ * 0.5f; \
             gb_ *= 1.0f + 2.6f * cb_;                 /* core glow */ \
+            gb_ *= ganti + (1.0f - ganti) * (0.5f + 0.5f * ct_); \
             gb_ *= ggain * (0.55f + 0.45f * \
                             nb_noise(d_.x * 2.6f + 5.0f, \
                                      d_.z * 2.6f - 11.0f)); \

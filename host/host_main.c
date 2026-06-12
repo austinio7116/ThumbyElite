@@ -1468,6 +1468,30 @@ int main(int argc, char **argv) {
 #endif
 
 #ifdef ELITE_STYLE_LAB
+    if (getenv("ELITE_BANDPAN")) {
+        /* Disc-asymmetry audit: 6 systems x 4 compass headings of the
+         * SAME sky — the band should swell toward the core and thin
+         * to a whisper on the anti-core side. */
+        const char *path = getenv("ELITE_BANDPAN");
+        sheet_clear(2 + 4 * 130, 2 + 6 * 130);
+        for (int r = 0; r < 6; r++) {
+            uint32_t sd = 7777777u * (uint32_t)(r + 1) + 311u;
+            r3d_starfield_init(sd);
+            r3d_scene_set_nebula(sd, 0.0f);     /* band only */
+            for (int c2 = 0; c2 < 4; c2++) {
+                Mat3 cam = m3_identity();
+                m3_rotate_local(&cam, 1, (float)c2 * 1.5708f);
+                r3d_scene_begin(&cam, 60.0f);
+                r3d_scene_raster(g_fb, 0, ELITE_FB_H);
+                sheet_blit(g_fb, ELITE_FB_W, 128, 128,
+                           2 + c2 * 130, 2 + r * 130, 1);
+            }
+        }
+        sheet_save(path);
+        r3d_scene_set_nebula(0, 0);
+        return 0;
+    }
+
     if (getenv("ELITE_BANDSHEET")) {
         /* 100 skies, one per seed: band orientation/width/gain/core +
          * nebula clouds on every third — the variety audit. */
