@@ -292,7 +292,7 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
                          -0.24f + (float)((gh >> 4) & 15) * 0.03f));
     }
     /* corner sample of the cloud field (intensity) + hue field */
-    #define NB_V3(px, py, out_n, out_w, out_g) do { \
+    #define NB_V3(px, py, out_n, out_w, out_g, out_h) do { \
         float vx_ = ((float)(px) - cx) / focal; \
         float vy_ = -((float)(py) - cy) / focal; \
         Vec3 d_ = v3_norm(m3_mul_v3(cam, v3(vx_, vy_, 1.0f))); \
@@ -303,22 +303,28 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
         (out_w) = nb_noise(d_.x * 0.7f + 77.0f + ox * 0.3f, \
                            d_.z * 0.7f - 19.0f); \
         float gc_ = d_.x * gax.x + d_.y * gax.y + d_.z * gax.z; \
-        float gb_ = 1.0f - (gc_ < 0 ? -gc_ : gc_) * 4.3f; \
+        float ac_ = gc_ < 0 ? -gc_ : gc_; \
+        float gb_ = 1.0f - ac_ * 4.3f; \
         if (gb_ > 0) { \
             gb_ *= gb_; \
+            /* raised core: a narrow bright ridge down the centreline */ \
+            float ridge_ = 1.0f - ac_ * 11.0f; \
+            if (ridge_ > 0) gb_ += ridge_ * ridge_ * ridge_ * 0.7f; \
             gb_ *= 0.55f + 0.45f * nb_noise(d_.x * 2.6f + 5.0f, \
                                             d_.z * 2.6f - 11.0f); \
         } else gb_ = 0; \
         (out_g) = gb_; \
+        /* hue lean: slow field, most of the band stays neutral */ \
+        (out_h) = nb_noise(d_.x * 0.9f - 31.0f, d_.z * 0.9f + 53.0f); \
     } while (0)
     for (int y = y0p; y < y1p; y += STEP) {
         for (int x = 0; x < R3D_FB_W; x += STEP) {
-            float n00, w00, g00, n10, w10, g10;
-            float n01, w01, g01, n11, w11, g11;
-            NB_V3(x, y, n00, w00, g00);
-            NB_V3(x + STEP, y, n10, w10, g10);
-            NB_V3(x, y + STEP, n01, w01, g01);
-            NB_V3(x + STEP, y + STEP, n11, w11, g11);
+            float n00, w00, g00, h00, n10, w10, g10, h10;
+            float n01, w01, g01, h01, n11, w11, g11, h11;
+            NB_V3(x, y, n00, w00, g00, h00);
+            NB_V3(x + STEP, y, n10, w10, g10, h10);
+            NB_V3(x, y + STEP, n01, w01, g01, h01);
+            NB_V3(x + STEP, y + STEP, n11, w11, g11, h11);
             /* skip fully-dark blocks outright (most of the sky) */
             float nmax = n00;
             if (n10 > nmax) nmax = n10;
@@ -346,6 +352,8 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
                 float wb = w10 + (w11 - w10) * ty;
                 float ga = g00 + (g01 - g00) * ty;
                 float gb2 = g10 + (g11 - g10) * ty;
+                float ha = h00 + (h01 - h00) * ty;
+                float hb2 = h10 + (h11 - h10) * ty;
                 uint16_t *row = fb + yy * R3D_FB_W;
                 for (int xx = x; xx < x + STEP && xx < R3D_FB_W; xx++) {
                     float tx = (float)(xx - x) * inv;
@@ -358,9 +366,18 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
                     if (gband > 0.012f) {
                         float sp = 0.40f + 1.05f * nb_grain(xx + 311, yy + 97);
                         float gk = gband * sp;
-                        gr = gk * 2.7f;
-                        gg = gk * 5.2f;
-                        gbl = gk * 2.5f;
+                        /* hue lean (user req): mostly neutral starlight,
+                         * but regions drift warm-gold or dusty rose */
+                        float hue = ha + (hb2 - ha) * tx;
+                        float warm = (hue - 0.62f) * 4.0f;
+                        float cool = (0.38f - hue) * 4.0f;
+                        if (warm < 0) warm = 0;
+                        if (warm > 1) warm = 1;
+                        if (cool < 0) cool = 0;
+                        if (cool > 1) cool = 1;
+                        gr = gk * (2.7f + 1.3f * warm + 0.9f * cool);
+                        gg = gk * (5.2f + 1.2f * warm);
+                        gbl = gk * (2.5f - 0.9f * warm + 2.4f * cool);
                     }
                     if (n <= 0.48f) {
                         if (gband <= 0.012f) { row[xx] = 0; continue; }
@@ -382,9 +399,9 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
                     float rose = (w - 0.45f) * 3.0f;
                     if (rose < 0) rose = 0;
                     if (rose > 1) rose = 1;
-                    float fr = k * (5.0f + 12.0f * rose) + gr;
-                    float fg = k * (3.6f + 2.2f * rose) + gg;
-                    float fbl = k * (19.0f - 8.5f * rose) + gbl;
+                    float fr = k * (3.2f + 7.8f * rose) + gr;
+                    float fg = k * (2.3f + 1.4f * rose) + gg;
+                    float fbl = k * (12.3f - 5.5f * rose) + gbl;
                     float dth = nb_grain(xx, yy);
                     int r = (int)(fr + dth);
                     int g = (int)(fg + dth);

@@ -142,7 +142,8 @@ static void scanner(uint16_t *fb) {
             dx *= k; dz *= k;
         }
         int fx = SC_CX + (int)dx, fy = SC_CY + (int)dz;
-        uint16_t c = s->is_police ? RGB565C(90, 180, 255)
+        uint16_t c = s->is_derelict ? RGB565C(190, 205, 220)
+                   : s->is_police ? RGB565C(90, 180, 255)
                    : (s->team == TEAM_HOSTILE) ? COL_BLIP_H
                    : s->is_civilian ? RGB565C(110, 230, 110)
                                     : COL_BLIP_N;
@@ -296,10 +297,12 @@ static void target_box(uint16_t *fb, int target) {
          * name them by faction, allies in friendly blue. */
         const char *id = t->war_fac
                        ? k_faction_names[(t->war_fac - 1) % N_FACTIONS]
+                       : t->is_derelict ? "DERELICT"
                        : t->is_police ? "POLICE"
                        : t->is_civilian ? "CIVILIAN"
                        : t->is_mark ? "** MARK **" : "PIRATE";
-        uint16_t idc = (t->war_fac && t->team == TEAM_HOSTILE)
+        uint16_t idc = t->is_derelict ? RGB565C(170, 190, 210)
+                     : (t->war_fac && t->team == TEAM_HOSTILE)
                            ? COL_TARGET
                      : t->is_police ? RGB565C(90, 180, 255)
                      : (t->is_civilian && t->team == TEAM_NEUTRAL)

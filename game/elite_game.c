@@ -641,6 +641,7 @@ static void spawn_poi_content(void) {
                 d->turret_type = 0;
                 d->shield = d->shield_max = 0;   /* cold and open */
                 d->hull = d->hull_max * 0.3f;
+                d->is_derelict = 1;     /* scanner + LB lock find it */
                 /* not civilian, not police: ai_tick leaves it inert */
                 s_derelict_idx = idx;
                 snprintf(s_scoop_toast, sizeof s_scoop_toast,
@@ -832,7 +833,8 @@ static void cycle_target(void) {
         for (int i = 1; i < MAX_SHIPS; i++) {
             if (!g_ships[i].alive || g_ships[i].team == TEAM_HOSTILE)
                 continue;
-            if (!g_ships[i].is_civilian && !g_ships[i].is_police)
+            if (!g_ships[i].is_civilian && !g_ships[i].is_police &&
+                !g_ships[i].is_derelict)
                 continue;
             float d = v3_len(v3_sub(g_ships[i].pos, pp));
             if (d < nfirst_d) { nfirst_d = d; nfirst = i; }
