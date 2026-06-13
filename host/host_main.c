@@ -1796,6 +1796,28 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (getenv("ELITE_STNSHOW")) {
+        /* Station-exterior showcase for the pilot guide: 12 random
+         * style-1 stations over the live sky (the natural archetype
+         * mix). Dumps /tmp/ss/s<NN>.ppm; a shell montage assembles it. */
+        (void)system("mkdir -p /tmp/ss");
+        station_gen_set_style(1);
+        char p[64];
+        for (int i = 0; i < 12; i++) {
+            uint32_t sd = 0xA17E5u + (uint32_t)i * 2654435761u;
+            r3d_starfield_init(sd);
+            r3d_scene_set_nebula(sd * 31u, 0.85f);
+            const Mesh *m = station_gen_mesh(sd);
+            sheet_render_mesh(m, 0.6f + 0.12f * (float)(i % 3), 0.35f);
+            snprintf(p, sizeof p, "/tmp/ss/s%02d.ppm", i);
+            dump_ppm(p);
+        }
+        r3d_scene_set_nebula(0, 0);
+        station_gen_set_style(0);
+        printf("[stnshow] wrote 12\n");
+        return 0;
+    }
+
     if (getenv("ELITE_SHIPGRID")) {
         /* Per-class catalogue cells for the guide's ship grids. Dumps
          * /tmp/sg/c<cls>_<col>.ppm (10 classes x 4 varied seeds); a
