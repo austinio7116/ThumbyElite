@@ -4653,9 +4653,9 @@ int main(int argc, char **argv) {
         obj.basis = m3_identity();
         /* Nose toward the camera, banked, tilted to splay the X foils —
          * a clear, recognisable front 3/4 (user: face it at the camera). */
-        m3_rotate_local(&obj.basis, 1, 3.14f);      /* yaw: nose dead at viewer */
-        m3_rotate_local(&obj.basis, 0, 0.33f);      /* pitch: look down on top */
-        m3_rotate_local(&obj.basis, 2, -0.05f);     /* a whisper of bank */
+        m3_rotate_local(&obj.basis, 1, 3.20f);      /* yaw: nose at viewer, slight 3/4 */
+        m3_rotate_local(&obj.basis, 0, 0.48f);      /* pitch: nose down, see the top */
+        m3_rotate_local(&obj.basis, 2, -0.07f);     /* slight bank */
         /* Frame by the ROTATED on-screen silhouette so the splayed hull
          * fills the tile (bound_r left sparse foils tiny — same fix as the
          * ship grids). */
