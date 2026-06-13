@@ -172,9 +172,9 @@ void r3d_starfield_init(uint32_t seed) {
             g->type = (uint8_t)(star_rand() % 3u);
             g->size = (uint8_t)(7 + star_rand() % 6u);
             g->hue = (uint8_t)(star_rand() % 3u);
-            /* spiral variety (user: 'all the same S'): 1-4 arms, a curl
+            /* spiral variety (user: 'all the same S'): 1-7 arms, a curl
              * from loose grand-design to tight, and either winding */
-            g->arms = (uint8_t)(1 + star_rand() % 4u);
+            g->arms = (uint8_t)(1 + star_rand() % 7u);
             g->hand = (star_rand() & 1u) ? 1 : -1;
             g->pitch = 2.2f + star_frand() * 5.0f;   /* 2.2 - 7.2 */
         }
