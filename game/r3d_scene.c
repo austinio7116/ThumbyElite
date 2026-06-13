@@ -416,9 +416,11 @@ static void band_fill(uint16_t *fb, int y0p, int y1p) {
         float z1 = (float)((gh >> 10) & 0xFF) * (2.0f / 255.0f) - 1.0f;
         float r1 = sqrtf(1.0f - z1 * z1);
         gax = v3(r1 * cosf(a1), z1, r1 * sinf(a1));
-        gwk = 3.2f + (float)((gh >> 18) & 7) * 0.5f;
-        ggain = 0.45f + (float)((gh >> 21) & 7) * 0.13f;
-        ganti = 0.08f + (float)((gh >> 27) & 7) * 0.075f;
+        /* user: 'WAY too big' — narrower (higher gwk = faster falloff)
+         * and fainter (lower gain). Distant galactic haze, not a wall. */
+        gwk = 6.5f + (float)((gh >> 18) & 7) * 0.9f;   /* 6.5 - 12.8 */
+        ggain = 0.26f + (float)((gh >> 21) & 7) * 0.06f; /* 0.26 - 0.68 */
+        ganti = 0.06f + (float)((gh >> 27) & 7) * 0.05f;
         Vec3 ref = (gax.y > 0.9f || gax.y < -0.9f) ? v3(1, 0, 0)
                                                    : v3(0, 1, 0);
         Vec3 c1 = v3_norm(v3_cross(gax, ref));
@@ -438,12 +440,12 @@ static void band_fill(uint16_t *fb, int y0p, int y1p) {
         float ct_ = d_.x * gcore.x + d_.y * gcore.y + d_.z * gcore.z; \
         float cb_ = ct_ < 0 ? 0 : ct_; \
         cb_ = cb_ * cb_; cb_ *= cb_; \
-        float gb_ = 1.0f - ac_ * gwk / (1.0f + 1.8f * cb_); \
+        float gb_ = 1.0f - ac_ * gwk / (1.0f + 0.8f * cb_); \
         if (gb_ > 0) { \
             gb_ *= gb_; \
-            float ridge_ = 1.0f - ac_ * gwk * 2.6f; \
-            if (ridge_ > 0) gb_ += ridge_ * ridge_ * ridge_ * 0.5f; \
-            gb_ *= 1.0f + 2.6f * cb_; \
+            float ridge_ = 1.0f - ac_ * gwk * 2.2f; \
+            if (ridge_ > 0) gb_ += ridge_ * ridge_ * ridge_ * 0.35f; \
+            gb_ *= 1.0f + 1.4f * cb_; \
             gb_ *= ganti + (1.0f - ganti) * (0.5f + 0.5f * ct_); \
             gb_ *= ggain * (0.55f + 0.45f * \
                             nb_grain((px) * 7 + 5, (py) * 7 - 11)); \
@@ -490,9 +492,9 @@ static void band_fill(uint16_t *fb, int y0p, int y1p) {
                     float cool = (0.38f - hue) * 4.0f;
                     if (warm < 0) warm = 0; if (warm > 1) warm = 1;
                     if (cool < 0) cool = 0; if (cool > 1) cool = 1;
-                    int r = (int)(gk * (2.7f + 1.3f * warm + 0.9f * cool) + sp);
-                    int g = (int)(gk * (5.2f + 1.2f * warm) + sp);
-                    int b = (int)(gk * (2.5f - 0.9f * warm + 2.4f * cool) + sp);
+                    int r = (int)(gk * (1.7f + 0.9f * warm + 0.6f * cool) + sp);
+                    int g = (int)(gk * (3.1f + 0.8f * warm) + sp);
+                    int b = (int)(gk * (1.6f - 0.6f * warm + 1.5f * cool) + sp);
                     if (r > 31) r = 31;
                     if (g > 63) g = 63;
                     if (b > 31) b = 31;
