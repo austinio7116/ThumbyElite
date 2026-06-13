@@ -1575,6 +1575,279 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (getenv("ELITE_GUIDESHOT")) {
+        /* Regenerate the pilot-guide screenshots that changed look or
+         * are new features. Writes 128x128 frames scaled x3 PNG-ready
+         * PPMs straight under docs/img via a scratch .ppm + convert. */
+        const char *root = "/home/maustin/thumby-color/ThumbyElite/docs/img";
+        char cmd[512], ppm[256];
+        #define GSAVE(name) do { \
+            snprintf(ppm, sizeof ppm, "/tmp/gs_%s.ppm", name); \
+            dump_ppm(ppm); \
+            snprintf(cmd, sizeof cmd, \
+                "convert %s -scale 300%% %s/%s.png", ppm, root, name); \
+            if (system(cmd) != 0) printf("[guideshot] convert failed %s\n", name); \
+            else printf("[guideshot] %s/%s.png\n", root, name); \
+        } while (0)
+
+        events_set_chance(0);                /* no surprise hails mid-capture */
+        remove("indemnityrun.sav");
+        /* Enter real flight: title -> NEW GAME -> skip the intro crawl. */
+        #define ENTER_FLIGHT() do { \
+            CraftRawButtons _n = {0}, _b; float _dt = 1.0f/30.0f; \
+            elite_game_init(42); \
+            for (int k=0;k<4;k++) elite_game_tick(&_n,_dt); \
+            _b=_n; _b.down=true; elite_game_tick(&_b,_dt); \
+            elite_game_tick(&_n,_dt); \
+            _b=_n; _b.a=true; elite_game_tick(&_b,_dt);  /* NEW GAME */ \
+            elite_game_tick(&_n,_dt); \
+            _b=_n; _b.a=true; elite_game_tick(&_b,_dt);  /* skip crawl */ \
+            for (int k=0;k<30;k++) elite_game_tick(&_n,_dt); \
+        } while (0)
+
+        /* find a near-front station system */
+        SystemInfo si_front; bool gotf = false;
+        for (int sy = -20; sy <= 20 && !gotf; sy++)
+            for (int sx = -20; sx <= 20 && !gotf; sx++) {
+                int ns = galaxy_sector_stars(sx, sy);
+                for (int i = 0; i < ns && !gotf; i++) {
+                    SysAddr a = { sx, sy, (uint8_t)i };
+                    galaxy_generate(a, &si_front);
+                    if (si_front.n_stations > 0 && mission_near_front(a))
+                        gotf = true;
+                }
+            }
+        /* war_battle: in flight, grant + jump + anchor the beacon. */
+        if (gotf) {
+            ENTER_FLIGHT();
+            for (int f = 0; f < N_FACTIONS; f++) g_rep[f] = 25;
+            if (mission_grant_warzone(&si_front)) {
+                Mission *m = NULL;
+                for (int i = 0; i < MAX_MISSIONS; i++)
+                    if (g_missions[i].type == MIS_WARZONE) m = &g_missions[i];
+                if (m) {
+                    elite_game_debug_jump(m->target);
+                    elite_game_debug_goto_poi(0);
+                    CraftRawButtons none = {0};
+                    for (int k = 0; k < 20; k++)
+                        elite_game_tick(&none, 1.0f/30.0f);
+                    render_frame();
+                    GSAVE("war_battle");
+                }
+            }
+        }
+
+        /* war_contract: dock at the front station and open MISSIONS with
+         * a guaranteed war offer (g_force_war_offer). Mirrors the BARSHOT
+         * dock path: enter the system, station_open, drive the real UI. */
+        if (gotf) {
+            extern int g_force_war_offer;
+            galaxy_set_seed(42);
+            player_init();
+            for (int f = 0; f < N_FACTIONS; f++) g_rep[f] = 25;
+            system_enter(si_front.addr);
+            g_force_war_offer = 1;
+            station_open(0);
+            CraftRawButtons none = {0}, b;
+            float dt2 = 1.0f / 30.0f;
+            station_tick(&none, dt2);            /* release debounce */
+            for (int k = 0; k < 3; k++) {        /* home cursor -> MISSIONS */
+                b = none; b.down = true; station_tick(&b, dt2);
+                station_tick(&none, dt2);
+            }
+            b = none; b.a = true; station_tick(&b, dt2);  /* enter MISSIONS */
+            station_tick(&none, dt2);
+            station_draw(g_fb);
+            g_force_war_offer = 0;
+            GSAVE("war_contract");
+        }
+
+        /* station_home: the docked services menu (home screen) */
+        if (gotf) {
+            galaxy_set_seed(42);
+            player_init();
+            system_enter(si_front.addr);
+            station_open(0);
+            CraftRawButtons none = {0};
+            station_tick(&none, 1.0f/30.0f);
+            station_draw(g_fb);
+            GSAVE("station_home");
+        }
+
+        /* flight: a clean in-flight beat with the new sky. Long settle so
+         * any arrival toast expires (toasts leaked into earlier shots). */
+        {
+            ENTER_FLIGHT();
+            CraftRawButtons none = {0};
+            for (int k = 0; k < 120; k++) elite_game_tick(&none, 1.0f/30.0f);
+            render_frame();
+            GSAVE("flight");
+        }
+
+        /* planet_approach: seek a RINGED planet and frame it close */
+        {
+            int rp = -1; SysAddr ra = {0,0,0};
+            for (int sy = -12; sy <= 12 && rp < 0; sy++)
+                for (int sx = -12; sx <= 12 && rp < 0; sx++) {
+                    int ns = galaxy_sector_stars(sx, sy);
+                    for (int i = 0; i < ns && rp < 0; i++) {
+                        SysAddr a = { sx, sy, (uint8_t)i };
+                        SystemInfo si; galaxy_generate(a, &si);
+                        for (int p = 0; p < si.n_planets; p++)
+                            if (si.planets[p].rings) {
+                                ra = a; rp = p; break;
+                            }
+                    }
+                }
+            ENTER_FLIGHT();
+            CraftRawButtons none = {0};
+            for (int k = 0; k < 120; k++) elite_game_tick(&none, 1.0f/30.0f);
+            if (rp >= 0) {
+                elite_game_debug_jump(ra);
+                elite_game_debug_view_planet(rp);
+            }
+            for (int k = 0; k < 120; k++) elite_game_tick(&none, 1.0f/30.0f);
+            render_frame();
+            GSAVE("planet_approach");
+        }
+        #undef ENTER_FLIGHT
+        #undef GSAVE
+        return 0;
+    }
+
+    if (getenv("ELITE_SHIPGRID")) {
+        /* Per-class catalogue cells for the guide's ship grids. Dumps
+         * /tmp/sg/c<cls>_<col>.ppm (10 classes x 4 varied seeds); a
+         * shell montage assembles the two labelled grids. */
+        extern const Mesh *hull_mesh(uint32_t, int);
+        (void)system("mkdir -p /tmp/sg");
+        galaxy_set_seed(42);
+        char p[64];
+        for (int cls = 0; cls < 10; cls++)
+            for (int col = 0; col < 4; col++) {
+                const Mesh *m = hull_mesh(0xC0FFEEu + (uint32_t)col * 2654435761u
+                                          + (uint32_t)cls * 97u, cls);
+                sheet_render_mesh(m, 0.7f + 0.25f * col, 0.26f);
+                snprintf(p, sizeof p, "/tmp/sg/c%d_%d.ppm", cls, col);
+                dump_ppm(p);
+            }
+        printf("[shipgrid] wrote 40 cells\n");
+        return 0;
+    }
+
+    if (getenv("ELITE_GAMEPLAYVIDEO")) {
+        /* A montage of the current build for the pilot guide: title ->
+         * intro -> flight -> handling a random event -> a faction
+         * battle. Frames -> /tmp/gvid for ffmpeg. Driven through the
+         * real game where practical; the event modal is drawn directly
+         * (the same UI the game uses). */
+        events_set_chance(0);
+        remove("indemnityrun.sav");
+        int fr = 0; char path[96];
+        CraftRawButtons none = {0}, b;
+        const float dt = 1.0f / 30.0f;
+        #define VDUMP() do { \
+            snprintf(path, sizeof path, "/tmp/gvid/%04d.ppm", fr++); \
+            dump_ppm(path); } while (0)
+
+        elite_game_init(42);
+        for (int k = 0; k < 4; k++) elite_game_tick(&none, dt);
+        /* 1. title (~2.5s) */
+        for (int k = 0; k < 75; k++) { elite_game_tick(&none, dt);
+            render_frame(); VDUMP(); }
+        /* 2. NEW GAME + intro crawl (~3s) */
+        b = none; b.down = true; elite_game_tick(&b, dt);
+        elite_game_tick(&none, dt);
+        b = none; b.a = true; elite_game_tick(&b, dt);
+        for (int k = 0; k < 95; k++) { elite_game_tick(&none, dt);
+            render_frame(); VDUMP(); }
+        b = none; b.a = true; elite_game_tick(&b, dt);   /* into flight */
+        for (int k = 0; k < 4; k++) elite_game_tick(&none, dt);
+        /* 3. flight: throttle up, a little traffic (~4s) */
+        for (int k = 0; k < 60; k++) { b = none; b.up = true;
+            elite_game_tick(&b, dt); render_frame(); VDUMP(); }
+        elite_game_debug_spawn(2);
+        for (int k = 0; k < 60; k++) { elite_game_tick(&none, dt);
+            render_frame(); VDUMP(); }
+        /* 4. handling a random event — the distress hail modal, for real */
+        {
+            galaxy_set_seed(42);
+            SystemInfo si; bool got = false;
+            for (int sy = -14; sy <= 14 && !got; sy++)
+                for (int sx = -14; sx <= 14 && !got; sx++) {
+                    int ns = galaxy_sector_stars(sx, sy);
+                    for (int i = 0; i < ns && !got; i++) {
+                        SysAddr a = { sx, sy, (uint8_t)i };
+                        galaxy_generate(a, &si);
+                        if (si.n_stations > 0) got = true;
+                    }
+                }
+            g_player.fuel = 5.0f; g_player.credits = 1200;
+            events_set_chance(100);              /* the roll was suppressed */
+            const Event *ev = NULL;
+            for (uint32_t s2 = 0; s2 < 200000u && !ev; s2++) {
+                events_init(); events_set_salt(s2);
+                const Event *e2 = events_roll_dock(&si, 0);
+                if (e2 && e2->id == 1) ev = e2;   /* DISTRESS HAIL */
+            }
+            events_set_chance(0);
+            if (ev) {
+                ui_event_open(ev);
+                for (int k = 0; k < 55; k++) { ui_event_tick(&none, dt);
+                    for (int i=0;i<OUT_W*OUT_H;i++) g_fb[i]=RGB565C(8,10,18);
+                    ui_event_draw(g_fb); VDUMP(); }
+                b = none; b.down = true; ui_event_tick(&b, dt);
+                for (int k = 0; k < 18; k++) { ui_event_tick(&none, dt);
+                    for (int i=0;i<OUT_W*OUT_H;i++) g_fb[i]=RGB565C(8,10,18);
+                    ui_event_draw(g_fb); VDUMP(); }
+                b = none; b.a = true; ui_event_tick(&b, dt);
+                for (int k = 0; k < 55; k++) { ui_event_tick(&none, dt);
+                    for (int i=0;i<OUT_W*OUT_H;i++) g_fb[i]=RGB565C(8,10,18);
+                    ui_event_draw(g_fb); VDUMP(); }
+            }
+        }
+        /* 5. a faction battle (~4s) */
+        {
+            events_set_chance(0);
+            remove("indemnityrun.sav");
+            elite_game_init(42);
+            for (int k = 0; k < 4; k++) elite_game_tick(&none, dt);
+            b = none; b.down = true; elite_game_tick(&b, dt);
+            elite_game_tick(&none, dt);
+            b = none; b.a = true; elite_game_tick(&b, dt);
+            elite_game_tick(&none, dt);
+            b = none; b.a = true; elite_game_tick(&b, dt);
+            for (int k = 0; k < 20; k++) elite_game_tick(&none, dt);
+            for (int f = 0; f < N_FACTIONS; f++) g_rep[f] = 25;
+            SystemInfo si2; bool gf = false;
+            for (int sy = -20; sy <= 20 && !gf; sy++)
+                for (int sx = -20; sx <= 20 && !gf; sx++) {
+                    int ns = galaxy_sector_stars(sx, sy);
+                    for (int i = 0; i < ns && !gf; i++) {
+                        SysAddr a = { sx, sy, (uint8_t)i };
+                        galaxy_generate(a, &si2);
+                        if (si2.n_stations > 0 && mission_near_front(a)) gf = true;
+                    }
+                }
+            if (gf && mission_grant_warzone(&si2)) {
+                Mission *m = NULL;
+                for (int i = 0; i < MAX_MISSIONS; i++)
+                    if (g_missions[i].type == MIS_WARZONE) m = &g_missions[i];
+                if (m) {
+                    elite_game_debug_jump(m->target);
+                    elite_game_debug_goto_poi(0);
+                    for (int k = 0; k < 120; k++) {
+                        b = none; if (k > 20 && k < 60) b.up = true;
+                        elite_game_tick(&b, dt); render_frame(); VDUMP();
+                    }
+                }
+            }
+        }
+        printf("[gvid] wrote %d frames\n", fr);
+        #undef VDUMP
+        return 0;
+    }
+
     if (getenv("ELITE_SKYBENCH")) {
         /* Microbench the per-frame sky cost. Host CPU is far faster than
          * the RP2350, but the RELATIVE breakdown transfers — it shows

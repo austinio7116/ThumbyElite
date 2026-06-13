@@ -202,6 +202,9 @@ static bool find_dest(SysAddr from, uint32_t salt, SysAddr *out, int *out_st) {
     return false;
 }
 
+#ifdef ELITE_STYLE_LAB
+int g_force_war_offer = 0;   /* guide-screenshot hook */
+#endif
 void mission_make_offers(const SystemInfo *si, int station,
                          Mission out[MISSION_OFFERS]) {
     Faction fac = system_faction(si->addr);
@@ -209,6 +212,13 @@ void mission_make_offers(const SystemInfo *si, int station,
     for (int i = 0; i < MISSION_OFFERS; i++) {
         Mission *m = &out[i];
         memset(m, 0, sizeof *m);
+#ifdef ELITE_STYLE_LAB
+        if (g_force_war_offer && i == 0) {
+            uint32_t wh = (uint32_t)(si->seed >> 10) ^ s_visit_salt ^ 0x3AA3u;
+            wh ^= wh >> 13; wh *= 1274126177u; wh ^= wh >> 16;
+            if (warzone_build(si, wh, m)) continue;
+        }
+#endif
         uint32_t h = (uint32_t)(si->seed >> 12) ^ s_visit_salt ^
                      (uint32_t)((station + 1) * 7919) ^
                      (uint32_t)(i * 104729);

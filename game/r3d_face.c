@@ -45,21 +45,26 @@ static uint16_t shade(uint16_t col, int pct) {   /* pct 100 = unchanged */
 }
 
 /* --- palettes ------------------------------------------------------------*/
-static const uint16_t k_skin[6] = {
-    RGB565C(232, 190, 160), RGB565C(208, 158, 120), RGB565C(176, 126, 90),
-    RGB565C(130, 90, 62),   RGB565C(96, 64, 46),    RGB565C(170, 150, 120),
+static const uint16_t k_skin[10] = {       /* wider human range (user) */
+    RGB565C(245, 205, 178), RGB565C(232, 190, 160), RGB565C(214, 168, 132),
+    RGB565C(208, 158, 120), RGB565C(186, 138, 100), RGB565C(176, 126, 90),
+    RGB565C(150, 104, 72),  RGB565C(130, 90, 62),   RGB565C(104, 70, 50),
+    RGB565C(78, 52, 38),
 };
-static const uint16_t k_hair[6] = {
-    RGB565C(34, 28, 24),  RGB565C(86, 58, 32),  RGB565C(150, 110, 50),
-    RGB565C(190, 186, 178), RGB565C(120, 40, 28), RGB565C(60, 64, 72),
+static const uint16_t k_hair[8] = {
+    RGB565C(28, 22, 20),  RGB565C(54, 38, 28),   RGB565C(86, 58, 32),
+    RGB565C(150, 110, 50), RGB565C(210, 170, 90), RGB565C(190, 186, 178),
+    RGB565C(120, 40, 28),  RGB565C(70, 74, 82),
 };
 static const uint16_t k_iris[6] = {
     RGB565C(70, 48, 28),  RGB565C(60, 100, 160), RGB565C(70, 120, 70),
     RGB565C(150, 110, 40), RGB565C(110, 70, 140), RGB565C(70, 110, 110),
 };
-static const uint16_t k_suit[5] = {
+static const uint16_t k_suit[12] = {       /* garment colours, widened */
     RGB565C(40, 52, 78),  RGB565C(70, 60, 48),  RGB565C(58, 70, 58),
-    RGB565C(120, 70, 30), RGB565C(56, 48, 64),
+    RGB565C(120, 70, 30), RGB565C(56, 48, 64),  RGB565C(120, 36, 40),
+    RGB565C(36, 84, 96),  RGB565C(150, 130, 70), RGB565C(44, 46, 52),
+    RGB565C(96, 60, 110), RGB565C(70, 96, 60),  RGB565C(150, 150, 158),
 };
 static const uint16_t COL_SCLERA = RGB565C(225, 222, 205);
 static const uint16_t COL_SYNTH  = RGB565C(120, 130, 145);
@@ -71,13 +76,15 @@ static int s_style = 1;
 void face_set_style(int s) { s_style = s; }
 
 /* PROPOSAL palettes: species skins + louder hair. */
-static const uint16_t k_skin_avian[4] = {
-    RGB565C(205, 170, 110), RGB565C(150, 170, 180), RGB565C(225, 215, 200),
-    RGB565C(160, 120, 90),
+static const uint16_t k_skin_avian[7] = {  /* plumage hues, widened */
+    RGB565C(210, 168, 96),  RGB565C(150, 172, 184), RGB565C(228, 216, 198),
+    RGB565C(164, 120, 86),  RGB565C(120, 150, 200), RGB565C(196, 96, 84),
+    RGB565C(96, 110, 96),
 };
-static const uint16_t k_skin_saur[4] = {
-    RGB565C(110, 150, 95), RGB565C(85, 130, 120), RGB565C(150, 150, 80),
-    RGB565C(95, 110, 135),
+static const uint16_t k_skin_saur[7] = {   /* scale hues, widened */
+    RGB565C(108, 152, 92),  RGB565C(82, 132, 122),  RGB565C(154, 150, 78),
+    RGB565C(92, 112, 138),  RGB565C(168, 112, 64),  RGB565C(70, 120, 84),
+    RGB565C(132, 80, 110),
 };
 static const uint16_t k_hair_punk[3] = {
     RGB565C(60, 200, 190), RGB565C(220, 80, 160), RGB565C(235, 235, 235),
@@ -105,29 +112,32 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
     int species = synth ? 1 : 0;
     if (s_style == 1 && kind != NK_MYSTIC) {
         int sr = fr_n(&r, 100);
+        /* aliens are common AND as varied as humans (user): wide skin
+         * palettes + per-species feature genes below. */
         species = (sr < 54) ? 0 : (sr < 64) ? 1 : (sr < 77) ? 2
                 : (sr < 89) ? 3 : 4;
         synth = (species == 1);
     }
-    uint16_t skin = synth ? COL_SYNTH : k_skin[fr_n(&r, 6)];
+    uint16_t skin = synth ? COL_SYNTH : k_skin[fr_n(&r, 10)];
     if (kind == NK_MYSTIC) skin = shade(skin, 88);          /* pallid */
     if (kind == NK_PIRATE) skin = shade(skin, 92);
     uint16_t skin_d = shade(skin, 72), skin_l = shade(skin, 116);
-    uint16_t hair = k_hair[fr_n(&r, 6)];
+    uint16_t hair = k_hair[fr_n(&r, 8)];
     uint16_t iris = synth ? COL_GLOW : k_iris[fr_n(&r, 6)];
     if (s_style == 1) {
-        if (species == 2) { skin = k_skin_avian[fr_n(&r, 4)];
+        if (species == 2) { skin = k_skin_avian[fr_n(&r, 7)];
                             iris = RGB565C(20, 16, 12); }
-        if (species == 3) { skin = k_skin_saur[fr_n(&r, 4)];
+        if (species == 3) { skin = k_skin_saur[fr_n(&r, 7)];
                             iris = RGB565C(230, 190, 60); }
-        if (species == 4) skin = shade(k_skin[fr_n(&r, 6)], 95);
+        if (species == 4) skin = shade(k_skin[fr_n(&r, 10)], 92);
         if ((species <= 1 || species == 4) && kind != NK_MYSTIC &&
             fr_pct(&r, 14))                  /* not under mystic hoods */
             hair = k_hair_punk[fr_n(&r, 3)];
         skin_d = shade(skin, 72);
         skin_l = shade(skin, 116);
     }
-    uint16_t suit = k_suit[kind == NK_OFFICIAL ? 0 : fr_n(&r, 5)];
+    uint16_t suit = k_suit[kind == NK_OFFICIAL ? 0 : fr_n(&r, 12)];
+    int garb = fr_n(&r, 6);   /* clothing cut/detail (user) */
 
     /* panel backdrop: deep blue-grey, faint floor glow */
     for (int y = 0; y < size; y++) {
@@ -141,22 +151,70 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
     int rx = (int)(S * (0.24f + 0.05f * (float)fr_n(&r, 4) / 3.0f));
     int ry = (int)(S * (0.30f + 0.05f * (float)fr_n(&r, 4) / 3.0f));
     float jaw = 0.10f + 0.35f * (float)fr_n(&r, 4) / 3.0f;
+    /* per-species feature genes (user: aliens should vary as much as
+     * humans) — head shape + the species' signature features all jitter. */
+    int   av_crest = 3 + fr_n(&r, 4);          /* 3-6 plume pairs        */
+    int   av_chgt  = 2 + fr_n(&r, 4);          /* crest height           */
+    float sr_snout = 0.78f + 0.10f * fr_n(&r, 5);  /* muzzle length      */
+    int   sr_teeth = 3 + fr_n(&r, 4);          /* crown-fin tooth count  */
+    float hv_jowl  = 0.14f + 0.05f * fr_n(&r, 4);  /* jowl bulge         */
     if (s_style == 1) {
-        if (species == 2) { rx = (int)(rx * 0.85f); jaw = 0.45f; }
-        if (species == 4) { rx = (int)(rx * 1.22f); jaw = 0.05f;
-                            ry = (int)(ry * 0.95f); }
+        if (species == 2) {                    /* avian: slim, narrow head */
+            rx = (int)(rx * (0.78f + 0.04f * fr_n(&r, 4)));
+            ry = (int)(ry * (0.95f + 0.04f * fr_n(&r, 3)));
+            jaw = 0.34f + 0.07f * fr_n(&r, 4);
+        }
+        if (species == 3)                      /* saurian: longer skull */
+            ry = (int)(ry * (1.0f + 0.05f * fr_n(&r, 4)));
+        if (species == 4) {                    /* heavyworlder: broad */
+            rx = (int)(rx * (1.14f + 0.06f * fr_n(&r, 3)));
+            jaw = 0.05f;
+            ry = (int)(ry * 0.95f);
+        }
     }
 
-    /* shoulders + neck under the head */
+    /* shoulders + neck under the head. Cut varies per garb: width,
+     * slope, and a garment detail (collar V, zip seam, yoke, sash,
+     * tabs) so two pilots in the same colour still differ. */
     int sh_y = cy + ry - (int)(S * 0.04f);
+    int sh_w0 = (int)(S * (0.14f + 0.04f * (garb & 1)));
+    int slope = 2 + (garb % 3);
+    uint16_t suit_d = shade(suit, 70), suit_l = shade(suit, 132);
     for (int y = sh_y; y < size; y++) {
-        int w = (int)(S * 0.18f) + (y - sh_y) * 2;
+        int w = sh_w0 + (y - sh_y) * slope / 2;
         fspan(&c, cx - w, cx + w, y, suit);
-        fpx(&c, cx - w, y, shade(suit, 130));
+        fpx(&c, cx - w, y, suit_l);
+        fpx(&c, cx + w, y, suit_d);
     }
-    if (kind == NK_OFFICIAL)                       /* rank stripe */
+    {
+        int gy = sh_y + (int)(S * 0.03f);
+        if (garb == 0) {
+            for (int t = 0; t < (int)(S * 0.10f); t++) {
+                fpx(&c, cx - t, gy + t, suit_d);
+                fpx(&c, cx + t, gy + t, suit_d);
+            }
+        } else if (garb == 1) {
+            for (int y = gy; y < size; y++) fpx(&c, cx, y, suit_l);
+        } else if (garb == 2) {
+            fspan(&c, cx - sh_w0 - slope, cx + sh_w0 + slope,
+                  sh_y + 2, suit_l);
+        } else if (garb == 3) {
+            for (int t = 0; t < (int)(S * 0.22f); t++)
+                fpx(&c, cx - (int)(S * 0.16f) + t, sh_y + 2 + t,
+                    RGB565C(190, 170, 90));
+        } else if (garb == 4) {
+            frect(&c, cx - (int)(S * 0.07f), gy, 3, 3, suit_l);
+            frect(&c, cx + (int)(S * 0.07f) - 2, gy, 3, 3, suit_l);
+        }
+    }
+    if (kind == NK_OFFICIAL) {
         fspan(&c, cx - (int)(S * 0.2f), cx + (int)(S * 0.2f),
               sh_y + 2, RGB565C(200, 170, 60));
+        frect(&c, cx - sh_w0 - 1, sh_y + (int)(S * 0.06f), 4, 2,
+              RGB565C(220, 185, 70));
+        frect(&c, cx + sh_w0 - 2, sh_y + (int)(S * 0.06f), 4, 2,
+              RGB565C(220, 185, 70));
+    }
     if (s_style == 1 && species == 4)            /* heavyworlder: bull neck */
         frect(&c, cx - (int)(S * 0.16f), cy + ry - (int)(S * 0.10f),
               (int)(S * 0.32f) + 1, (int)(S * 0.14f), skin_d);
@@ -170,7 +228,7 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
         float w = (float)rx * sqrtf(1.0f - ny * ny);
         if (ny > 0.15f) w *= 1.0f - jaw * (ny - 0.15f) / 0.85f;
         if (s_style == 1 && species == 4 && ny > 0.0f)
-            w *= 1.0f + 0.22f * 4.0f * ny * (1.0f - ny);     /* jowls */
+            w *= 1.0f + hv_jowl * 4.0f * ny * (1.0f - ny);  /* jowls */
         int wi = (int)w;
         if (wi < 1) continue;
         fspan(&c, cx - wi, cx + wi, y, skin);
@@ -226,15 +284,15 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
              * darker so the overlap between neighbours reads */
             uint16_t fc = shade(skin, 124), fd = shade(skin, 84);
             int dir = fr_pct(&r2, 50) ? 1 : -1;
-            for (int k = 3; k >= 0; k--) {
-                int bxo = 2 * k - 5;                 /* front → back */
+            for (int k = av_crest - 1; k >= 0; k--) {
+                int bxo = 2 * k - (av_crest + 1);    /* front → back */
                 if (bxo > rx - 2) bxo = rx - 2;
                 if (bxo < 2 - rx) bxo = 2 - rx;
                 float fx = (float)bxo / (float)rx;
                 int ys = cy - (int)((float)ry *
                                     sqrtf(1.0f - fx * fx));
                 int sx = cx + dir * bxo;
-                int len = 6 - k;                     /* front plumes taller */
+                int len = av_chgt + (av_crest - k); /* front plumes taller */
                 uint16_t col = (k & 1) ? fd : fc;
                 for (int t = 0; t <= len; t++) {
                     float f = (float)t / (float)len;
@@ -247,10 +305,14 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
             }
         } else if (species == 3) {
             /* crown ridge: serrated fin — wide-based teeth rooted on the
-             * skull arc, fusing into one mass, tall in the centre */
-            static const int hgt[5] = { 2, 4, 5, 4, 2 };
-            for (int k = -2; k <= 2; k++) {
-                int h = hgt[k + 2], sx = cx + k * 3;
+             * skull arc, fusing into one mass, tall in the centre. Tooth
+             * count varies per saurian. */
+            int half_t = sr_teeth / 2;
+            for (int k = -half_t; k <= half_t; k++) {
+                int ak = k < 0 ? -k : k;
+                int h = 5 - ak * 4 / (half_t + 1) + (ak == 0);
+                if (h < 2) h = 2;
+                int sx = cx + k * 3;
                 float fx = (float)(k * 3) / (float)rx;
                 if (fx > 0.95f) fx = 0.95f;
                 if (fx < -0.95f) fx = -0.95f;
@@ -557,7 +619,7 @@ void face_draw(uint16_t *fb, int bx, int by, int size, uint32_t seed,
     } else if (s_style == 1 && species == 3) {
         /* muzzle: a lit snout mass protrudes below the eyes — end-on
          * nostrils up top, the gape runs back wider than the snout */
-        int mz0 = nly - 2, mz1 = my + 3;
+        int mz0 = nly - 2, mz1 = my + 1 + (int)(4 * sr_snout);
         uint16_t snt = shade(skin, 128);     /* catches the light */
         for (int y = mz0; y <= mz1; y++) {
             float f = (float)(y - mz0) / (float)(mz1 - mz0);
