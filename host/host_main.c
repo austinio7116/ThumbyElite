@@ -1770,6 +1770,32 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (getenv("ELITE_STNFAM")) {
+        /* Contact sheet for the 4 candidate station families that replace
+         * the rejected cuboid drydock. Each family x 6 varied seeds ->
+         * /tmp/sf/f<fam>_<col>.ppm; a shell montage labels the rows. */
+        extern int g_force_station_fam;
+        (void)system("mkdir -p /tmp/sf");
+        station_gen_set_style(1);
+        r3d_scene_set_icon_bg(RGB565C(7, 9, 15));
+        char p[64];
+        for (int fam = 0; fam < 4; fam++) {
+            g_force_station_fam = fam;
+            for (int col = 0; col < 6; col++) {
+                const Mesh *m = station_gen_mesh(0x5747A1u
+                    + (uint32_t)col * 2654435761u + (uint32_t)fam * 131u);
+                sheet_render_mesh(m, 0.6f, 0.35f);
+                snprintf(p, sizeof p, "/tmp/sf/f%d_%d.ppm", fam, col);
+                dump_ppm(p);
+            }
+        }
+        g_force_station_fam = -1;
+        r3d_scene_set_icon_bg(0);
+        station_gen_set_style(0);
+        printf("[stnfam] wrote 24 cells\n");
+        return 0;
+    }
+
     if (getenv("ELITE_SHIPGRID")) {
         /* Per-class catalogue cells for the guide's ship grids. Dumps
          * /tmp/sg/c<cls>_<col>.ppm (10 classes x 4 varied seeds); a

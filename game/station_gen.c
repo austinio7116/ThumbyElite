@@ -540,6 +540,34 @@ static void s1_light(float x, float y, float z, float s, uint16_t c) {
     box(x, y, z, s, s, s, c, NULL);
 }
 
+/* Faceted ball: three octagonal rings + polar caps (26v / 48f). Lit
+ * facets alternate to read as window bands. */
+static void s1_ball(float r, uint16_t mtl, uint16_t face_col) {
+    if (s_nv + 26 > MAX_SV || s_nf + 48 > MAX_SF) return;
+    int rings[3][8];
+    float zs[3] = { -r * 0.55f, 0, r * 0.55f };
+    float rs[3] = { r * 0.68f, r, r * 0.68f };
+    for (int k = 0; k < 3; k++)
+        for (int i = 0; i < 8; i++) {
+            float a = (float)i * (6.2831853f / 8.0f) + 0.3927f;
+            rings[k][i] = add_vert(cosf(a) * rs[k], sinf(a) * rs[k], zs[k]);
+        }
+    int south = add_vert(0, 0, -r * 0.95f);
+    int north = add_vert(0, 0, r * 0.95f);
+    for (int k = 0; k < 2; k++)
+        for (int i = 0; i < 8; i++) {
+            int j = (i + 1) & 7;
+            add_face(rings[k][i], rings[k][j], rings[k + 1][j], mtl);
+            add_face(rings[k][i], rings[k + 1][j], rings[k + 1][i],
+                     (i & 1) ? mtl : face_col);
+        }
+    for (int i = 0; i < 8; i++) {
+        int j = (i + 1) & 7;
+        add_face(rings[0][i], south, rings[0][j], mtl);
+        add_face(rings[2][i], rings[2][j], north, face_col);
+    }
+}
+
 /* --- archetypes -------------------------------------------------- */
 
 typedef struct {
@@ -898,6 +926,254 @@ static void s1_arch_platform(float B, const S1Pal *p) {
     s1_light(-px, G * 0.9f, pz + B * 0.05f, B * 0.022f, p->ACCENT);
 }
 
+/* === new 4th-family concepts (2026-06-13) ========================= *
+ * The cuboid drydock (s1_arch_platform) was rejected; these four are
+ * the candidate replacements.  All keep the +z docking aperture on the
+ * spin axis so ST_DOCKING (glide to origin) reads the same as the other
+ * archetypes.  g_force_station_fam (lab) pins one for the contact sheet.
+ * ----------------------------------------------------------------- */
+
+#ifdef ELITE_STYLE_LAB
+int g_force_station_fam = -1;   /* -1 random; 0..3 pin a concept */
+#endif
+
+/* Square-section tube ring around an arbitrary axis `a` (unit), centred
+ * at C, mean radius R, tube half-size t, n segments.  Used for the
+ * crossed-ring gyrostation (rings that don't lie in the z=0 plane). */
+static void s1_tube_ring(float cx, float cy, float cz,
+                         float ax, float ay, float az,
+                         float R, float t, int n,
+                         uint16_t c0, uint16_t c1) {
+    if (n > 10) n = 10;
+    if (s_nv + 4 * n > MAX_SV || s_nf + 8 * n > MAX_SF) return;
+    /* normalise axis, build an in-plane orthonormal basis e1,e2 */
+    float al = sqrtf(ax*ax + ay*ay + az*az);
+    if (al < 1e-6f) return;
+    ax /= al; ay /= al; az /= al;
+    float rx = (fabsf(ax) < 0.9f) ? 1.0f : 0.0f;
+    float ry = (fabsf(ax) < 0.9f) ? 0.0f : 1.0f;
+    float e1x = ay*0.0f - az*ry, e1y = az*rx - ax*0.0f, e1z = ax*ry - ay*rx;
+    float e1l = sqrtf(e1x*e1x + e1y*e1y + e1z*e1z);
+    e1x /= e1l; e1y /= e1l; e1z /= e1l;
+    float e2x = ay*e1z - az*e1y;
+    float e2y = az*e1x - ax*e1z;
+    float e2z = ax*e1y - ay*e1x;
+    int ring[10][4];
+    for (int i = 0; i < n; i++) {
+        float th = (float)i * (6.2831853f / (float)n);
+        float ct = cosf(th), st = sinf(th);
+        /* radial unit dir in the ring plane */
+        float dx = ct*e1x + st*e2x;
+        float dy = ct*e1y + st*e2y;
+        float dz = ct*e1z + st*e2z;
+        float px = cx + R*dx, py = cy + R*dy, pz = cz + R*dz;
+        /* square cross-section spanned by axis a and radial d */
+        ring[i][0] = add_vert(px - t*ax - t*dx, py - t*ay - t*dy, pz - t*az - t*dz);
+        ring[i][1] = add_vert(px + t*ax - t*dx, py + t*ay - t*dy, pz + t*az - t*dz);
+        ring[i][2] = add_vert(px + t*ax + t*dx, py + t*ay + t*dy, pz + t*az + t*dz);
+        ring[i][3] = add_vert(px - t*ax + t*dx, py - t*ay + t*dy, pz - t*az + t*dz);
+    }
+    for (int i = 0; i < n; i++) {
+        int j = (i + 1) % n;
+        uint16_t c = (i & 1) ? c1 : c0;
+        s1_quad(ring[i][3], ring[i][2], ring[j][2], ring[j][3], c);   /* outer */
+        s1_quad(ring[i][1], ring[i][0], ring[j][0], ring[j][1], c0);  /* inner */
+        s1_quad(ring[i][2], ring[i][1], ring[j][1], ring[j][2], c);   /* +a    */
+        s1_quad(ring[i][0], ring[i][3], ring[j][3], ring[j][0], c0);  /* -a    */
+    }
+}
+
+/* CORIOLIS: a faceted rotating sphere with a lit equatorial window band
+ * and a recessed docking trench cut into the +z face. */
+static void s1_st_coriolis(float B, const S1Pal *p) {
+    float R = B * rndf(0.66f, 0.82f);
+    /* Hull sphere: alternate facets lit (window pattern is baked into
+     * ball()'s face_col alternation). */
+    s1_ball(R, p->HULL, p->WIN);
+    /* Reinforcing equatorial belt — a slim drum hugging the waist. */
+    int n = 8 + 2 * rndi(0, 1);
+    float ph = rndf(0, 6.2831853f);
+    s1_drum(n, R * 1.02f, R * 1.02f, -R * 0.12f, R * 0.12f, ph,
+            p->HULL2, p->ACCENT, 0, 0, 0, 0);
+    /* Docking trench on +z: a dark recessed slot with a glass floor and
+     * an accent lip — the iconic Coriolis "letterbox". */
+    float tw = R * rndf(0.30f, 0.42f);     /* slot half-width  */
+    float th = R * rndf(0.10f, 0.16f);     /* slot half-height */
+    uint16_t fcSlot[6] = { p->GLASS, p->DARK, p->DARK, p->DARK,
+                           p->DARK, p->DARK };
+    box(0, 0, R * 0.74f, tw, th, R * 0.16f, p->DARK, fcSlot);
+    /* Accent rails framing the mouth. */
+    box(0,  th + R*0.03f, R*0.88f, tw, R*0.018f, R*0.02f, p->ACCENT, NULL);
+    box(0, -th - R*0.03f, R*0.88f, tw, R*0.018f, R*0.02f, p->ACCENT, NULL);
+    /* A couple of surface pods + comms dish + polar antenna. */
+    for (int s = -1; s <= 1; s += 2) {
+        float a = rndf(0, 6.2831853f);
+        s1_pod(cosf(a) * R * 0.9f, sinf(a) * R * 0.9f, -R * 0.2f,
+               R * 0.10f, R * 0.10f, p->HULL2, p->HULL);
+    }
+    s1_dish(R * 0.55f, R * 0.55f, R * 0.55f, R * 0.16f, p->HULL, p->HULL2);
+    float sl = R * rndf(0.18f, 0.30f);
+    uint16_t afc[6] = { p->HULL2, p->ACCENT, p->HULL2, p->HULL2,
+                        p->HULL2, p->HULL2 };
+    box(0, R + sl * 0.6f, 0, R * 0.02f, sl, R * 0.02f, p->HULL2, afc);
+    s1_light(0,  th, R * 0.95f, R * 0.03f, p->ACCENT);
+    s1_light(0, -th, R * 0.95f, R * 0.03f, p->ACCENT);
+}
+
+/* STACK: a slim spine carrying a tapering tower of habitat discs, an
+ * aft engine bell, and the docking collar at the +z crown. */
+static void s1_st_stack(float B, const S1Pal *p) {
+    float L  = B * rndf(1.15f, 1.40f);       /* half-length */
+    float ar = B * rndf(0.07f, 0.10f);       /* visible spine column */
+    float ph = rndf(0, 6.2831853f);
+    int n = 10 + 2 * rndi(0, 1);             /* rounder plates */
+    /* Central spine column — left exposed between the plates so the
+     * "coins on a rod" silhouette reads from any angle. */
+    s1_drum(8, ar, ar, -L * 0.80f, L * 0.84f, ph, p->HULL2, p->HULL,
+            0, 0, 0, 0);
+    /* Aft engine bell. */
+    s1_drum(6, ar * 1.1f, ar * 2.2f, -L, -L * 0.80f, ph,
+            p->HULL2, p->HULL, 1, p->ACCENT, 1, p->HULL2);
+    /* Plate stack: thin discs with WIDE gaps and a modest taper. Each
+     * plate carries a darker rim band + an edge light so the disc edge
+     * reads as a disc rather than merging into a cone. */
+    int nd = rndi(4, 5);
+    int lit = rndi(0, nd - 1);
+    float z0 = -L * 0.62f, z1 = L * 0.74f;
+    float top = B * rndf(0.22f, 0.30f);      /* crown plate radius */
+    float bot = B * rndf(0.40f, 0.52f);      /* base  plate radius */
+    float dh  = B * 0.035f;                  /* thin plates */
+    for (int k = 0; k < nd; k++) {
+        float f  = (float)k / (float)(nd - 1);
+        float zc = z0 + (z1 - z0) * f;
+        float dr = bot + (top - bot) * f;
+        /* plate body: lit window band on the side wall */
+        s1_drum(n, dr, dr, zc - dh, zc + dh, ph,
+                p->HULL, (k == lit) ? p->WIN : p->HULL2,
+                1, p->HULL2, 1, p->HULL);
+        /* thin dark rim lip proud of the plate edge */
+        s1_drum(n, dr * 1.04f, dr * 1.04f, zc - dh * 0.5f, zc + dh * 0.5f,
+                ph, p->DARK, p->DARK, 0, 0, 0, 0);
+        s1_light(dr * 1.04f, 0, zc, B * 0.02f, p->ACCENT);
+    }
+    /* Docking collar at the crown. */
+    float cr = B * rndf(0.13f, 0.17f);
+    s1_drum(8, cr, cr, L * 0.74f, L * 0.84f, ph, p->HULL, p->HULL,
+            0, 0, 0, 0);
+    s1_drum(8, cr, cr * 0.6f, L * 0.84f, L, ph,
+            p->ACCENT, p->ACCENT, 0, 0, 1, p->GLASS);
+    /* Solar fins off the base plate, mirrored. */
+    for (int s = -1; s <= 1; s += 2) {
+        uint16_t pfc[6] = { p->PANEL, p->PANEL, p->DARK, p->DARK,
+                            p->DARK, p->DARK };
+        box(s * (bot + B * 0.30f), 0, z0, B * 0.26f, B * 0.36f,
+            B * 0.012f, p->PANEL, pfc);
+        box(s * (bot + B * 0.04f), 0, z0, B * 0.05f, B * 0.025f,
+            B * 0.025f, p->HULL2, NULL);
+    }
+}
+
+/* ROCK: an asteroid-anchored port — a lumpy dark rock with bolted-on
+ * habitat modules, a carved docking bay on +z, tanks and an antenna. */
+static void s1_st_rock(float B, const S1Pal *p) {
+    float R = B * rndf(0.70f, 0.90f);
+    int tn = rndi(-4, 12);
+    uint16_t ROCK  = rgb565((uint8_t)(118 + tn), (uint8_t)(102 + tn),
+                            (uint8_t)(86 + tn));
+    uint16_t ROCK2 = rgb565((uint8_t)(80 + tn), (uint8_t)(68 + tn),
+                            (uint8_t)(56 + tn));
+    /* Main body + a couple of overlapping lumps for an irregular mass. */
+    s1_ball(R, ROCK, ROCK2);
+    for (int k = 0; k < 2; k++) {
+        float a = rndf(0, 6.2831853f), e = rndf(0, 6.2831853f);
+        float lr = R * rndf(0.45f, 0.70f);
+        s1_pod(cosf(a) * R * 0.7f, sinf(a) * R * 0.6f,
+               cosf(e) * R * 0.5f, lr, lr * 0.85f, ROCK, ROCK2);
+    }
+    /* Carved docking bay on +z: bright lit recess + glass control face,
+     * framed by an accent collar so it reads as a working port mouth. */
+    float bw = R * rndf(0.36f, 0.48f);
+    uint16_t fcBay[6] = { p->GLASS, p->DARK, p->WIN, p->WIN,
+                          p->WIN, p->WIN };
+    box(0, 0, R * 0.70f, bw, bw * 0.72f, R * 0.20f, p->WIN, fcBay);
+    s1_drum(8, bw * 1.18f, bw * 1.06f, R * 0.80f, R * 0.96f,
+            rndf(0, 6.2831853f), p->ACCENT, p->HULL2, 0, 0, 0, 0);
+    s1_light( bw, 0, R * 0.92f, B * 0.024f, p->ACCENT);
+    s1_light(-bw, 0, R * 0.92f, B * 0.024f, p->ACCENT);
+    /* Bolted-on habitat modules clinging to the surface. */
+    int nm = rndi(3, 5);
+    for (int k = 0; k < nm; k++) {
+        float a = rndf(0, 6.2831853f), el = rndf(-0.6f, 0.9f);
+        float rr = R * sqrtf(1.0f - el * el * 0.6f);
+        float mx = cosf(a) * rr, my = sinf(a) * rr, mz = el * R * 0.8f;
+        uint16_t mc = (k & 1) ? p->HULL : p->HULL2;
+        uint16_t fcM[6] = { p->WIN, mc, mc, mc, mc, mc };
+        box(mx, my, mz, B * 0.10f, B * 0.07f, B * 0.07f, mc, fcM);
+        if (k == 0) s1_light(mx, my + B * 0.10f, mz, B * 0.018f, p->ACCENT);
+    }
+    /* Fuel tanks slung off one flank + a tall antenna mast. */
+    float side = (rnd() & 1) ? 1.0f : -1.0f;
+    for (int k = 0; k < 2; k++)
+        s1_pod(side * (R + B * 0.10f), -R * 0.2f + k * B * 0.20f, -R * 0.3f,
+               B * 0.09f, B * 0.13f, p->HULL2, p->DARK);
+    float sl = R * rndf(0.30f, 0.46f);
+    uint16_t afc[6] = { p->HULL2, p->ACCENT, p->HULL2, p->HULL2,
+                        p->HULL2, p->HULL2 };
+    box(0, R * 0.6f + sl * 0.5f, R * 0.2f, R * 0.018f, sl, R * 0.018f,
+        p->HULL2, afc);
+}
+
+/* SPINE: an open gyroscopic frame — two crossed tube rings on a central
+ * hub, node pods around the rims, and the dock collar on +z. */
+static void s1_st_spin(float B, const S1Pal *p) {
+    float R = B * rndf(0.78f, 0.96f);
+    float t = B * rndf(0.035f, 0.055f);
+    int n = 8;
+    float ph = rndf(0, 6.2831853f);
+    /* Hub: small faceted drum on the z axis. */
+    float hr = B * rndf(0.16f, 0.22f);
+    s1_drum(8, hr, hr, -hr * 0.8f, hr * 0.8f, ph, p->HULL, p->WIN,
+            1, p->HULL2, 0, 0);
+    /* Docking collar on the hub +z. */
+    s1_drum(8, hr * 0.72f, hr * 0.5f, hr * 0.8f, hr * 0.8f + B * 0.09f, ph,
+            p->ACCENT, p->ACCENT, 0, 0, 1, p->GLASS);
+    /* Ring A: around z (lies in the z=0 plane). */
+    s1_tube_ring(0, 0, 0, 0, 0, 1, R, t, n, p->HULL, p->WIN);
+    /* Ring B: around x, tilted (crosses ring A like a gyroscope). */
+    float tlt = rndf(0.5f, 0.9f);
+    s1_tube_ring(0, 0, 0, 1, sinf(tlt) * 0.4f, 0, R * 0.92f, t, n,
+                 p->HULL2, p->ACCENT);
+    /* Spokes from hub to ring A at a few nodes + node pods. */
+    int ns = 4;
+    for (int k = 0; k < ns; k++) {
+        float a = ph + (float)k * (6.2831853f / (float)ns);
+        float ca = cosf(a), sa = sinf(a);
+        s1_bar(ca * hr, sa * hr, ca * (R - t), sa * (R - t), 0,
+               B * 0.022f, B * 0.022f, p->HULL2, p->HULL, p->HULL2);
+        s1_pod(ca * R, sa * R, 0, B * 0.07f, B * 0.07f,
+               (k & 1) ? p->HULL : p->ACCENT, p->HULL2);
+    }
+    /* A comms dish riding one node. */
+    s1_dish(0, R, 0, B * 0.13f, p->HULL, p->HULL2);
+}
+
+static void s1_arch_exotic(float B, const S1Pal *p) {
+    /* Kept families (user 2026-06-13): STACK / ROCK / SPINE. The
+     * CORIOLIS sphere was dropped from the rotation but its builder is
+     * retained so the lab contact sheet (g_force_station_fam) still
+     * renders all four. */
+    int fam = 1 + rndi(0, 2);    /* 1=stack 2=rock 3=spin */
+#ifdef ELITE_STYLE_LAB
+    if (g_force_station_fam >= 0) fam = g_force_station_fam;
+#endif
+    switch (fam) {
+        case 0:  s1_st_coriolis(B, p); break;
+        case 1:  s1_st_stack(B, p);    break;
+        case 2:  s1_st_rock(B, p);     break;
+        default: s1_st_spin(B, p);     break;
+    }
+}
+
 /* --- style-1 entry ------------------------------------------------ */
 
 static const Mesh *station_gen_style1(uint32_t seed) {
@@ -924,10 +1200,13 @@ static const Mesh *station_gen_style1(uint32_t seed) {
     float B = rndf(24, 34) * rndf(1.0f, 1.6f);
 
     int arch = rndi(0, 99);
+#ifdef ELITE_STYLE_LAB
+    if (g_force_station_fam >= 0) arch = 99;   /* pin the exotic branch */
+#endif
     if (arch < 30)      s1_arch_ring(B, &pal);
     else if (arch < 55) s1_arch_spindle(B, &pal);
     else if (arch < 80) s1_arch_cross(B, &pal);
-    else                s1_arch_platform(B, &pal);
+    else                s1_arch_exotic(B, &pal);   /* cuboid platform retired */
 
     /* Quantise to the int8 mesh format (same rules as style 0). */
     float maxc = 1.0f, bound2 = 1.0f;
