@@ -5633,13 +5633,13 @@ int main(int argc, char **argv) {
         CAP("STAR TYPE layer: each sun coloured by its class");
         MV_IDLE(60);                            /* dwell on spectral */
         CAP("Threat layer: green systems are safe, red is pirate country");
-        MV_TAP(rb, 78);                         /* -> threat (shown now) */
+        MV_TAP(lb, 78);                         /* -> threat (LB cycles layers) */
         CAP("FACTION layer: who controls each system");
-        MV_TAP(rb, 78);                         /* -> faction (shown now) */
+        MV_TAP(lb, 78);                         /* -> faction */
         CAP("ECONOMY layer: every station's trade -- the money map");
-        MV_TAP(rb, 78);                         /* -> economy (shown now) */
+        MV_TAP(lb, 78);                         /* -> economy */
         CAP("Pick a destination within jump range");
-        MV_TAP(rb, 55);                         /* -> spectral */
+        MV_TAP(lb, 55);                         /* -> back to star type */
         MV_IDLE(20);
         {
             /* aim the snap at the nearest in-range neighbour */
@@ -5769,7 +5769,6 @@ int main(int argc, char **argv) {
         pl->throttle = 0.35f;
         MV_IDLE(40);                             /* close the distance */
         MV_TAP(lb, 4);                           /* lock the mark */
-        CAP("Trade fire with a better pilot -- the mark out-flies you");
         /* A REAL dogfight, not a nose-glued stare. Two states:
          *   APPROACH (far): aim the lead point, throttle up, fire.
          *   MERGE (close): STOP tracking -- fly straight through the
@@ -5777,7 +5776,7 @@ int main(int argc, char **argv) {
          *     behind, which forces a proper banked wheel-around as we
          *     re-acquire. That pass/break/re-engage IS the dogfight. */
         int merging = 0; float merge_t = 0.0f;
-        for (int f = 0; f < 30 * 16 && g_ships[0].alive; f++) {
+        for (int f = 0; f < 30 * 9 && g_ships[0].alive; f++) {
             for (int i = 1; i < MAX_SHIPS; i++)
                 if (i != mk && g_ships[i].alive &&
                     g_ships[i].team == TEAM_HOSTILE)
@@ -5818,7 +5817,7 @@ int main(int argc, char **argv) {
              * dips under the mark's fire and is floored at ~30% for most
              * of it; in the closing seconds the floor falls away and the
              * ace finishes us -- attrition, not a scripted snap. */
-            float fl = (f > 30 * 13) ? 0.0f : pl->hull_max * 0.30f;
+            float fl = (f > 30 * 6) ? 0.0f : pl->hull_max * 0.30f;
             if (pl->hull < fl) pl->hull = fl;
         }
         /* safety net: if the ace hasn't landed the kill by the end, make
@@ -5830,12 +5829,12 @@ int main(int argc, char **argv) {
         MV_IDLE(15);                             /* the explosion */
         CAP("The KILL REPORT names who got you -- study it, hunt smarter");
         for (int f = 0; f < 130; f++) MV(none);  /* read the report */
-        CAP("Claim your insurance payout");
+        CAP("The Indemnity makes you whole");
         MV_TAP(a, 6);
         for (int f = 0; f < 40; f++) MV(none);
         CAP("It rebuilds your ship at your last dock -- but the cargo");
         for (int f = 0; f < 70; f++) MV(none);
-        CAP("and credits you earned since are gone. Dock often to bank");
+        CAP("and credits you earned since are gone");
         for (int f = 0; f < 90; f++) MV(none);
         if (gwav) fclose(gwav);
         printf("[movie] %d frames (player alive=%d)\n", mf,
