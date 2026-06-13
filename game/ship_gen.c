@@ -33,6 +33,9 @@ static uint32_t rnd(void) {
  * branches, so the style-0 rnd() sequence — and therefore every
  * shipped mesh — stays byte-identical. */
 static int s_style = 1;   /* ADOPTED 2026-06-12 */
+#ifdef ELITE_STYLE_LAB
+int g_force_gunship = 0;   /* guide harness: only the loft+gun variant */
+#endif
 void ship_gen_set_style(int s) { s_style = s; }
 static float rndf(float lo, float hi) {
     return lo + (hi - lo) * (float)(rnd() & 0xFFFF) * (1.0f / 65535.0f);
@@ -393,6 +396,9 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
     int arch, family = 0;
     int hint = s_hint;
     s_hint = -1;
+#ifdef ELITE_STYLE_LAB
+    if (g_force_gunship) { arch = 0; family = 3; goto archdone; }
+#endif
     if (hint < 0) {
         int r = rndi(0, 99);
         arch = (r < 55) ? 0 : (r < 75) ? 1 : (r < 87) ? 2 : 3;
@@ -449,6 +455,7 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
             break;
         }
     }
+archdone:;
     float len = (family == 0) ? rndf(8, 12)
               : (family == 4) ? rndf(18, 26)
               : (family == 5) ? rndf(14, 20)
@@ -1007,57 +1014,101 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
               h1 * rndf(0.2f, 0.9f), HULL2);
         break;
     }
-    case 3: { /* gunship: hull-hugging cannons + twin canted fins */
+    case 3: { /* gunship / heavy fighter */
         float px = w_mid * rndf(0.4f, 0.85f);
         int npr = rndi(1, 2) * 2;            /* 2 or 4 prongs */
+        uint16_t MUZ = RGB565C(40, 40, 48);
         if (s1) {
-            /* MAULER-class premium guns (user: too long, floated up,
-             * samey). Short integrated cannons hugging the nose, level
-             * with the spine, ending at the nose tip with a neat muzzle
-             * step. Spread/length/stagger vary per ship. */
-            float gpx = w_mid * rndf2(0.30f, 0.55f);   /* tight to hull */
-            float gz0 = z3 + len * rndf2(0.02f, 0.10f);/* start near nose */
-            float gz1 = zf - len * rndf2(0.0f, 0.04f); /* end at the tip  */
-            float gr  = w_mid * rndf2(0.09f, 0.13f);   /* barrel radius   */
-            float stag = (npr == 2) ? 0.0f : h2 * rndf2(0.22f, 0.40f);
+            /* MAULER-class premium fighters (user: boring + guns float
+             * off the hull). FOUR distinct silhouettes, and every gun is
+             * physically seated on a pod / wing / nose shoulder so it
+             * always meets the ship. */
+            int gstyle = (int)(rnd2() % 4u);
+            float gl = len * rndf2(0.14f, 0.20f);
+            float gr = w_mid * 0.10f;
+            if (gstyle == 0) {
+                /* TWIN-SPONSON DESTROYER: a weapon pod each side, its
+                 * nose carrying a forward cannon (gun meets pod). */
+                float spx = w_mid * rndf2(0.95f, 1.15f);
+                float pz1 = z3 + len * 0.04f;
+                nacelle(spx, -h2 * 0.10f, z1, pz1,
+                        w_mid * rndf2(0.30f, 0.40f), HULL2, GLOW, 1);
+                gun_pair(spx, -h2 * 0.10f, pz1, gl, gr, ACC, MUZ);
+                fin(0, z0 + len * 0.02f, z0 + len * 0.20f, h0 * 0.8f,
+                    w_mid * 0.05f, h0 * 1.7f, z0, z0 + len * 0.08f, 1.0f,
+                    ACC);
+            } else if (gstyle == 1) {
+                /* GUNWING: short swept wings with wingtip cannons. */
+                float span = len * rndf2(0.26f, 0.42f);
+                float wty = h2 * rndf2(-0.10f, 0.55f);
+                wings(z2 - len * 0.04f, z2 + len * 0.12f, w_mid * 0.82f, 0,
+                      h2 * 0.10f, w_mid + span, z2 - len * 0.14f,
+                      z2 - len * 0.06f, wty, HULL2);
+                gun_pair(w_mid + span, wty, z2 - len * 0.14f, gl * 1.15f,
+                         gr * 0.9f, ACC, MUZ);
+                fin(0, z0 + len * 0.02f, z0 + len * 0.18f, h0 * 0.7f,
+                    w_mid * 0.05f, h0 * 1.5f, z0, z0 + len * 0.08f, 1.0f,
+                    ACC);
+            } else if (gstyle == 2) {
+                /* NOSE LANCE: 2 or 4 cannons flush on the nose shoulders
+                 * (mount x clamped to the local hull half-width). */
+                float gpx = w3 * 0.80f;
+                int n2 = (rnd2() & 1u) ? 2 : 4;
+                float stag = h3 * 0.50f;
+                for (int s2 = 0; s2 < n2; s2++) {
+                    float sx = (s2 & 1) ? -gpx : gpx;
+                    float by = y3 + ((n2 == 2) ? 0.0f
+                                    : (s2 >= 2) ? -stag : stag);
+                    int g0[8], g1[8];
+                    ring(z3 + len * 0.05f, gr, gr, by, 0.4f, g0);
+                    ring(zf - len * 0.02f, gr * 0.8f, gr * 0.8f, by, 0.4f,
+                         g1);
+                    for (int k = 0; k < 8; k++) { s_fx[g0[k]] += sx;
+                                                  s_fx[g1[k]] += sx; }
+                    skin(g0, g1, ACC, ACC, ACC);
+                    cap_back(g0, HULL2);
+                    int m0[6], m1[6];
+                    hex6(zf - len * 0.02f, gr * 0.6f, sx, by, m0);
+                    hex6(zf + len * 0.04f, gr * 0.8f, sx, by, m1);
+                    skin6(m0, m1, HULL2);
+                    fan6f(m1, MUZ);
+                }
+                fin(w_mid * 0.5f, z0, z0 + len * 0.16f, h0 * 0.6f,
+                    w_mid * 0.05f, h0 * 1.6f, z0, z0 + len * 0.08f, 1.0f,
+                    ACC);
+                fin(-w_mid * 0.5f, z0, z0 + len * 0.16f, h0 * 0.6f,
+                    w_mid * 0.05f, h0 * 1.6f, z0, z0 + len * 0.08f, 1.0f,
+                    ACC);
+            } else {
+                /* CHIN GONDOLA: under-slung weapon block + twin chin
+                 * cannons (gondola meets the belly; guns meet gondola). */
+                float gz1 = z3 + len * 0.02f;
+                nacelle(0, -h2 * 0.88f, z2 - len * 0.05f, gz1,
+                        w_mid * rndf2(0.34f, 0.46f), HULL2, GLOW, 0);
+                gun_twin(0, -h2 * 0.88f, gz1, gl * 1.15f, gr, HULL2, MUZ);
+                fin(0, z1, z1 + len * 0.22f, h1 * 0.85f, w_mid * 0.06f,
+                    h1 * rndf2(1.6f, 2.4f), z1, z1 + len * 0.12f, 1.0f,
+                    ACC);
+            }
+        } else {
             for (int s2 = 0; s2 < npr; s2++) {
-                float sx = (s2 & 1) ? -gpx : gpx;
-                /* sit on the spine (follows the rake) so nothing tilts */
-                float by = y3 + ((npr == 2) ? -h3 * 0.15f
-                                : (s2 >= 2) ? -stag : stag);
+                float sx = (s2 & 1) ? -px : px;
                 int g0[8], g1[8];
-                ring(gz0, gr, gr, by, 0.4f, g0);
-                ring(gz1, gr * 0.82f, gr * 0.82f, by, 0.4f, g1);
+                ring(z3 - len * 0.05f, w_mid * 0.10f, w_mid * 0.10f, 0,
+                     0.4f, g0);
+                ring(zf + len * 0.08f, w_mid * 0.07f, w_mid * 0.07f, 0,
+                     0.4f, g1);
                 for (int k = 0; k < 8; k++) { s_fx[g0[k]] += sx;
                                               s_fx[g1[k]] += sx; }
                 skin(g0, g1, ACC, ACC, ACC);
                 cap_back(g0, HULL2);
-                /* short muzzle: one neat step just past the tip */
-                int m0[6], m1[6];
-                hex6(gz1, gr * 0.6f, sx, by, m0);
-                hex6(gz1 + len * 0.05f, gr * 0.82f, sx, by, m1);
-                skin6(m0, m1, HULL2);
-                fan6f(m1, RGB565C(40, 40, 48));
+                cap_front(g1, RGB565C(40, 40, 48));
             }
-        } else
-        for (int s2 = 0; s2 < npr; s2++) {
-            float sx = (s2 & 1) ? -px : px;
-            float sy2 = (s2 >= 2) ? -h2 * 0.8f : h2 * 0.3f;
-            (void)sy2;
-            int g0[8], g1[8];
-            ring(z3 - len * 0.05f, w_mid * 0.10f, w_mid * 0.10f, 0, 0.4f, g0);
-            ring(zf + len * 0.08f, w_mid * 0.07f, w_mid * 0.07f, 0, 0.4f, g1);
-            for (int k = 0; k < 8; k++) {
-                s_fx[g0[k]] += sx; s_fx[g1[k]] += sx;
-            }
-            skin(g0, g1, ACC, ACC, ACC);
-            cap_back(g0, HULL2);
-            cap_front(g1, RGB565C(40, 40, 48));
+            fin(w_mid * 0.55f, z0, z0 + len * 0.16f, h0 * 0.6f,
+                w_mid * 0.05f, h0 * 1.6f, z0, z0 + len * 0.08f, 1.0f, ACC);
+            fin(-w_mid * 0.55f, z0, z0 + len * 0.16f, h0 * 0.6f,
+                w_mid * 0.05f, h0 * 1.6f, z0, z0 + len * 0.08f, 1.0f, ACC);
         }
-        fin(w_mid * 0.55f, z0, z0 + len * 0.16f, h0 * 0.6f,
-            w_mid * 0.05f, h0 * 1.6f, z0, z0 + len * 0.08f, 1.0f, ACC);
-        fin(-w_mid * 0.55f, z0, z0 + len * 0.16f, h0 * 0.6f,
-            w_mid * 0.05f, h0 * 1.6f, z0, z0 + len * 0.08f, 1.0f, ACC);
         break;
     }
     case 4: { /* cruiser: four superstructure schools (user req: the

@@ -1752,6 +1752,24 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (getenv("ELITE_MAULSHOT")) {
+        extern const Mesh *hull_mesh(uint32_t, int);
+        extern int g_force_gunship;
+        (void)system("mkdir -p /tmp/sg");
+        galaxy_set_seed(42);
+        g_force_gunship = 1;
+        char p[64];
+        for (int i = 0; i < 12; i++) {
+            const Mesh *m = hull_mesh(0xBEEF01u + (uint32_t)i * 2654435761u, 5);
+            sheet_render_mesh(m, 3.9f - 0.0f, 0.34f);
+            snprintf(p, sizeof p, "/tmp/sg/m%02d.ppm", i);
+            dump_ppm(p);
+        }
+        g_force_gunship = 0;
+        printf("[maulshot] wrote 12\n");
+        return 0;
+    }
+
     if (getenv("ELITE_SHIPGRID")) {
         /* Per-class catalogue cells for the guide's ship grids. Dumps
          * /tmp/sg/c<cls>_<col>.ppm (10 classes x 4 varied seeds); a
