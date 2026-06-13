@@ -4641,20 +4641,37 @@ int main(int argc, char **argv) {
      * Run under the hires build for a crisp 256x256 source. */
     if (getenv("ELITE_APPICON")) {
         int cls = getenv("ELITE_ICONCLS") ? atoi(getenv("ELITE_ICONCLS")) : 3;
+        extern uint32_t g_force_xfoil_seed;
+        uint32_t hseed = 0x5A17u;
+        g_force_xfoil_seed = hseed;                 /* iconic X-wing hull */
         r3d_scene_set_icon_bg(0xF81Fu);             /* magenta key, no sky */
         Mat3 cam = m3_identity();
         r3d_scene_begin(&cam, 50.0f);
-        r3d_pipe_set_sun(v3_norm(v3(0.50f, 0.60f, -0.62f)));
+        r3d_pipe_set_sun(v3_norm(v3(0.45f, 0.55f, -0.70f)));
         R3DObject obj;
-        obj.mesh  = hull_mesh(0x5A17u, cls);        /* a real game hull */
+        obj.mesh  = hull_mesh(hseed, cls);          /* a real game hull */
         obj.basis = m3_identity();
-        m3_rotate_local(&obj.basis, 1, 0.70f);      /* yaw  3/4 */
-        m3_rotate_local(&obj.basis, 0, 0.36f);      /* pitch nose-down (see the top) */
-        m3_rotate_local(&obj.basis, 2, -0.16f);     /* slight bank */
-        float dist = obj.mesh->bound_r * 2.0f;
-        obj.pos   = v3(0.0f, 0.0f, dist);
+        /* Nose toward the camera, banked, tilted to splay the X foils —
+         * a clear, recognisable front 3/4 (user: face it at the camera). */
+        m3_rotate_local(&obj.basis, 1, 3.14f);      /* yaw: nose dead at viewer */
+        m3_rotate_local(&obj.basis, 0, 0.33f);      /* pitch: look down on top */
+        m3_rotate_local(&obj.basis, 2, -0.05f);     /* a whisper of bank */
+        /* Frame by the ROTATED on-screen silhouette so the splayed hull
+         * fills the tile (bound_r left sparse foils tiny — same fix as the
+         * ship grids). */
+        float ext = 0.001f;
+        for (int i = 0; i < obj.mesh->nverts; i++) {
+            Vec3 v = v3((float)obj.mesh->verts[i].x, (float)obj.mesh->verts[i].y,
+                        (float)obj.mesh->verts[i].z);
+            v = v3_scale(v, obj.mesh->scale / 127.0f);
+            Vec3 r = m3_mul_v3(&obj.basis, v);
+            float lat = sqrtf(r.x * r.x + r.y * r.y);
+            if (lat > ext) ext = lat;
+        }
+        obj.pos   = v3(0.0f, 0.0f, ext * 2.5f);
         r3d_scene_add_object(&obj);
         r3d_scene_raster(g_fb, 0, ELITE_FB_H);
+        g_force_xfoil_seed = 0;
         dump_ppm("/tmp/elite_icon.ppm");
         return 0;
     }
@@ -5148,12 +5165,16 @@ int main(int argc, char **argv) {
         #define CAP(txt) printf("[cap] %d %s\n", mf, txt)
 
         CAP("INDEMNITY RUN  --  an infinite galaxy in your pocket");
-        /* Phase 0: the title drifts, then NEW GAME. */
+        /* Phase 0: the title drifts, NEW GAME, then SKIP the intro crawl
+         * so the captions land on real gameplay, not the story text. */
         MV_IDLE(140);
         MV_TAP(down, 4);
-        MV_TAP(a, 8);
+        MV_TAP(a, 6);                            /* NEW GAME -> intro crawl */
+        MV_TAP(a, 6);                            /* skip the crawl -> flight */
+        MV_IDLE(20);                             /* settle into the void */
 
         CAP("Every commander starts with a ship, 1000cr, and the void");
+        MV_IDLE(55);                             /* the starter hull in open space */
         /* Phase 1: a proper hero ship — MAULER with PULSE-M, GAUSS and
          * HOMING, war chest for the shopping act. */
         Ship *pl = &g_ships[0];
@@ -5296,32 +5317,32 @@ int main(int argc, char **argv) {
         CAP("MISSION COMPLETE -- two pirates culled. Collect at any dock");
         MV_IDLE(45);
         CAP("Wrecks drop loot -- lock it and fly through to scoop");
-        /* Phase 3: salvage run — lock loot, fly to it, scoop. */
+        /* Phase 3: salvage run — lock loot, fly to ONE can, scoop, move
+         * on. (Was a two-can chase that could run a full minute when the
+         * second can drifted away — user. Now: first scoop ends it, with
+         * a hard ~7s cap so a fleeing can never drags the beat.) */
         extern int loot_positions(Vec3 *, int *, int);
-        loot_on_kill(v3_add(pl->pos, v3_scale(pl->basis.r[2], 120.0f)),
+        loot_on_kill(v3_add(pl->pos, v3_scale(pl->basis.r[2], 90.0f)),
                      v3(0, 0, 0), 2, NULL);           /* guaranteed wreckage */
-        for (int c2 = 0; c2 < 2; c2++) {
-            MV_TAP(lb, 2);                      /* salvage lock */
-            for (int f = 0; f < 700; f++) {
-                Vec3 cans[6]; int comp[6];
-                int n = loot_positions(cans, comp, 6);
-                if (n == 0) break;
-                /* nearest */
-                int bi = 0; float bd = 1e30f;
-                for (int i = 0; i < n; i++) {
-                    float d3 = v3_len(v3_sub(cans[i], pl->pos));
-                    if (d3 < bd) { bd = d3; bi = i; }
-                }
-                MV_STEER(cans[bi], 0.06f);
-                pl->throttle = (bd > 120.0f) ? 0.85f
-                             : (bd > 40.0f) ? 0.45f : 0.22f;
-                MV(none);
-            }
+        int loot_start = 0;
+        { Vec3 c0[6]; int q0[6]; loot_start = loot_positions(c0, q0, 6); }
+        MV_TAP(lb, 2);                          /* salvage lock */
+        for (int f = 0; f < 210; f++) {
             Vec3 cans[6]; int comp[6];
-            if (loot_positions(cans, comp, 6) == 0) break;
+            int n = loot_positions(cans, comp, 6);
+            if (n == 0 || n < loot_start) break;   /* first can scooped -> done */
+            int bi = 0; float bd = 1e30f;
+            for (int i = 0; i < n; i++) {
+                float d3 = v3_len(v3_sub(cans[i], pl->pos));
+                if (d3 < bd) { bd = d3; bi = i; }
+            }
+            MV_STEER(cans[bi], 0.07f);
+            pl->throttle = (bd > 120.0f) ? 0.9f
+                         : (bd > 40.0f) ? 0.45f : 0.22f;
+            MV(none);
         }
         pl->throttle = 0.2f;
-        MV_IDLE(30);
+        MV_IDLE(25);
 
         /* Phase 3b: MINING loop — crack a rock, scoop the ore. */
         CAP("MINING: switch to a mining laser and crack asteroids");
@@ -5455,11 +5476,11 @@ int main(int argc, char **argv) {
          * reputation or a fight. */
         events_set_chance(100);
         if (elite_game_debug_open_event()) {
-            CAP("ENCOUNTERS: a hail demands an answer -- there is no ignoring it");
+            CAP("ENCOUNTERS: a hail opens -- a face, a situation, a choice");
             MV_IDLE(95);                        /* read portrait + situation */
-            MV_TAP(down, 2);                    /* weigh a second option */
+            MV_TAP(down, 2);                    /* weigh the options */
             MV_IDLE(45);
-            CAP("Every choice branches: credits, cargo, standing -- or a fight");
+            CAP("Comply, ignore or fight -- every call has consequences");
             MV_TAP(a, 4);                       /* commit to a choice */
             MV_IDLE(80);                        /* the aftermath text */
             MV_TAP(a, 4);                       /* dismiss the hail */
@@ -5532,56 +5553,70 @@ int main(int argc, char **argv) {
             for (int _u = 0; _u < 9; _u++) MV_TAP(up, 1); \
             for (int _dn = 0; _dn < (row); _dn++) MV_TAP(down, 2); \
         } while (0)
+        /* Caption discipline (user: 'all out of sequence'): the menu
+         * navigation (GOROW + the opening A) plays UNDER the previous
+         * caption; the new CAP fires the instant the target screen is on
+         * screen, then we dwell. So every caption matches its picture. */
         MV_IDLE(40);                            /* docked home menu */
+        GOROW(0); MV_TAP(a, 3);                 /* open MARKET */
         CAP("THE MARKET: prices swing by economy -- buy low, sell high");
-        GOROW(0); MV_TAP(a, 12);                /* MARKET */
-        MV_IDLE(55);
+        MV_IDLE(52);
         MV_TAP(a, 10); MV_TAP(a, 10);           /* buy 2 units */
         MV_TAP(down, 6); MV_TAP(a, 10);
         MV_IDLE(40);
         MV_TAP(menu, 14);
+
+        GOROW(1); MV_TAP(a, 3);                 /* open SHIPYARD */
         CAP("THE SHIPYARD: hulls for sale, each a different trade-off");
-        GOROW(1); MV_TAP(a, 14);                /* SHIPYARD */
-        MV_IDLE(55);                            /* the offer list */
+        MV_IDLE(52);                            /* the offer list */
         CAP("Browse the lot -- cargo, speed, slots and price all vary");
         MV_TAP(down, 45);                       /* hull #2 */
         MV_TAP(down, 45);                       /* hull #3 */
+        MV_TAP(b, 3);                            /* open the spec sheet */
         CAP("B opens a hull's full spec to compare against yours");
-        MV_TAP(b, 70);                          /* spec sheet, linger */
+        MV_IDLE(67);                            /* linger on the spec */
         MV_TAP(b, 10);
         MV_TAP(down, 45);                       /* hull #4 */
         MV_TAP(down, 40);                       /* hull #5 */
         MV_TAP(b, 65);                          /* another spec */
         MV_TAP(b, 10); MV_TAP(menu, 12);
+
+        GOROW(2); MV_TAP(a, 3);                 /* open OUTFITTING */
         CAP("OUTFITTING: weapons, shields, armor and gadgets for sale");
-        GOROW(2); MV_TAP(a, 14);                /* OUTFITTING */
-        MV_IDLE(55);                            /* read your fitted gear */
+        MV_IDLE(52);                            /* read your fitted gear */
+        MV_TAP(lb, 3);                          /* detail on a row */
         CAP("Open any item for its full spec sheet");
-        MV_TAP(lb, 55);                         /* detail on a row */
+        MV_IDLE(52);
+        MV_TAP(rb, 3);                          /* browse for-sale #1 */
         CAP("Stock varies: quality, wear and affixes roll per item");
-        MV_TAP(rb, 60);                         /* browse for-sale #1 */
+        MV_IDLE(57);
         MV_TAP(rb, 60);                         /* #2 */
+        MV_TAP(rb, 3);                          /* #3 */
         CAP("One PULSE may out-punch another -- read before you buy");
-        MV_TAP(rb, 60);                         /* #3 */
+        MV_IDLE(57);
         MV_TAP(rb, 60);                         /* #4 */
         MV_TAP(rb, 55);                         /* #5 */
+        MV_TAP(a, 3);                           /* BUY + FIT */
         CAP("Found an upgrade? A buys and fits it");
-        MV_TAP(a, 28);                          /* BUY + FIT */
         MV_IDLE(25);
         MV_TAP(b, 10); MV_TAP(menu, 12);
+
+        GOROW(3); MV_TAP(a, 3);                 /* open MISSIONS */
         CAP("MISSIONS: contracts for credits and reputation");
-        GOROW(3); MV_TAP(a, 14);                /* MISSIONS */
         MV_IDLE(60);                            /* read the board */
         MV_TAP(a, 18);                          /* accept the first */
         MV_IDLE(30); MV_TAP(menu, 10);
+
+        GOROW(5); MV_TAP(a, 3);                 /* open STATUS */
         CAP("SHIP STATUS: every stat -- hold LB to admire the hull");
-        GOROW(5); MV_TAP(a, 14);                /* STATUS */
         MV_IDLE(50);
         MV_TAP(lb, 55);                         /* hide text: clean ship */
         MV_TAP(lb, 18);                         /* show again */
         MV_TAP(b, 10); MV_TAP(menu, 10);
-        CAP("REFUEL and SERVICE here -- then LAUNCH back into the black");
-        GOROW(9); MV_TAP(a, 22);                /* LAUNCH */
+
+        GOROW(9); MV_TAP(a, 3);                 /* LAUNCH */
+        CAP("REFUEL and SERVICE on this menu -- then LAUNCH to the black");
+        MV_TAP(a, 19);
         MV_IDLE(45);
         #undef GOROW
 

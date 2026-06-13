@@ -11,6 +11,45 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 
 ## Changelog
 
+### 1.25 (ThumbyOne v1.25)
+
+A visual, content and world-building refresh for Indemnity Run. **No save
+change — existing pilots and universes load.**
+
+**Campaign**
+- **THE POLICY storyline, acts 4–5.** The debt arc reaches its end:
+  insolvency, the Collection, and the *lapse* — a real, branching finish
+  rather than an open thread.
+
+**Stations**
+- **The boxy drydock is retired.** Orbital stations now roll from six
+  archetypes: ring wheels, spindle towers, cross-trusses, and three new
+  families — **stack disc-towers**, mined **asteroid ports**, and open
+  **gyroscopic ring frames**. Each rolls its own size, segment count,
+  window decks and add-ons, so no two are alike.
+
+**Ships & faces**
+- **Gunship hulls rebuilt.** The MAULER-class gunships had over-long
+  cannons that floated off the hull; they're now four distinct,
+  properly-seated silhouettes.
+- **NPC faces vary far more** — features, hair, clothing and bodies — so
+  the people you meet stop looking like siblings.
+
+**The sky**
+- **A subtler, more distant galactic band** that varies by system (the
+  bright core sits to one side, thinning to a faint ring opposite)
+  instead of the same bright ring everywhere.
+- **Distant spiral galaxies** scattered across the black, with varied
+  arm counts, curl and colours.
+- Sky rendering is **~20× cheaper per frame**, so the framerate holds.
+- **Purple title wordmark** (was cyan), gold border kept.
+
+**Guide & presentation**
+- Expanded **pilot guide**: new Encounters, Lore and Faction Wars
+  sections, a station-exterior showcase, regenerated ship grids, and a
+  new full field-guide video.
+- **New app / lobby icon** — a fighter facing the camera over a world.
+
 ### 1.23.2 (ThumbyOne v1.23.2)
 
 A balance, content and fixes dot-release from playtesting. **No save change.**
