@@ -103,7 +103,7 @@ settings (`thumbyelite_settings.dat`) are written to the working directory.
 |-----|--------|
 | `W` `A` `S` `D` | pitch / yaw (d-pad) |
 | `.` | A — fire primary |
-| `,` | B — secondary / missile |
+| `,` | B — cycle weapon |
 | `Shift` | LB (hold = roll mod, tap = cycle target) |
 | `Space` | RB (hold = throttle mod, tap = flight-assist, double-tap = boost) |
 | `Enter` | MENU (pause / dashboard) |
@@ -111,19 +111,32 @@ settings (`thumbyelite_settings.dat`) are written to the working directory.
 
 ### Game controller (Xbox / PlayStation / etc.)
 
-Auto-detected, hot-pluggable. Analog aim with the device chords intact:
+Auto-detected, hot-pluggable. Analog sticks fly the ship; all three weapons
+get a dedicated fire button so you never have to cycle mid-fight.
+
+**In flight:**
 
 | Control | Action |
 |---------|--------|
-| Left stick | pitch / yaw (analog) |
+| Left stick | pitch / yaw (analog; **INVERT Y** in settings flips pitch) |
 | Right stick X | roll |
 | Right stick Y | throttle (up = faster, holds) |
-| A | fire primary &nbsp;·&nbsp; B | secondary |
-| Right trigger | fire (alt) |
-| LB | hold = roll mod · tap = cycle target |
-| RB | hold = throttle mod · tap = flight-assist · double-tap = boost |
-| Start | MENU |
-| D-pad | menu navigation |
+| Right trigger (RT) | fire the active weapon (hold to charge a railgun) |
+| Left trigger (LT) | fire your 2nd weapon |
+| RB | fire your 3rd weapon |
+| LB (hold) | cycle the active weapon |
+| LB + RB | request docking (near a station) · engage supercruise |
+| B | cycle target lock (hostile → salvage → station) |
+| Y | shift target class (AUTO → SALVAGE → ROCKS) |
+| X | toggle flight assist (drift) |
+| A | afterburner boost |
+| View (Back) | dump chaff (with a CHAFF pod fitted) |
+| L3 (click left stick) | engage cloak (with a CLOAK fitted) |
+| Start | MENU / dashboard |
+
+**In menus:** D-pad or left stick navigate · **A** select / confirm · **B**
+back / secondary · **LB** or **Y** open a detail sheet and cycle the
+galaxy-chart layers · **Start** close.
 
 ### HOTAS (flight stick + throttle)
 
@@ -137,17 +150,24 @@ treated as a HOTAS). Default mapping:
 | **Twist** | **roll** (rotate) |
 | Throttle lever | absolute throttle |
 
-| Button | Action |
+| Button (default) | Action |
 |--------|--------|
-| Trigger (btn 0) | fire |
-| btn 1 | secondary |
-| btn 2 | RB · btn 3 | LB |
-| btn 4 | MENU |
+| Trigger (btn 0) | fire the active weapon |
+| btn 1 | cycle weapon |
+| btn 2 | flight assist |
+| btn 3 | cycle target |
+| btn 4 | MENU / dashboard |
 | Hat / POV | menu navigation |
 
-**Axis numbers vary by device.** If pitch/roll/throttle are on the wrong axes,
-run once with `ELITE_HOTAS_DEBUG=1` — it prints every axis value live so you
-can read off the indices — then set them:
+The dedicated extras — **fire 2nd / 3rd weapon, boost, chaff, cloak and
+request-dock** — are **unbound by default**. Bind them (and remap anything
+above) without touching a config file from the in-game **SETTINGS →
+CONTROLLER** screen: it shows a live input monitor, you pick a row and press
+the button or sweep the axis to bind it.
+
+**Axis numbers vary by device.** If you'd rather set axes from the command
+line, run once with `ELITE_HOTAS_DEBUG=1` — it prints every axis value live so
+you can read off the indices — then set them:
 
 ```bash
 ELITE_HOTAS_YAW=0 ELITE_HOTAS_PITCH=1 ELITE_HOTAS_ROLL=3 ELITE_HOTAS_THROTTLE=2 \
