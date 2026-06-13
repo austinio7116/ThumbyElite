@@ -35,6 +35,7 @@ static uint32_t rnd(void) {
 static int s_style = 1;   /* ADOPTED 2026-06-12 */
 #ifdef ELITE_STYLE_LAB
 int g_force_gunship = 0;   /* guide harness: only the loft+gun variant */
+uint32_t g_force_xfoil_seed = 0;  /* guide harness: force this seed's hull to an x-foil (X-wing) */
 #endif
 void ship_gen_set_style(int s) { s_style = s; }
 static float rndf(float lo, float hi) {
@@ -398,6 +399,9 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
     s_hint = -1;
 #ifdef ELITE_STYLE_LAB
     if (g_force_gunship) { arch = 0; family = 3; goto archdone; }
+    if (g_force_xfoil_seed && seed == g_force_xfoil_seed) {
+        arch = 1; family = 1; goto archdone;   /* X-wing hero */
+    }
 #endif
     if (hint < 0) {
         int r = rndi(0, 99);

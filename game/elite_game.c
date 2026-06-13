@@ -724,6 +724,18 @@ static void try_arrival_hail(void) {
     s_state = ST_EVENT;
 }
 
+/* Guide harness: force-open an in-flight event modal (TRIG_ARRIVAL,
+ * falling back to TRIG_SPACE). Returns 1 if a modal opened. */
+int elite_game_debug_open_event(void) {
+    const Event *ev = events_roll_arrival(system_info());
+    if (!ev) ev = events_roll_space(system_info());
+    if (!ev) return 0;
+    ui_event_open(ev);
+    s_event_return = EVRET_FLIGHT;
+    s_state = ST_EVENT;
+    return 1;
+}
+
 /* Re-anchor the local frame at a system-space position. */
 static const Mesh *s_station_mesh;   /* generated for the anchored station */
 

@@ -28,7 +28,7 @@ def pos_for(t):
 out='/tmp/guide_cut'; os.makedirs(out,exist_ok=True)
 for x in glob.glob(out+'/*.png'): os.remove(x)
 frames=sorted(glob.glob('/tmp/movie/f_*.ppm')); seq=0
-INTRO,OUTRO=78,95
+INTRO,OUTRO=0,0   # no title/closing slides (pure gameplay, top & tail)
 def card(big,sub,n):
     global seq
     for _ in range(n):
@@ -38,7 +38,7 @@ def card(big,sub,n):
         y+=14
         for L in sub: d.text((S//2,y),L,anchor="mm",font=fsub,fill=(180,190,205)); y+=34
         im.save(f'{out}/c_{seq:06d}.png'); seq+=1
-card(["THUMBY ELITE"],["a complete field guide","trade   fight   explore"],INTRO)
+# (initial title slide removed per request — wrong game name)
 for i,fp in enumerate(frames):
     im=Image.open(fp).resize((S,S),Image.NEAREST).convert('RGBA')
     txt=cap_for(i); wr=textwrap.wrap(txt,width=34)[:2]
@@ -49,7 +49,7 @@ for i,fp in enumerate(frames):
         d=ImageDraw.Draw(im); ty=y0+10
         for L in wr: d.text((16,ty),L,font=fcap,fill=(232,238,245)); ty+=lh
     im.convert('RGB').save(f'{out}/c_{seq:06d}.png'); seq+=1
-card(["THUMBY ELITE"],["color.thumby.us","the infinite galaxy awaits"],OUTRO)
+# (closing slide removed per request)
 raw=open('/tmp/guide_audio.raw','rb').read(); sil=b'\x00\x00'*735
 full=sil*INTRO+raw+sil*OUTRO
 wf=wave.open('/tmp/guide_audio.wav','wb'); wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(22050); wf.writeframes(full); wf.close()

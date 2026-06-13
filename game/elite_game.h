@@ -57,5 +57,6 @@ void elite_game_police_stand_down(void);
 void elite_game_debug_goto_poi(int n);
 void elite_game_debug_jump(SysAddr addr);
 void elite_game_debug_view_planet(int n);
+int  elite_game_debug_open_event(void);   /* guide harness: open an event modal */
 
 #endif

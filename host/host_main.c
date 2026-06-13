@@ -5147,7 +5147,7 @@ int main(int argc, char **argv) {
          * the game frame (never obscuring the gameplay). */
         #define CAP(txt) printf("[cap] %d %s\n", mf, txt)
 
-        CAP("THUMBY ELITE  --  an infinite galaxy in your pocket");
+        CAP("INDEMNITY RUN  --  an infinite galaxy in your pocket");
         /* Phase 0: the title drifts, then NEW GAME. */
         MV_IDLE(140);
         MV_TAP(down, 4);
@@ -5157,8 +5157,13 @@ int main(int argc, char **argv) {
         /* Phase 1: a proper hero ship — MAULER with PULSE-M, GAUSS and
          * HOMING, war chest for the shopping act. */
         Ship *pl = &g_ships[0];
-        g_player.hull_id = 5;                    /* MAULER */
+        g_player.hull_id = 5;                    /* MAULER stats (3 slots) */
         g_player.hull_seed = 0x5EED77u;
+        /* Force the hero hull to an X-wing silhouette (only this seed is
+         * matched, so enemies keep their own shapes). Stays set for the
+         * whole shoot incl. the death-beat re-mesh. */
+        extern uint32_t g_force_xfoil_seed;
+        g_force_xfoil_seed = 0x5EED77u;
         g_player.credits = 30000;
         g_player.mounts[0] = (WeaponInst){ .type = WPN_PULSE_S,
             .quality = Q_STANDARD, .integrity = 100, .in_use = 1 };
@@ -5445,6 +5450,23 @@ int main(int argc, char **argv) {
         pl->throttle = 0.2f;
         MV_IDLE(15);
 
+        /* Phase 3b: ENCOUNTERS. A hail opens a seeded modal -- a portrait,
+         * a situation, and choices that branch into credits, cargo,
+         * reputation or a fight. */
+        events_set_chance(100);
+        if (elite_game_debug_open_event()) {
+            CAP("ENCOUNTERS: a hail demands an answer -- there is no ignoring it");
+            MV_IDLE(95);                        /* read portrait + situation */
+            MV_TAP(down, 2);                    /* weigh a second option */
+            MV_IDLE(45);
+            CAP("Every choice branches: credits, cargo, standing -- or a fight");
+            MV_TAP(a, 4);                       /* commit to a choice */
+            MV_IDLE(80);                        /* the aftermath text */
+            MV_TAP(a, 4);                       /* dismiss the hail */
+            MV_IDLE(20);
+        }
+        events_set_chance(0);
+
         CAP("MENU opens the dashboard -- the galaxy never pauses");
         /* Phase 4: dashboard TOUR -> SYSTEM map -> supercruise. The
          * dash panels are live MFDs: 0 GALAXY, 1 SYSTEM, 2 STATUS. */
@@ -5649,6 +5671,53 @@ int main(int argc, char **argv) {
         for (int f = 0; f < 95; f++) MV(none);   /* CLOAKED readout */
         CAP("Plus scanners, repair drones, chaff and more");
         for (int f = 0; f < 55; f++) MV(none);
+
+        /* Phase 10b: FACTION WARS. Jump to a contested front and fight at
+         * the beacon -- two fleets clash, and your kills bank credits and
+         * reputation with the side you back. */
+        {
+            SystemInfo si_w; bool gotw = false;
+            for (int sy = -20; sy <= 20 && !gotw; sy++)
+                for (int sx = -20; sx <= 20 && !gotw; sx++) {
+                    int ns = galaxy_sector_stars(sx, sy);
+                    for (int i = 0; i < ns && !gotw; i++) {
+                        SysAddr a = { sx, sy, (uint8_t)i };
+                        galaxy_generate(a, &si_w);
+                        if (si_w.n_stations > 0 && mission_near_front(a))
+                            gotw = true;
+                    }
+                }
+            for (int fc = 0; fc < N_FACTIONS; fc++) g_rep[fc] = 25;
+            Mission *wm = NULL;
+            if (gotw && mission_grant_warzone(&si_w)) {
+                for (int i = 0; i < MAX_MISSIONS; i++)
+                    if (g_missions[i].type == MIS_WARZONE) wm = &g_missions[i];
+            }
+            if (wm) {
+                CAP("FACTION WARS: a contested beacon, two fleets clashing");
+                elite_game_debug_jump(wm->target);
+                elite_game_debug_goto_poi(0);
+                for (int f = 0; f < 35; f++) MV(none);   /* warzone spins up */
+                pl->active_w = 0;                        /* pulse, sustained */
+                pl->hull = pl->hull_max; pl->shield = pl->shield_max;
+                CAP("Back a side -- every kill banks credits and reputation");
+                MV_TAP(lb, 3);                           /* lock a combatant */
+                for (int f = 0; f < 30 * 9; f++) {
+                    int tgt = -1; float best = 1e30f;
+                    for (int i = 1; i < MAX_SHIPS; i++)
+                        if (g_ships[i].alive &&
+                            g_ships[i].team == TEAM_HOSTILE) {
+                            float d = v3_len(v3_sub(g_ships[i].pos, pl->pos));
+                            if (d < best) { best = d; tgt = i; }
+                        }
+                    if (tgt < 0) { MV(none); continue; }
+                    MV_AIM(tgt, 0.0f, 3.0f, 0.016f, 1);
+                    pl->hull = pl->hull_max; pl->shield = pl->shield_max;
+                    if (f % 90 == 89) MV_TAP(lb, 2);     /* retarget */
+                }
+                MV_IDLE(20);
+            }
+        }
 
         CAP("A bounty MARK -- a DEADLY ace. The hunt is on");
         player_apply_to_ship();                  /* drop the plot armour */
