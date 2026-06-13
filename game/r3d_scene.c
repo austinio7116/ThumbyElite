@@ -139,6 +139,9 @@ typedef struct {
     uint8_t size;      /* half-extent px, 4-9 */
     uint8_t hue;       /* 0 cool 1 neutral 2 warm */
     uint8_t on;
+    uint8_t arms;      /* spiral arm count 1-4 */
+    int8_t  hand;      /* spiral winding +1 / -1 */
+    float   pitch;     /* spiral curl: low = open sweep, high = tight */
 } BgGalaxy;
 static BgGalaxy s_gal[GAL_COUNT];
 #ifdef ELITE_STYLE_LAB
@@ -169,6 +172,11 @@ void r3d_starfield_init(uint32_t seed) {
             g->type = (uint8_t)(star_rand() % 3u);
             g->size = (uint8_t)(7 + star_rand() % 6u);
             g->hue = (uint8_t)(star_rand() % 3u);
+            /* spiral variety (user: 'all the same S'): 1-4 arms, a curl
+             * from loose grand-design to tight, and either winding */
+            g->arms = (uint8_t)(1 + star_rand() % 4u);
+            g->hand = (star_rand() & 1u) ? 1 : -1;
+            g->pitch = 2.2f + star_frand() * 5.0f;   /* 2.2 - 7.2 */
         }
     }
     for (int i = 0; i < STAR_COUNT; i++) {
@@ -241,9 +249,10 @@ static void galaxies_raster(uint16_t *fb, int y0p, int y1p) {
         if (tl < 1e-4f) { tx2 = 1; ty2 = 0; tl = 1; }
         float ux = tx2 / tl, uy = ty2 / tl;       /* sprite x-axis */
         int R = (int)g->size * R3D_SS;
-        int gr8 = g->hue == 2 ? 11 : g->hue == 0 ? 7 : 9;
-        int gg8 = g->hue == 2 ? 9 : 9;
-        int gb8 = g->hue == 2 ? 6 : g->hue == 0 ? 12 : 10;
+        /* softer than before (user: colours too strong) */
+        int gr8 = g->hue == 2 ? 8 : g->hue == 0 ? 5 : 6;
+        int gg8 = g->hue == 2 ? 6 : 6;
+        int gb8 = g->hue == 2 ? 4 : g->hue == 0 ? 8 : 7;
         for (int dy = -R; dy <= R; dy++) {
             int py = (int)sy + dy;
             if (py < y0p || py >= y1p) continue;
@@ -265,20 +274,22 @@ static void galaxies_raster(uint16_t *fb, int y0p, int y1p) {
                         I = (1 - au * au) * (1 - aw * 4.5f) * 1.2f;
                     float q = u * u * 9.0f + w * w * 4.0f;
                     if (q < 1) { float f = 1 - q; I += f * f * 1.1f; }
-                } else {                           /* 2-arm spiral */
+                } else {                           /* spiral */
                     float rr = sqrtf(u * u + w * w);
                     if (rr < 1 && rr > 0.02f) {
                         float th = atan2f(w, u);
-                        float arm = cosf(2.0f * th - 4.2f * logf(rr + 0.14f));
+                        float arm = cosf((float)g->arms * th -
+                                         (float)g->hand * g->pitch *
+                                         logf(rr + 0.14f));
                         arm = arm < 0 ? 0 : arm;
-                        I = arm * arm * arm * (1 - rr) * 1.5f;
+                        I = arm * arm * arm * (1 - rr) * 1.35f;
                     }
                     float q = (u * u + w * w) * 22.0f;
-                    if (q < 1) { float f = 1 - q; I += f * 1.0f; }
+                    if (q < 1) { float f = 1 - q; I += f * 0.9f; }
                 }
                 if (I <= 0.015f) continue;
-                if (I > 1.3f) I = 1.3f;
-                I *= 0.60f + 0.8f * nb_grain(px + 173, py + 59);
+                if (I > 1.2f) I = 1.2f;
+                I *= 0.55f + 0.7f * nb_grain(px + 173, py + 59);
                 int r = ((row[px] >> 11) & 31) + (int)(gr8 * I);
                 int gg = ((row[px] >> 5) & 63) + (int)(gg8 * I);
                 int b = (row[px] & 31) + (int)(gb8 * I);
