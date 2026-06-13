@@ -13,42 +13,50 @@ pipeline, host + device builds). Roadmap in [PLAN.md](PLAN.md).
 
 ### 1.25 (ThumbyOne v1.25)
 
-A visual, content and world-building refresh for Indemnity Run. **No save
-change — existing pilots and universes load.**
+A major content update. Indemnity Run is now a living galaxy with people,
+choices and a story running through it — not just a place to fly and
+fight. **No save change — existing pilots and universes load.**
 
-**Campaign**
-- **THE POLICY storyline, acts 4–5.** The debt arc reaches its end:
-  insolvency, the Collection, and the *lapse* — a real, branching finish
-  rather than an open thread.
+**A living world of people and choices (new)**
+- **Encounters.** Ships hail you in open space, officials and traders
+  stop you at the docks, and characters approach you in the station bar.
+  Each one is a face-to-face exchange — **every person is drawn as their
+  own portrait** — and **you decide** how to respond: comply or refuse,
+  pay or fight, help or walk away. Your choice has real consequences —
+  credits, cargo, equipment, your standing with the factions, or a fight
+  right there. Dozens of distinct encounters.
+- **A story that unfolds as you play.** A running plot with recurring
+  characters builds across several chapters to a real ending, surfacing
+  as you dock and travel.
+- **Faction wars.** Border systems erupt into open war between the great
+  powers. Jump in, take a side and fight at the beacon — every kill banks
+  credits and reputation. A war-contract board lets you pick fights at
+  your level and pay to step up, against believable mixed-rank wings.
+- **Board derelicts.** Drift up to a cold, abandoned hulk and board it —
+  what's inside is a gamble.
+- **Station database.** Every station now carries readable local lore,
+  history and intel.
 
-**Stations**
-- **The boxy drydock is retired.** Orbital stations now roll from six
-  archetypes: ring wheels, spindle towers, cross-trusses, and three new
-  families — **stack disc-towers**, mined **asteroid ports**, and open
-  **gyroscopic ring frames**. Each rolls its own size, segment count,
-  window decks and add-ons, so no two are alike.
+**A new look across the galaxy**
+- **Every space station is redesigned**, now built from six distinct
+  families — ring wheels, spindle towers, cross-trusses, stacked
+  disc-towers, mined asteroid ports, and open gyroscopic ring frames —
+  each unique in size, lights and add-ons.
+- **Redrawn warships.** Hull shapes were overhauled; the multi-gun
+  gunships in particular are now clean, distinct ships rather than slabs
+  with over-long cannons.
+- **A new night sky.** A subtler, more distant galactic band that
+  genuinely changes from system to system — the bright core to one side,
+  fading to a faint ring opposite — with distant spiral galaxies
+  scattered across the black.
+- **New purple title wordmark.**
 
-**Ships & faces**
-- **Gunship hulls rebuilt.** The MAULER-class gunships had over-long
-  cannons that floated off the hull; they're now four distinct,
-  properly-seated silhouettes.
-- **NPC faces vary far more** — features, hair, clothing and bodies — so
-  the people you meet stop looking like siblings.
-
-**The sky**
-- **A subtler, more distant galactic band** that varies by system (the
-  bright core sits to one side, thinning to a faint ring opposite)
-  instead of the same bright ring everywhere.
-- **Distant spiral galaxies** scattered across the black, with varied
-  arm counts, curl and colours.
-- Sky rendering is **~20× cheaper per frame**, so the framerate holds.
-- **Purple title wordmark** (was cyan), gold border kept.
-
-**Guide & presentation**
-- Expanded **pilot guide**: new Encounters, Lore and Faction Wars
-  sections, a station-exterior showcase, regenerated ship grids, and a
-  new full field-guide video.
-- **New app / lobby icon** — a fighter facing the camera over a world.
+**Quality of life & presentation**
+- **Lock onto friendly contacts too** — added to the target cycle.
+- **New app and lobby icon** — your fighter banking toward you over a
+  world.
+- **Expanded pilot guide** with new sections on encounters, the galaxy's
+  lore and the faction wars, plus a full field-guide video.
 
 ### 1.23.2 (ThumbyOne v1.23.2)
 
