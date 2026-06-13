@@ -2811,7 +2811,7 @@ static void draw_intro_crawl(uint16_t *fb) {
     craft_font_draw(fb, "A / MENU: SKIP", 35, 121, RGB565C(70, 80, 100));
 }
 
-/* --- Title wordmark: custom N2 angular 5x7 font, teal double border ------
+/* --- Title wordmark: custom N2 angular 5x7 font, purple gradient + gold border ------
  * Three passes per glyph (teal outer ring +2, dark inner ring +1, gradient
  * fill) give the layered border the design called for. rows: 5 bits, bit4 = left
  * column. Only the letters in "INDEMNITY RUN" are defined. */
@@ -2884,10 +2884,10 @@ void elite_game_draw_overlay(uint16_t *fb) {
     switch (s_state) {
     case ST_TITLE: {
         if (s_intro_active) { draw_intro_crawl(fb); return; }
-        /* Title wordmark: custom angular font, teal double border. RUN matches
+        /* Title wordmark: custom angular font, purple gradient + gold border. RUN matches
          * INDEMNITY's size (both scale 2). */
         {
-            uint16_t T_top = RGB565C(220,255,250), T_bot = RGB565C(24,176,166);
+            uint16_t T_top = RGB565C(196,120,240), T_bot = RGB565C(72,22,116);
             uint16_t T_in  = RGB565C(10,10,14),    T_out = RGB565C(255,205,70);
             int s = 2;
             tw_draw(fb, "INDEMNITY", (128 - tw_width("INDEMNITY", s)) / 2, 14, s,
