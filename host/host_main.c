@@ -755,7 +755,19 @@ static void sheet_render_mesh(const Mesh *mesh, float yaw, float pitch) {
     obj.basis = m3_identity();
     m3_rotate_local(&obj.basis, 1, yaw);
     m3_rotate_local(&obj.basis, 0, pitch);
-    obj.pos = v3(0, 0, mesh->bound_r * 2.4f);
+    /* Frame by the ROTATED on-screen silhouette, not the bounding
+     * sphere — otherwise compact bulky hulls (TIE pods) fill the cell
+     * while sparse X-wings look tiny inside the same sphere (user). */
+    float ext = 0.001f;
+    for (int i = 0; i < mesh->nverts; i++) {
+        Vec3 v = v3((float)mesh->verts[i].x, (float)mesh->verts[i].y,
+                    (float)mesh->verts[i].z);
+        v = v3_scale(v, mesh->scale / 127.0f);
+        Vec3 r = m3_mul_v3(&obj.basis, v);
+        float lat = sqrtf(r.x * r.x + r.y * r.y);   /* screen-plane radius */
+        if (lat > ext) ext = lat;
+    }
+    obj.pos = v3(0, 0, ext * 3.0f);   /* silhouette fills ~the cell */
     r3d_scene_add_object(&obj);
     r3d_scene_raster(g_fb, 0, ELITE_FB_H);
 }
@@ -1674,6 +1686,31 @@ int main(int argc, char **argv) {
             GSAVE("station_home");
         }
 
+        /* civ_lock: a lone civilian hauler locked (green friend-or-foe) */
+        {
+            extern const Mesh *hull_mesh(uint32_t, int);
+            ENTER_FLIGHT();
+            CraftRawButtons none = {0}, b;
+            for (int k = 0; k < 100; k++)         /* let any leftover toast expire */
+                elite_game_tick(&none, 1.0f/30.0f);
+            for (int i = 1; i < MAX_SHIPS; i++) g_ships[i].alive = false;
+            Ship *pl = &g_ships[0];
+            pl->pos = v3(0, 0, 0);
+            pl->basis = m3_identity();
+            pl->vel = v3(0, 0, 0);
+            int e = ship_spawn(hull_mesh(0x5EED1u, 6), v3(34, 20, 190),
+                               TEAM_NEUTRAL);
+            if (e > 0) {
+                g_ships[e].is_civilian = 1;
+                g_ships[e].team = TEAM_NEUTRAL;
+                g_ships[e].civ_kind = 1;
+            }
+            b = none; b.lb = true; elite_game_tick(&b, 1.0f/30.0f);  /* lock */
+            for (int k = 0; k < 6; k++) elite_game_tick(&none, 1.0f/30.0f);
+            render_frame();
+            GSAVE("civ_lock");
+        }
+
         /* flight: a clean in-flight beat with the new sky. Long settle so
          * any arrival toast expires (toasts leaked into earlier shots). */
         {
@@ -1727,7 +1764,9 @@ int main(int argc, char **argv) {
             for (int col = 0; col < 4; col++) {
                 const Mesh *m = hull_mesh(0xC0FFEEu + (uint32_t)col * 2654435761u
                                           + (uint32_t)cls * 97u, cls);
-                sheet_render_mesh(m, 0.7f + 0.25f * col, 0.26f);
+                /* 3/4 view coming TOWARDS the camera (user): nose
+                 * rotated to face us, slight top-down. */
+                sheet_render_mesh(m, 3.9f - 0.30f * col, 0.40f);
                 snprintf(p, sizeof p, "/tmp/sg/c%d_%d.ppm", cls, col);
                 dump_ppm(p);
             }

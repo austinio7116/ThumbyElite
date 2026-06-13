@@ -1007,39 +1007,37 @@ const Mesh *ship_gen_mesh(uint32_t seed) {
               h1 * rndf(0.2f, 0.9f), HULL2);
         break;
     }
-    case 3: { /* gunship: prongs + twin canted fins */
+    case 3: { /* gunship: hull-hugging cannons + twin canted fins */
         float px = w_mid * rndf(0.4f, 0.85f);
         int npr = rndi(1, 2) * 2;            /* 2 or 4 prongs */
         if (s1) {
-            /* weapon booms: tapered, vertically staggered on 4-boom
-             * frames (style 0 stacks them on one axis), each tipped
-             * with a stepped muzzle instead of a flat cap */
+            /* MAULER-class premium guns (user: too long, floated up,
+             * samey). Short integrated cannons hugging the nose, level
+             * with the spine, ending at the nose tip with a neat muzzle
+             * step. Spread/length/stagger vary per ship. */
+            float gpx = w_mid * rndf2(0.30f, 0.55f);   /* tight to hull */
+            float gz0 = z3 + len * rndf2(0.02f, 0.10f);/* start near nose */
+            float gz1 = zf - len * rndf2(0.0f, 0.04f); /* end at the tip  */
+            float gr  = w_mid * rndf2(0.09f, 0.13f);   /* barrel radius   */
+            float stag = (npr == 2) ? 0.0f : h2 * rndf2(0.22f, 0.40f);
             for (int s2 = 0; s2 < npr; s2++) {
-                float sx = (s2 & 1) ? -px : px;
-                float sy2 = (npr == 2) ? 0
-                          : (s2 >= 2) ? -h2 * 0.45f : h2 * 0.45f;
+                float sx = (s2 & 1) ? -gpx : gpx;
+                /* sit on the spine (follows the rake) so nothing tilts */
+                float by = y3 + ((npr == 2) ? -h3 * 0.15f
+                                : (s2 >= 2) ? -stag : stag);
                 int g0[8], g1[8];
-                ring(z3 - len * 0.02f, w_mid * 0.13f, w_mid * 0.13f,
-                     sy2, 0.35f, g0);
-                ring(zf + len * 0.04f, w_mid * 0.085f, w_mid * 0.085f,
-                     sy2, 0.35f, g1);
-                for (int k = 0; k < 8; k++) {
-                    s_fx[g0[k]] += sx; s_fx[g1[k]] += sx;
-                }
+                ring(gz0, gr, gr, by, 0.4f, g0);
+                ring(gz1, gr * 0.82f, gr * 0.82f, by, 0.4f, g1);
+                for (int k = 0; k < 8; k++) { s_fx[g0[k]] += sx;
+                                              s_fx[g1[k]] += sx; }
                 skin(g0, g1, ACC, ACC, ACC);
                 cap_back(g0, HULL2);
-                cap_front(g1, HULL2);
+                /* short muzzle: one neat step just past the tip */
                 int m0[6], m1[6];
-                hex6(zf + len * 0.04f, w_mid * 0.05f, sx, sy2, m0);
-                hex6(zf + len * 0.115f, w_mid * 0.075f, sx, sy2, m1);
+                hex6(gz1, gr * 0.6f, sx, by, m0);
+                hex6(gz1 + len * 0.05f, gr * 0.82f, sx, by, m1);
                 skin6(m0, m1, HULL2);
                 fan6f(m1, RGB565C(40, 40, 48));
-            }
-            if (npr == 2) {
-                /* underslung twin gun pod below the nose */
-                gun_twin(w3 * 0.5f, -h3 * 0.95f, z3 - len * 0.02f,
-                         len * rndf2(0.16f, 0.24f), w_mid * 0.055f,
-                         HULL2, RGB565C(40, 40, 48));
             }
         } else
         for (int s2 = 0; s2 < npr; s2++) {
