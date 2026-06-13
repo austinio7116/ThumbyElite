@@ -1598,17 +1598,16 @@ int main(int argc, char **argv) {
             r3d_scene_set_style(cfg[c].style);
             r3d_starfield_init(909091u);
             r3d_scene_set_nebula(cfg[c].neb, cfg[c].neb ? 0.85f : 0.0f);
-            struct timespec t0, t1;
-            clock_gettime(CLOCK_MONOTONIC, &t0);
+            Uint64 t0 = SDL_GetPerformanceCounter();
             for (int i = 0; i < N; i++) {
                 Mat3 c2 = cam;
                 m3_rotate_local(&c2, 1, (float)i * 0.0003f);
                 r3d_scene_begin(&c2, 60.0f);
                 r3d_scene_raster(g_fb, 0, ELITE_FB_H);
             }
-            clock_gettime(CLOCK_MONOTONIC, &t1);
-            double us = ((t1.tv_sec - t0.tv_sec) * 1e6 +
-                         (t1.tv_nsec - t0.tv_nsec) * 1e-3) / N;
+            Uint64 t1 = SDL_GetPerformanceCounter();
+            double us = (double)(t1 - t0) * 1e6 /
+                        (double)SDL_GetPerformanceFrequency() / N;
             printf("[skybench] %-26s %7.2f us/frame\n", cfg[c].name, us);
         }
         g_sky_band = g_sky_clouds = g_sky_galaxies = 1;
