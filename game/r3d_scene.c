@@ -123,6 +123,10 @@ static float star_frand(void) {
  * style 0 still selects the old sky for archival sheet comparisons. */
 static int s_style = 1;
 void r3d_scene_set_style(int s) { s_style = s; }
+/* Cost-isolation switches (default on). The sky bench flips these to
+ * measure band vs clouds vs galaxies independently; one predictable
+ * branch each, negligible in normal play. */
+int g_sky_band = 1, g_sky_clouds = 1, g_sky_galaxies = 1;
 
 /* Distant galaxies (user req): 2-4 tiny resolved neighbours per sky —
  * spirals, edge-on streaks with a core bump, soft ellipticals. Fixed
@@ -218,6 +222,7 @@ static inline float nb_grain(int x, int y);   /* defined with the nebula */
 
 /* Tiny additive galaxy sprites, world-anchored spin. */
 static void galaxies_raster(uint16_t *fb, int y0p, int y1p) {
+    if (!g_sky_galaxies) return;
     const Mat3 *cam = r3d_pipe_camera();
     const float focal = r3d_pipe_focal();
     for (int i = 0; i < GAL_COUNT; i++) {
@@ -385,19 +390,23 @@ static inline float nb_grain(int x, int y) {
     h ^= h >> 15; h *= 0x2C1B3C6Du; h ^= h >> 12;
     return (float)(h & 0xFF) * (1.0f / 256.0f);
 }
-static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
+/* Style-1 sky = galactic BAND only (clouds removed for framerate, user
+ * req). A great circle of unresolved starlight with per-system
+ * character: full-sphere plane, seeded width/gain, a core bulge that
+ * widens+brightens one direction, and a disc-asymmetry floor so the
+ * anti-core side fades. Per-pixel grain gives the "unresolved stars"
+ * sparkle and dithers the 5-bit gradient. STEP=8 corner grid, bilinear
+ * between corners. Dark blocks early-out to a plain black fill. */
+static void band_fill(uint16_t *fb, int y0p, int y1p) {
     const Mat3 *cam = r3d_pipe_camera();
     float focal = r3d_pipe_focal() * (float)R3D_SS;
     float cx = 64.0f * R3D_SS, cy = 64.0f * R3D_SS;
-    float ox = (float)(s_nebula & 0xFF) * 0.6f;
-    const float F = 1.05f;
-    const int STEP = 4 * R3D_SS;
-    /* Galactic band: a great circle of unresolved starlight with REAL
-     * per-system character (user: 'too samey — the same line all the
-     * way round'). The seed picks the plane's full orientation, the
-     * band's width and gain (some skies barely show it), and the
-     * direction of the CORE — a bright wide bulge at one point on the
-     * circle, like the Milky Way toward Sagittarius. */
+    const int STEP = 8 * R3D_SS;
+    if (!g_sky_band) {                       /* bench: blank sky */
+        for (int y = y0p; y < y1p; y++)
+            memset(fb + y * R3D_FB_W, 0, R3D_FB_W * sizeof(uint16_t));
+        return;
+    }
     Vec3 gax, gcore;
     float gwk, ggain, ganti;
     {
@@ -406,14 +415,10 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
         float a1 = (float)(gh & 0x3FF) * (6.2831853f / 1024.0f);
         float z1 = (float)((gh >> 10) & 0xFF) * (2.0f / 255.0f) - 1.0f;
         float r1 = sqrtf(1.0f - z1 * z1);
-        gax = v3(r1 * cosf(a1), z1, r1 * sinf(a1));   /* full sphere */
-        gwk = 3.2f + (float)((gh >> 18) & 7) * 0.5f;  /* width 3.2-6.7 */
-        ggain = 0.45f + (float)((gh >> 21) & 7) * 0.13f; /* 0.45-1.36 */
-        /* where this system sits in its disc (user req): core-ward
-         * skies are bright nearly all round; rim systems see a strong
-         * band toward the core and a thin whisper behind them */
-        ganti = 0.08f + (float)((gh >> 27) & 7) * 0.075f; /* 0.08-0.60 */
-        /* core: a seeded azimuth on the band plane */
+        gax = v3(r1 * cosf(a1), z1, r1 * sinf(a1));
+        gwk = 3.2f + (float)((gh >> 18) & 7) * 0.5f;
+        ggain = 0.45f + (float)((gh >> 21) & 7) * 0.13f;
+        ganti = 0.08f + (float)((gh >> 27) & 7) * 0.075f;
         Vec3 ref = (gax.y > 0.9f || gax.y < -0.9f) ? v3(1, 0, 0)
                                                    : v3(0, 1, 0);
         Vec3 c1 = v3_norm(v3_cross(gax, ref));
@@ -421,59 +426,44 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
         float az = (float)((gh >> 24) & 0xFF) * (6.2831853f / 256.0f);
         gcore = v3_add(v3_scale(c1, cosf(az)), v3_scale(c2, sinf(az)));
     }
-    /* corner sample of the cloud field (intensity) + hue field */
-    #define NB_V3(px, py, out_n, out_w, out_g, out_h) do { \
+    /* Per-corner band brightness (out_g) + hue lean (out_h). No noise:
+     * the glow modulation is a cheap integer hash of the block index,
+     * smoothed by the bilinear interp between corners. */
+    #define BAND_V(px, py, out_g, out_h) do { \
         float vx_ = ((float)(px) - cx) / focal; \
         float vy_ = -((float)(py) - cy) / focal; \
         Vec3 d_ = v3_norm(m3_mul_v3(cam, v3(vx_, vy_, 1.0f))); \
-        (out_n) = nb_noise(d_.x * F + 40.0f + ox, d_.y * F + 40.0f) * 0.5f + \
-                  nb_noise(d_.z * F + 17.0f, d_.x * F) * 0.3f + \
-                  nb_noise(d_.y * F * 2.1f + 7.0f, d_.z * F * 2.1f + 23.0f) \
-                      * 0.2f; \
-        (out_w) = nb_noise(d_.x * 0.7f + 77.0f + ox * 0.3f, \
-                           d_.z * 0.7f - 19.0f); \
         float gc_ = d_.x * gax.x + d_.y * gax.y + d_.z * gax.z; \
         float ac_ = gc_ < 0 ? -gc_ : gc_; \
-        /* core bulge + disc asymmetry: bright toward gcore, fading \
-         * to a per-system floor on the anti-core side (no uniform \
-         * hoop — you can FEEL which way the core lies) */ \
         float ct_ = d_.x * gcore.x + d_.y * gcore.y + d_.z * gcore.z; \
         float cb_ = ct_ < 0 ? 0 : ct_; \
-        cb_ = cb_ * cb_; cb_ *= cb_;                  /* ^4 falloff */ \
+        cb_ = cb_ * cb_; cb_ *= cb_; \
         float gb_ = 1.0f - ac_ * gwk / (1.0f + 1.8f * cb_); \
         if (gb_ > 0) { \
             gb_ *= gb_; \
             float ridge_ = 1.0f - ac_ * gwk * 2.6f; \
             if (ridge_ > 0) gb_ += ridge_ * ridge_ * ridge_ * 0.5f; \
-            gb_ *= 1.0f + 2.6f * cb_;                 /* core glow */ \
+            gb_ *= 1.0f + 2.6f * cb_; \
             gb_ *= ganti + (1.0f - ganti) * (0.5f + 0.5f * ct_); \
             gb_ *= ggain * (0.55f + 0.45f * \
-                            nb_noise(d_.x * 2.6f + 5.0f, \
-                                     d_.z * 2.6f - 11.0f)); \
+                            nb_grain((px) * 7 + 5, (py) * 7 - 11)); \
         } else gb_ = 0; \
         (out_g) = gb_; \
-        /* hue lean: slow field, most of the band stays neutral */ \
-        (out_h) = nb_noise(d_.x * 0.9f - 31.0f, d_.z * 0.9f + 53.0f); \
+        (out_h) = 0.5f + 0.5f * (gc_ * 1.7f + ct_ * 1.3f); \
     } while (0)
     for (int y = y0p; y < y1p; y += STEP) {
         for (int x = 0; x < R3D_FB_W; x += STEP) {
-            float n00, w00, g00, h00, n10, w10, g10, h10;
-            float n01, w01, g01, h01, n11, w11, g11, h11;
-            NB_V3(x, y, n00, w00, g00, h00);
-            NB_V3(x + STEP, y, n10, w10, g10, h10);
-            NB_V3(x, y + STEP, n01, w01, g01, h01);
-            NB_V3(x + STEP, y + STEP, n11, w11, g11, h11);
-            /* skip fully-dark blocks outright (most of the sky) */
-            float nmax = n00;
-            if (n10 > nmax) nmax = n10;
-            if (n01 > nmax) nmax = n01;
-            if (n11 > nmax) nmax = n11;
+            float g00, h00, g10, h10, g01, h01, g11, h11;
+            BAND_V(x, y, g00, h00);
+            BAND_V(x + STEP, y, g10, h10);
+            BAND_V(x, y + STEP, g01, h01);
+            BAND_V(x + STEP, y + STEP, g11, h11);
             float gmax = g00;
             if (g10 > gmax) gmax = g10;
             if (g01 > gmax) gmax = g01;
             if (g11 > gmax) gmax = g11;
             int ylim = y + STEP < y1p ? y + STEP : y1p;
-            if (nmax <= 0.48f && gmax <= 0.012f) {
+            if (gmax <= 0.012f) {            /* dark block: black fill */
                 for (int yy = y; yy < ylim; yy++) {
                     uint16_t *row = fb + yy * R3D_FB_W;
                     for (int xx = x; xx < x + STEP && xx < R3D_FB_W; xx++)
@@ -484,10 +474,6 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
             float inv = 1.0f / (float)STEP;
             for (int yy = y; yy < ylim; yy++) {
                 float ty = (float)(yy - y) * inv;
-                float na = n00 + (n01 - n00) * ty;
-                float nb = n10 + (n11 - n10) * ty;
-                float wa = w00 + (w01 - w00) * ty;
-                float wb = w10 + (w11 - w10) * ty;
                 float ga = g00 + (g01 - g00) * ty;
                 float gb2 = g10 + (g11 - g10) * ty;
                 float ha = h00 + (h01 - h00) * ty;
@@ -495,55 +481,18 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
                 uint16_t *row = fb + yy * R3D_FB_W;
                 for (int xx = x; xx < x + STEP && xx < R3D_FB_W; xx++) {
                     float tx = (float)(xx - x) * inv;
-                    float n = na + (nb - na) * tx;
                     float gband = ga + (gb2 - ga) * tx;
-                    /* the band: warm-white starlight, per-pixel grain
-                     * sparkle so it reads as unresolved stars, peak
-                     * ~12%% channel — DISTANT */
-                    float gr = 0, gg = 0, gbl = 0;
-                    if (gband > 0.012f) {
-                        float sp = 0.40f + 1.05f * nb_grain(xx + 311, yy + 97);
-                        float gk = gband * sp;
-                        /* hue lean (user req): mostly neutral starlight,
-                         * but regions drift warm-gold or dusty rose */
-                        float hue = ha + (hb2 - ha) * tx;
-                        float warm = (hue - 0.62f) * 4.0f;
-                        float cool = (0.38f - hue) * 4.0f;
-                        if (warm < 0) warm = 0;
-                        if (warm > 1) warm = 1;
-                        if (cool < 0) cool = 0;
-                        if (cool > 1) cool = 1;
-                        gr = gk * (2.7f + 1.3f * warm + 0.9f * cool);
-                        gg = gk * (5.2f + 1.2f * warm);
-                        gbl = gk * (2.5f - 0.9f * warm + 2.4f * cool);
-                    }
-                    if (n <= 0.48f) {
-                        if (gband <= 0.012f) { row[xx] = 0; continue; }
-                        float dth0 = nb_grain(xx, yy);
-                        int r0 = (int)(gr + dth0);
-                        int g0 = (int)(gg + dth0);
-                        int b0 = (int)(gbl + dth0);
-                        if (r0 > 31) r0 = 31;
-                        if (g0 > 63) g0 = 63;
-                        if (b0 > 31) b0 = 31;
-                        row[xx] = (uint16_t)((r0 << 11) | (g0 << 5) | b0);
-                        continue;
-                    }
-                    float w = wa + (wb - wa) * tx;
-                    float k = (n - 0.48f) * 3.4f * s_neb_str;
-                    if (k > 1.0f) k = 1.0f;
-                    k = k * k * (3.0f - 2.0f * k); /* smoothstep onset */
-                    /* indigo wash <-> dusty rose, gently */
-                    float rose = (w - 0.45f) * 3.0f;
-                    if (rose < 0) rose = 0;
-                    if (rose > 1) rose = 1;
-                    float fr = k * (3.2f + 7.8f * rose) + gr;
-                    float fg = k * (2.3f + 1.4f * rose) + gg;
-                    float fbl = k * (12.3f - 5.5f * rose) + gbl;
-                    float dth = nb_grain(xx, yy);
-                    int r = (int)(fr + dth);
-                    int g = (int)(fg + dth);
-                    int b = (int)(fbl + dth);
+                    if (gband <= 0.012f) { row[xx] = 0; continue; }
+                    float sp = 0.40f + 1.05f * nb_grain(xx + 311, yy + 97);
+                    float gk = gband * sp;
+                    float hue = ha + (hb2 - ha) * tx;
+                    float warm = (hue - 0.62f) * 4.0f;
+                    float cool = (0.38f - hue) * 4.0f;
+                    if (warm < 0) warm = 0; if (warm > 1) warm = 1;
+                    if (cool < 0) cool = 0; if (cool > 1) cool = 1;
+                    int r = (int)(gk * (2.7f + 1.3f * warm + 0.9f * cool) + sp);
+                    int g = (int)(gk * (5.2f + 1.2f * warm) + sp);
+                    int b = (int)(gk * (2.5f - 0.9f * warm + 2.4f * cool) + sp);
                     if (r > 31) r = 31;
                     if (g > 63) g = 63;
                     if (b > 31) b = 31;
@@ -552,11 +501,11 @@ static void nebula_fill_v3(uint16_t *fb, int y0p, int y1p) {
             }
         }
     }
-    #undef NB_V3
+    #undef BAND_V
 }
 
 static void nebula_fill(uint16_t *fb, int y0p, int y1p) {
-    if (s_style == 1) { nebula_fill_v3(fb, y0p, y1p); return; }
+    if (s_style == 1) { band_fill(fb, y0p, y1p); return; }
     const Mat3 *cam = r3d_pipe_camera();
     float focal = r3d_pipe_focal() * (float)R3D_SS;
     float cx = 64.0f * R3D_SS, cy = 64.0f * R3D_SS;

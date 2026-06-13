@@ -1575,6 +1575,46 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (getenv("ELITE_SKYBENCH")) {
+        /* Microbench the per-frame sky cost. Host CPU is far faster than
+         * the RP2350, but the RELATIVE breakdown transfers — it shows
+         * which layer eats the frame. */
+        extern int g_sky_band, g_sky_clouds, g_sky_galaxies;
+        galaxy_set_seed(42);
+        Mat3 cam = m3_identity();
+        m3_rotate_local(&cam, 1, 0.7f);
+        const int N = 4000;
+        struct { const char *name; int band, clouds, gal, style; uint32_t neb; } cfg[] = {
+            { "black (memset, style 0)", 0, 0, 0, 0, 0 },
+            { "band only",               1, 0, 0, 1, 909091u },
+            { "galaxies only",           0, 0, 1, 1, 0 },
+            { "FULL (band + galaxies)",  1, 0, 1, 1, 909091u },
+        };  /* clouds removed 2026-06-12 — g_sky_clouds is now a no-op */
+        printf("[skybench] %d iters/config, 128x128, worst-case seed\n", N);
+        for (unsigned c = 0; c < sizeof cfg / sizeof cfg[0]; c++) {
+            g_sky_band = cfg[c].band;
+            g_sky_clouds = cfg[c].clouds;
+            g_sky_galaxies = cfg[c].gal;
+            r3d_scene_set_style(cfg[c].style);
+            r3d_starfield_init(909091u);
+            r3d_scene_set_nebula(cfg[c].neb, cfg[c].neb ? 0.85f : 0.0f);
+            struct timespec t0, t1;
+            clock_gettime(CLOCK_MONOTONIC, &t0);
+            for (int i = 0; i < N; i++) {
+                Mat3 c2 = cam;
+                m3_rotate_local(&c2, 1, (float)i * 0.0003f);
+                r3d_scene_begin(&c2, 60.0f);
+                r3d_scene_raster(g_fb, 0, ELITE_FB_H);
+            }
+            clock_gettime(CLOCK_MONOTONIC, &t1);
+            double us = ((t1.tv_sec - t0.tv_sec) * 1e6 +
+                         (t1.tv_nsec - t0.tv_nsec) * 1e-3) / N;
+            printf("[skybench] %-26s %7.2f us/frame\n", cfg[c].name, us);
+        }
+        g_sky_band = g_sky_clouds = g_sky_galaxies = 1;
+        return 0;
+    }
+
     if (getenv("ELITE_GALSHOT")) {
         /* zoomed look at each background galaxy of a few seeds */
         const char *path = getenv("ELITE_GALSHOT");
