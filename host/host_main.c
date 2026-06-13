@@ -5233,7 +5233,7 @@ int main(int argc, char **argv) {
         CAP("Two pirates inbound -- read the radar, close the gap");
         pl->throttle = 0.25f;
         MV_IDLE(75);                            /* establishing approach */
-        CAP("Tap LB to lock the nearest threat");
+        CAP("Lock the nearest threat -- the radar tracks every contact");
         MV_TAP(lb, 2);                          /* lock */
         MV_IDLE(35);                            /* hold on the lock box */
 
@@ -5280,7 +5280,7 @@ int main(int argc, char **argv) {
             MV_AIM(p1, 190.0f, 6.0f, 0.05f, fire);
         }
         MV_IDLE(45);                             /* missiles fly */
-        CAP("B cycles weapons. Pulse lasers: no ammo, just heat");
+        CAP("Pulse lasers run on heat, not ammo -- no magazine to empty");
         /* 2b: switch to the medium laser, press the attack. */
         MV_TAP(b, 2);                            /* HOMING -> PULSE-M */
         pl->shield = pl->shield_max;             /* continuity polish */
@@ -5316,7 +5316,7 @@ int main(int argc, char **argv) {
 
         CAP("MISSION COMPLETE -- two pirates culled. Collect at any dock");
         MV_IDLE(45);
-        CAP("Wrecks drop loot -- lock it and fly through to scoop");
+        CAP("Wrecks drop loot -- fly through a canister to scoop it");
         /* Phase 3: salvage run — lock loot, fly to ONE can, scoop, move
          * on. (Was a two-can chase that could run a full minute when the
          * second can drifted away — user. Now: first scoop ends it, with
@@ -5345,7 +5345,7 @@ int main(int argc, char **argv) {
         MV_IDLE(25);
 
         /* Phase 3b: MINING loop — crack a rock, scoop the ore. */
-        CAP("MINING: switch to a mining laser and crack asteroids");
+        CAP("Mining: a mining laser cracks asteroids open");
         {
             extern void rocks_spawn_field(uint32_t, int);
             extern int rocks_positions(Vec3 *, int);
@@ -5488,7 +5488,7 @@ int main(int argc, char **argv) {
         }
         events_set_chance(0);
 
-        CAP("MENU opens the dashboard -- the galaxy never pauses");
+        CAP("The dashboard rises -- and the galaxy never pauses while you read it");
         /* Phase 4: dashboard TOUR -> SYSTEM map -> supercruise. The
          * dash panels are live MFDs: 0 GALAXY, 1 SYSTEM, 2 STATUS. */
         MV_TAP(menu, 12);                       /* dash rises (in shot) */
@@ -5518,7 +5518,7 @@ int main(int argc, char **argv) {
             MV(none);
         MV_IDLE(40);
 
-        CAP("Approach the station");
+        CAP("Approach the station -- the docking computer brings you in");
         /* Phase 6: approach + dock. */
         for (int f = 0; f < 1400; f++) {
             float d3 = v3_len(pl->pos);         /* station at origin */
@@ -5530,8 +5530,7 @@ int main(int argc, char **argv) {
         pl->throttle = 0.05f;
         printf("[movie] dock attempt at %.0fm state=%d\n",
                v3_len(pl->pos), elite_game_state());
-        CAP("LB + RB together: request docking");
-        for (int k = 0; k < 3; k++) {           /* hold the chord */
+        for (int k = 0; k < 3; k++) {           /* hold the dock chord */
             CraftRawButtons b = none;
             b.lb = true; b.rb = true;
             MV(b);
@@ -5540,85 +5539,71 @@ int main(int argc, char **argv) {
         printf("[movie] post-dock state=%d (7=DOCKED) frame=%d\n",
                elite_game_state(), mf);
         if (elite_game_state() != 7) {
-            printf("[movie] DOCK FAILED — aborting shoot\n");
+            printf("[movie] DOCK FAILED -- aborting shoot\n");
             return 1;
         }
-        MV_IDLE(40);
-
-        /* Phase 7: station life. DETERMINISTIC nav — GOHOME resets the
-         * HOME cursor to the top (UP clamps at 0), then DOWN to the
-         * exact row. HOME rows: 0 MARKET, 1 SHIPYARD, 2 OUTFITTING,
-         * 3 MISSIONS, 4 BAR, 5 STATUS, ... 9 LAUNCH. */
-        #define GOROW(row) do { \
-            for (int _u = 0; _u < 9; _u++) MV_TAP(up, 1); \
-            for (int _dn = 0; _dn < (row); _dn++) MV_TAP(down, 2); \
-        } while (0)
-        /* Caption discipline (user: 'all out of sequence'): the menu
-         * navigation (GOROW + the opening A) plays UNDER the previous
-         * caption; the new CAP fires the instant the target screen is on
-         * screen, then we dwell. So every caption matches its picture. */
-        MV_IDLE(40);                            /* docked home menu */
-        GOROW(0); MV_TAP(a, 3);                 /* open MARKET */
-        CAP("THE MARKET: prices swing by economy -- buy low, sell high");
-        MV_IDLE(52);
-        MV_TAP(a, 10); MV_TAP(a, 10);           /* buy 2 units */
-        MV_TAP(down, 6); MV_TAP(a, 10);
-        MV_IDLE(40);
-        MV_TAP(menu, 14);
-
-        GOROW(1); MV_TAP(a, 3);                 /* open SHIPYARD */
-        CAP("THE SHIPYARD: hulls for sale, each a different trade-off");
-        MV_IDLE(52);                            /* the offer list */
-        CAP("Browse the lot -- cargo, speed, slots and price all vary");
-        MV_TAP(down, 45);                       /* hull #2 */
-        MV_TAP(down, 45);                       /* hull #3 */
-        MV_TAP(b, 3);                            /* open the spec sheet */
-        CAP("B opens a hull's full spec to compare against yours");
-        MV_IDLE(67);                            /* linger on the spec */
-        MV_TAP(b, 10);
-        MV_TAP(down, 45);                       /* hull #4 */
-        MV_TAP(down, 40);                       /* hull #5 */
-        MV_TAP(b, 65);                          /* another spec */
-        MV_TAP(b, 10); MV_TAP(menu, 12);
-
-        GOROW(2); MV_TAP(a, 3);                 /* open OUTFITTING */
-        CAP("OUTFITTING: weapons, shields, armor and gadgets for sale");
-        MV_IDLE(52);                            /* read your fitted gear */
-        MV_TAP(lb, 3);                          /* detail on a row */
-        CAP("Open any item for its full spec sheet");
-        MV_IDLE(52);
-        MV_TAP(rb, 3);                          /* browse for-sale #1 */
-        CAP("Stock varies: quality, wear and affixes roll per item");
-        MV_IDLE(57);
-        MV_TAP(rb, 60);                         /* #2 */
-        MV_TAP(rb, 3);                          /* #3 */
-        CAP("One PULSE may out-punch another -- read before you buy");
-        MV_IDLE(57);
-        MV_TAP(rb, 60);                         /* #4 */
-        MV_TAP(rb, 55);                         /* #5 */
-        MV_TAP(a, 3);                           /* BUY + FIT */
-        CAP("Found an upgrade? A buys and fits it");
-        MV_IDLE(25);
-        MV_TAP(b, 10); MV_TAP(menu, 12);
-
-        GOROW(3); MV_TAP(a, 3);                 /* open MISSIONS */
-        CAP("MISSIONS: contracts for credits and reputation");
-        MV_IDLE(60);                            /* read the board */
-        MV_TAP(a, 18);                          /* accept the first */
-        MV_IDLE(30); MV_TAP(menu, 10);
-
-        GOROW(5); MV_TAP(a, 3);                 /* open STATUS */
-        CAP("SHIP STATUS: every stat -- hold LB to admire the hull");
-        MV_IDLE(50);
-        MV_TAP(lb, 55);                         /* hide text: clean ship */
-        MV_TAP(lb, 18);                         /* show again */
-        MV_TAP(b, 10); MV_TAP(menu, 10);
-
-        GOROW(9); MV_TAP(a, 3);                 /* LAUNCH */
-        CAP("REFUEL and SERVICE on this menu -- then LAUNCH to the black");
-        MV_TAP(a, 19);
         MV_IDLE(45);
-        #undef GOROW
+
+        /* Phase 7: station services. STATE-VERIFIED navigation — we read
+         * the open screen (station_debug_screen) and only caption once it
+         * is actually up, instead of guessing button timing (the old fixed
+         * nav drifted badly: wrong LAUNCH row, B/MENU mixed). NOTE: B or
+         * MENU at the HOME menu LAUNCHES, so ST_HOME only presses back
+         * while NOT already home. Captions describe features, not buttons. */
+        extern int station_debug_screen(void);
+        /* SCR: 0 HOME 1 MARKET 2 SHIPYARD 3 OUTFIT 4 STATUS 5 MISSIONS */
+        #define ST_SCR() station_debug_screen()
+        #define ST_HOME() do { \
+            for (int _g = 0; _g < 16 && ST_SCR() != 0; _g++) MV_TAP(b, 4); \
+        } while (0)
+        #define ST_OPEN(row, scr) do { \
+            ST_HOME(); \
+            for (int _u = 0; _u < 12; _u++) MV_TAP(up, 2); \
+            for (int _d = 0; _d < (row); _d++) MV_TAP(down, 3); \
+            for (int _t = 0; _t < 5 && ST_SCR() != (scr); _t++) MV_TAP(a, 6); \
+        } while (0)
+
+        ST_OPEN(0, 1);                          /* MARKET */
+        CAP("Trade goods between worlds -- prices swing with each economy");
+        MV_IDLE(55);
+        MV_TAP(down, 8); MV_TAP(down, 8);       /* scroll the commodity table */
+        MV_IDLE(28);
+
+        ST_OPEN(1, 2);                          /* SHIPYARD */
+        CAP("The shipyard stocks hulls, each a different trade-off");
+        MV_IDLE(55);
+        MV_TAP(down, 38); MV_TAP(down, 38);     /* browse the offers */
+        MV_TAP(lb, 4);                          /* Info: full spec sheet */
+        CAP("A full spec sheet weighs every stat against your own ship");
+        MV_IDLE(68);
+
+        ST_OPEN(2, 3);                          /* OUTFITTING */
+        CAP("Outfitting: weapons, shields, armour and gadgets");
+        MV_IDLE(55);
+        MV_TAP(down, 30);                       /* page through the stock */
+        MV_TAP(lb, 4);                          /* Info on an item */
+        CAP("Every item has a full spec -- quality, wear and traits all vary");
+        MV_IDLE(62);
+
+        ST_OPEN(3, 5);                          /* MISSIONS */
+        CAP("The mission board -- contracts for credits and reputation");
+        MV_IDLE(72);
+
+        ST_OPEN(5, 4);                          /* STATUS */
+        CAP("Ship status -- every stat, and your fighter itself in the bay");
+        MV_IDLE(48);
+        MV_TAP(lb, 55);                         /* clean view of the hull */
+        MV_IDLE(12);
+
+        ST_HOME();                              /* back to the home menu */
+        CAP("Refuel, repair, pay fines -- then launch back into the black");
+        MV_IDLE(22);
+        MV_TAP(menu, 6);                        /* MENU at HOME = launch */
+        for (int f = 0; f < 220 && elite_game_state() == 8; f++) MV(none);
+        MV_IDLE(30);
+        #undef ST_OPEN
+        #undef ST_HOME
+        #undef ST_SCR
 
         printf("[movie] station phase done, state=%d frame=%d\n",
                elite_game_state(), mf);
@@ -5628,7 +5613,7 @@ int main(int argc, char **argv) {
         MV_TAP(menu, 12);
         MV_TAP(a, 12);                          /* GALAXY CHART */
         MV_IDLE(45);
-        CAP("Pan the chart -- thousands of real stars to explore");
+        CAP("Thousands of real stars to explore");
         /* wander the field to show the depth of the map */
         MV_TAP(right, 16); MV_TAP(right, 16); MV_TAP(up, 16);
         MV_TAP(up, 16); MV_TAP(left, 16); MV_TAP(down, 16);
@@ -5641,19 +5626,19 @@ int main(int argc, char **argv) {
         for (int _u = 0; _u < 3; _u++) MV_TAP(up, 1);   /* dash sel 0 */
         MV_TAP(a, 12);                           /* reopen, recentered */
         MV_IDLE(20);
-        CAP("The ring is your JUMP RANGE -- fuel and drive set how far");
+        CAP("The ring shows your jump range -- fuel and drive set how far");
         MV_IDLE(75);
         /* caption goes BEFORE the RB that shows the layer, so each
          * comment matches the layer on screen during its dwell */
         CAP("STAR TYPE layer: each sun coloured by its class");
         MV_IDLE(60);                            /* dwell on spectral */
-        CAP("RB cycles DATA LAYERS -- THREAT: green safe, red pirate");
+        CAP("Threat layer: green systems are safe, red is pirate country");
         MV_TAP(rb, 78);                         /* -> threat (shown now) */
         CAP("FACTION layer: who controls each system");
         MV_TAP(rb, 78);                         /* -> faction (shown now) */
         CAP("ECONOMY layer: every station's trade -- the money map");
         MV_TAP(rb, 78);                         /* -> economy (shown now) */
-        CAP("Back to star types -- pick a destination in range");
+        CAP("Pick a destination within jump range");
         MV_TAP(rb, 55);                         /* -> spectral */
         MV_IDLE(20);
         {
@@ -5685,9 +5670,9 @@ int main(int argc, char **argv) {
             }
             MV(b); MV_IDLE(20);
         }
-        CAP("A in range opens the SURVEY: economy, threat, stations");
+        CAP("A system survey lists its economy, threat level and stations");
         MV_TAP(a, 85);                          /* survey sheet, linger */
-        CAP("Confirm to jump -- each hop burns fuel from the tank");
+        CAP("Each jump burns fuel from the tank");
         MV_IDLE(30);
         MV_TAP(a, 6);                           /* commit the jump */
 
@@ -5700,7 +5685,7 @@ int main(int argc, char **argv) {
         /* Phase 10: gadgets, then the hunt that ends you. */
         elite_game_debug_face_away_from_sun();
         pl->throttle = 0.35f;
-        CAP("GADGETS: CLOAK vanishes you for 8s -- press RB + B");
+        CAP("Gadgets: the cloak makes you vanish for a few seconds");
         { CraftRawButtons b = none; b.rb = true; MV(b);
           b.b = true; MV(b); MV(b); }            /* RB held, then B */
         for (int f = 0; f < 95; f++) MV(none);   /* CLOAKED readout */
@@ -5747,7 +5732,11 @@ int main(int argc, char **argv) {
                         }
                     if (tgt < 0) { MV(none); continue; }
                     MV_AIM(tgt, 0.0f, 3.0f, 0.016f, 1);
-                    pl->hull = pl->hull_max; pl->shield = pl->shield_max;
+                    /* let enemy fire land -- shield flickers, hull dips and
+                     * floors at ~45% so we win the engagement but visibly
+                     * take hits (not an untouchable gun platform). */
+                    if (pl->hull < pl->hull_max * 0.45f)
+                        pl->hull = pl->hull_max * 0.45f;
                     if (f % 90 == 89) MV_TAP(lb, 2);     /* retarget */
                 }
                 MV_IDLE(20);
@@ -5805,28 +5794,35 @@ int main(int argc, char **argv) {
                     pl->throttle = 1.0f;
                     if (merge_t <= 0.0f && d > 150.0f) merging = 0;
                 } else {
-                    /* APPROACH: lead the target, close, fire on line */
+                    /* APPROACH: lead the target, close, fire on line.
+                     * Human wobble: track slightly off the lead so the
+                     * pilot isn't a perfect shot -- some bolts miss (user:
+                     * perfect aim isn't representative). */
                     Vec3 lead = v3_add(m->pos,
                                        v3_scale(v3_sub(m->vel, pl->vel),
                                                 d / 900.0f));
-                    MV_STEER(lead, 0.058f);
+                    float wob = sinf((float)f * 0.21f) * d * 0.06f;
+                    Vec3 aim = v3_add(lead, v3_scale(pl->basis.r[0], wob));
+                    MV_STEER(aim, 0.05f);
                     pl->throttle = (d > 300.0f) ? 1.0f
                                  : (d > 150.0f) ? 0.8f : 0.95f;
-                    Vec3 l = m3_mul_v3_t(&pl->basis, v3_sub(lead, pl->pos));
+                    Vec3 l = m3_mul_v3_t(&pl->basis, v3_sub(aim, pl->pos));
                     if (d < 380.0f && l.z > 0.0f &&
-                        l.x*l.x + l.y*l.y < d*d*0.016f) {
+                        l.x*l.x + l.y*l.y < d*d*0.014f) {
                         b.a = true;   /* hold trigger -> real cadence */
                     }
                 }
             }
             MV(b);
-            /* survive the SHOWCASE (top up hull each frame) so the duel
-             * actually plays out; the mark's hits still set it as our
-             * killer. Shields are left to flash under fire. */
-            pl->hull = pl->hull_max;
+            /* Take real damage so the duel reads as a losing fight: hull
+             * dips under the mark's fire and is floored at ~30% for most
+             * of it; in the closing seconds the floor falls away and the
+             * ace finishes us -- attrition, not a scripted snap. */
+            float fl = (f > 30 * 13) ? 0.0f : pl->hull_max * 0.30f;
+            if (pl->hull < fl) pl->hull = fl;
         }
-        /* now the finishing blow — attributed to the mark (it has been
-         * hitting us throughout, so the report names it) */
+        /* safety net: if the ace hasn't landed the kill by the end, make
+         * sure the death (and the kill report naming the mark) still lands */
         CAP("...and the better pilot wins");
         if (g_ships[0].alive) { g_ships[0].hull = -1.0f;
                                 g_ships[0].alive = false; }
@@ -5834,7 +5830,7 @@ int main(int argc, char **argv) {
         MV_IDLE(15);                             /* the explosion */
         CAP("The KILL REPORT names who got you -- study it, hunt smarter");
         for (int f = 0; f < 130; f++) MV(none);  /* read the report */
-        CAP("Press A to claim INSURANCE");
+        CAP("Claim your insurance payout");
         MV_TAP(a, 6);
         for (int f = 0; f < 40; f++) MV(none);
         CAP("It rebuilds your ship at your last dock -- but the cargo");

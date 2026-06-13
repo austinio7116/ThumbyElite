@@ -1111,6 +1111,12 @@ static void outfit_action_b(int row) {
     }
 }
 
+/* Guide harness: which docked screen is open (SCR_* as int:
+ * 0 HOME, 1 MARKET, 2 SHIPYARD, 3 OUTFIT, 4 STATUS, 5 MISSIONS,
+ * 6 BAR, 7 CODEX). Lets the recorder verify a menu actually opened
+ * before captioning, instead of guessing at button timing. */
+int station_debug_screen(void) { return (int)s_screen; }
+
 DockAction station_tick(const CraftRawButtons *btn, float dt) {
     DockAction act = DOCK_NONE;
     bool a_edge = btn->a && !s_prev.a;
